@@ -1,3 +1,3 @@
-from orbitrows.app import main
+from orbitrows.services.cli.app import main
 
 main()

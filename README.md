@@ -19,10 +19,17 @@ uv run orbitrows
 ## Layout
 
 ```
-src/orbitrows/
-  app.py        Textual app and the `orbitrows` entry point
-  jev.py        Jev client
-  pipeline/     one module per stage: context, columns, rows, cells
+src/                imported as `orbitrows`
+  pipeline/         one module per stage: context, columns, rows, cells
+  services/
+    cli/            terminal UI
+      app.py        Textual app and the `orbitrows` entry point
+      screens.py    intro screen, source CSV prompt
+      crash.py      unexpected errors -> short message + log file
+    csv/
+      reader.py     CSV loading (delimiter sniffing, validation)
+    jev/
+      client.py     Jev client (OpenRouter, jev-1.13)
 tests/
 ```
 

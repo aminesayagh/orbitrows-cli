@@ -15,3 +15,8 @@ wheels/
 # Tooling
 .pytest_cache/
 .serena/
+
+# Build output
+build/
+dist/
+*.egg-info/

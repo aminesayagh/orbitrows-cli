@@ -9,15 +9,20 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "textual>=8.2.8",
+    "textual-autocomplete>=4.0.6",
     "typesafe-sdk>=0.7.1",
 ]
 
 [project.scripts]
-orbitrows = "orbitrows.app:main"
+orbitrows = "orbitrows.services.cli.app:main"
 
 [build-system]
-requires = ["uv_build>=0.11.17,<0.12.0"]
-build-backend = "uv_build"
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+# Code lives directly in src/ but is imported as `orbitrows`.
+[tool.setuptools.package-dir]
+orbitrows = "src"
 
 [dependency-groups]
 dev = [
