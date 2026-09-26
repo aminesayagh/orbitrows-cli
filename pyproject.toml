@@ -1,0 +1,29 @@
+[project]
+name = "orbitrows"
+version = "0.1.0"
+description = "Reconcile a store CSV export with an incoming update CSV, using Jev plus deterministic matching, with human review in a Textual TUI."
+readme = "README.md"
+authors = [
+    { name = "aminesayagh", email = "aminesayagh1997@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "textual>=8.2.8",
+    "typesafe-sdk>=0.7.1",
+]
+
+[project.scripts]
+orbitrows = "orbitrows.app:main"
+
+[build-system]
+requires = ["uv_build>=0.11.17,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
