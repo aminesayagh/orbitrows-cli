@@ -1,15 +1,21 @@
+import asyncio
 import os
 from pathlib import Path
 
+from rich.markup import escape
 from textual.app import ComposeResult
 from textual.content import Content
 from textual.containers import Center, Horizontal, Vertical, VerticalScroll
 from textual.geometry import Offset
 from textual.screen import Screen
-from textual.widgets import Footer, Input, Static
+from textual.widgets import DataTable, Footer, Input, Static
 from textual_autocomplete import DropdownItem, PathAutoComplete, TargetState
+from sqlalchemy.exc import IntegrityError, OperationalError
+from typesafe_sdk import TypeSafeError
 
 from orbitrows.services.csv.reader import load_csv
+from orbitrows.services.db import workspace
+from orbitrows.services.jev.intent import classify
 
 LOGO = """\
  ██████╗ ██████╗ ██████╗ ██╗████████╗██████╗  ██████╗ ██╗    ██╗███████╗
@@ -59,14 +65,23 @@ class IntroScreen(Screen):
         self.app.pop_screen()
 
 
+def word_at_cursor(state: TargetState) -> tuple[int, TargetState]:
+    """The whitespace-separated word under the cursor, so a path can be completed inside a prompt."""
+    start = state.text.rfind(" ", 0, state.cursor_position) + 1
+    return start, TargetState(state.text[start : state.cursor_position], state.cursor_position - start)
+
+
 class CsvPathAutoComplete(PathAutoComplete):
-    """Suggests folders and .csv files only, in a dropdown that opens above the input."""
+    """Completes the word under the cursor to folders and .csv files, in a dropdown above the input."""
 
     def get_candidates(self, target_state: TargetState) -> list[DropdownItem]:
         # Own listing instead of super(): the library stats every entry unguarded and
         # crashes on files it may not stat (e.g. /mnt/c/DumpStack.log.tmp under WSL).
-        typed = target_state.text[: target_state.cursor_position]
+        typed = word_at_cursor(target_state)[1].text
+        if not typed:  # between words of a prompt: stay out of the way
+            return []
         folder = self.path / Path(typed[: typed.rfind("/") + 1] or ".").expanduser()
+        segment = typed[typed.rfind("/") + 1 :].lower()
         items = []
         try:
             entries = list(os.scandir(folder))
@@ -79,11 +94,27 @@ class CsvPathAutoComplete(PathAutoComplete):
                 continue
             if entry.name.startswith(".") or not (is_dir or entry.name.lower().endswith(".csv")):
                 continue
+            if not entry.name.lower().startswith(segment):  # prefix only: prompt words must not fuzzy-match files
+                continue
             items.append((not is_dir, entry.name.lower(), entry.name + "/" * is_dir, is_dir))
         return [
             DropdownItem(name, prefix=self.folder_prefix if is_dir else self.file_prefix)
             for _, _, name, is_dir in sorted(items)
         ]
+
+    def get_search_string(self, target_state: TargetState) -> str:
+        return super().get_search_string(word_at_cursor(target_state)[1])
+
+    def apply_completion(self, value: str, state: TargetState) -> None:
+        start, word = word_at_cursor(state)
+        before = state.text[:start] + word.text[: word.text.rfind("/") + 1] + value
+        with self.prevent(Input.Changed):
+            self.target.value = before + state.text[state.cursor_position :]
+            self.target.cursor_position = len(before)
+
+    def post_completion(self) -> None:
+        if not self.target.value[: self.target.cursor_position].endswith("/"):
+            self.action_hide()
 
     # ponytail: overrides a private method of textual-autocomplete 4.x; recheck on upgrade
     def _align_to_target(self) -> None:
@@ -97,75 +128,216 @@ def message(text: str, bullet: str = "●", color: str = GRADIENT[3]) -> Static:
     return Static(f"[{color}]{bullet}[/] {text}", classes="message")
 
 
-class SourceScreen(Screen):
-    AUTO_FOCUS = "#path"
+class Refusal(Exception):
+    """A request we can't do; its text is shown to the user as is."""
+
+
+def split_input(value: str, root: Path) -> tuple[str, Path | None]:
+    """(prompt, csv path). A word ending in .csv is the file, the other words are the prompt."""
+    # ponytail: paths with spaces aren't supported; quote-aware parsing if users need them
+    words = value.split()
+    files = [w for w in words if w.lower().endswith(".csv")]
+    if len(files) > 1:
+        raise Refusal("One file at a time, please.")
+    prompt = " ".join(w for w in words if w not in files)
+    return prompt, (root / Path(files[0]).expanduser() if files else None)  # absolute path overrides root
+
+
+def need(variable: str) -> None:
+    if not os.environ.get(variable):
+        raise Refusal(f"{variable} is not set. Add it to .env and start with: uv run --env-file .env orbitrows")
+
+
+COMMANDS = """\
+[b]/preview[/]          show the latest version of the store
+[b]/undo store[/]       undo the last change to the store
+[b]/undo incoming[/]    undo the last change to the incoming file
+[b]/merge[/]            merge the incoming file into the store
+[b]/reset[/]            go back to the store as it was uploaded"""
+
+PREVIEW_ROWS, PREVIEW_COLUMNS = 20, 6
+
+
+class PromptScreen(Screen):
+    AUTO_FOCUS = "#entry"
     BINDINGS = [("escape", "app.quit", "Quit")]
     DEFAULT_CSS = f"""
-    SourceScreen {{ layout: vertical; }}
+    PromptScreen {{ layout: vertical; }}
     #log {{ height: 1fr; padding: 0 1; scrollbar-size-vertical: 1; }}
     #banner {{ margin: 1 0; }}
     .message {{ margin-bottom: 1; }}
+    .preview {{ height: auto; max-height: 22; margin-bottom: 1; }}
     #prompt {{ dock: bottom; height: auto; }}
     #box {{ height: 3; border: round {GRADIENT[4]}; padding: 0 1; }}
     #box:focus-within {{ border: round {GRADIENT[1]}; }}
     #caret {{ width: 2; color: {GRADIENT[1]}; text-style: bold; }}
-    #path {{ border: none; background: transparent; padding: 0; height: 1; width: 1fr; }}
-    #path:focus {{ border: none; background: transparent; }}
+    #entry {{ border: none; background: transparent; padding: 0; height: 1; width: 1fr; }}
+    #entry:focus {{ border: none; background: transparent; }}
     #hints {{ padding: 0 2; color: $text-muted; }}
     """
 
     def __init__(self, root: Path):
         super().__init__()
         self.root = root
+        self.busy = False
 
     def compose(self) -> ComposeResult:
         log = VerticalScroll(id="log")
         log.can_focus = False
         with log:
             yield Static(
-                f"[b {GRADIENT[1]}]✻[/] [b]OrbitRows[/]  [dim]·  source import  ·  {self.root.resolve()}[/]",
+                f"[b {GRADIENT[1]}]✻[/] [b]OrbitRows[/]  [dim]·  {self.root.resolve()}[/]",
                 id="banner",
             )
-            yield message("Which CSV is your [b]store export[/]? Type its path below.")
+            yield message(
+                "Start with your [b]store export[/]: type its path below. Then add a supplier file, "
+                "or ask for changes in plain words. You can do both in one line."
+            )
         with Vertical(id="prompt"):
             with Horizontal(id="box"):
                 yield Static(">", id="caret")
-                path_input = Input(placeholder="data/store.csv", id="path")
-                yield path_input
-            yield Static("↑↓ browse · tab complete · enter load · esc quit", id="hints")
+                entry = Input(placeholder="data/store.csv, or a request like: raise all prices by 5%", id="entry")
+                yield entry
+            yield Static("tab complete · enter send · /preview /undo /merge /reset · esc quit", id="hints")
         yield CsvPathAutoComplete(
-            path_input, path=self.root, show_dotfiles=False,
+            entry, path=self.root, show_dotfiles=False,
             folder_prefix=Content("▸ "), file_prefix=Content("  "),
         )
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self.submit(event.value)
 
-    def say(self, *widgets: Static) -> None:
+    def say(self, *widgets: Static | DataTable) -> None:
         log = self.query_one("#log", VerticalScroll)
         log.mount_all(widgets)
         log.scroll_end(animate=False)
 
+    def refuse(self, text: str) -> None:
+        self.say(message(text, "✗", "red"))
+
     def submit(self, value: str) -> None:
         if not value.strip():
             return
-        path = self.root / Path(value.strip()).expanduser()  # absolute input overrides root
-        echo = message(f"[dim]{value}[/]", ">", "$text-muted")
-        self.query_one("#path", Input).clear()
-        if path.suffix.lower() != ".csv" or not path.is_file():
-            self.say(echo, message(f"Not a CSV file: {value}", "✗", "red"))
+        if self.busy:
+            self.refuse("Still working on your last request.")
             return
+        self.query_one("#entry", Input).clear()
+        self.say(message(f"[dim]{escape(value)}[/]", ">", "$text-muted"))
+        self.busy = True
+        self.run_worker(self.handle(value.strip()))
+
+    async def handle(self, value: str) -> None:
         try:
-            rows = load_csv(path)
+            if value.startswith("/"):
+                await self.command(value.split())
+            else:
+                await self.route(*split_input(value, self.root))
+        except Refusal as e:
+            self.refuse(str(e))
+        except OperationalError:
+            self.refuse("Can't reach the database. Check DATABASE_URL in .env and that PostgreSQL is running.")
+        except TypeSafeError as e:
+            self.refuse(f"Jev couldn't answer ({type(e).__name__}). Nothing was changed; try again.")
+        finally:
+            self.busy = False
+
+    async def route(self, prompt: str, path: Path | None) -> None:
+        """The cases: no store yet → the file becomes the store; with a store → it becomes the incoming."""
+        if path is None and self.app.store_id is None:
+            raise Refusal("Upload a store first: type the path of your store CSV export.")
+        if path is not None:
+            await self.upload(path)
+        if prompt:
+            await self.ask(prompt)
+
+    async def upload(self, path: Path) -> None:
+        if not path.is_file():
+            raise Refusal(f"File not found: {path}")
+        try:
+            header, rows = load_csv(path)
         except ValueError as e:
-            self.say(echo, message(f"Cannot read {e}", "✗", "red"))
-            return
-        self.app.source, self.app.rows = path, rows
-        columns = "  ".join(
-            f"[{GRADIENT[i % len(GRADIENT)]}]{name}[/]" for i, name in enumerate(rows[0])
-        )
-        # ponytail: next stage (column analysis) not built yet
-        self.say(echo, message(
-            f"Loaded [b]{path.name}[/]  [dim]{len(rows)} rows · {len(rows[0])} columns[/]\n  {columns}",
+            raise Refusal(f"Cannot read {e}") from None
+        need("DATABASE_URL")
+        app = self.app
+        if app.store_id is None:
+            side, app.store_id = "store", await asyncio.to_thread(workspace.upload_store, header, rows)
+        else:
+            side, app.incoming_id = "incoming", await asyncio.to_thread(
+                workspace.upload_incoming, app.store_id, header, rows
+            )
+        app.files[side] = {"name": path.name, "columns": header}
+        columns = "  ".join(f"[{GRADIENT[i % len(GRADIENT)]}]{h or '(empty)'}[/]" for i, h in enumerate(header))
+        self.say(message(
+            f"Loaded [b]{path.name}[/] as the [b]{side}[/]  [dim]{len(rows)} rows · {len(header)} columns[/]\n  {columns}",
             "✓", GRADIENT[0],
         ))
+
+    async def ask(self, prompt: str) -> None:
+        need("OPENROUTER_API_KEY")
+        intent = await classify(self.app.jev, prompt, self.app.files)
+        targets = [side for side in ("store", "incoming") if getattr(intent, side)]
+        if intent.command:  # a command asked in words; checked before on_topic, which judges the data only
+            words = ["/" + intent.command]
+            if intent.command == "undo":
+                if len(targets) != 1:
+                    raise Refusal("Undo which file? Say the store or the incoming file, or use /undo store or /undo incoming.")
+                words += targets
+            self.say(message(f"[dim]Running[/] [b]{' '.join(words)}[/]", "↳", "$text-muted"))
+            await self.command(words)
+            return
+        if not intent.on_topic:
+            hint = "" if self.app.incoming_id else " If it's about a supplier file, load that file first by typing its path."
+            raise Refusal(
+                "Your CSV files can't answer that, so nothing was changed. Ask about your data or change it, "
+                f"or use a command: /preview /undo /merge /reset.{hint}"
+            )
+        if not targets:
+            raise Refusal("Jev couldn't tell which file this is for. Say whether you mean the store or the incoming file.")
+        # ponytail: prompt → Mongo update execution not built yet; this is where it plugs in
+        self.say(message(
+            f"This request is for the [b]{' and the '.join(targets)}[/].\n"
+            "  [dim]Running prompts isn't built yet, so nothing was changed.[/]"
+        ))
+
+    async def command(self, words: list[str]) -> None:
+        app = self.app
+        match words:
+            case ["/preview"]:
+                store_id = self.require_store()
+                headers, rows, total = await asyncio.to_thread(workspace.current, "store", store_id, PREVIEW_ROWS)
+                table = DataTable(show_cursor=False, zebra_stripes=True, classes="preview")
+                table.add_columns(*(h or f"({i})" for i, h in enumerate(headers[:PREVIEW_COLUMNS], 1)))
+                table.add_rows(row[:PREVIEW_COLUMNS] for row in rows)
+                count = lambda shown, total, what: f"{shown} of {total} {what}" if total > shown else f"{total} {what}"
+                self.say(message(
+                    "Latest store version  [dim]"
+                    f"{count(len(rows), total, 'rows')} · {count(min(len(headers), PREVIEW_COLUMNS), len(headers), 'columns')}[/]"
+                ), table)
+            case ["/undo", "store" | "incoming" as side]:
+                owner_id = self.require_store() if side == "store" else app.incoming_id
+                if owner_id is None:
+                    raise Refusal("There's no incoming file yet.")
+                try:
+                    undone = await asyncio.to_thread(workspace.undo, side, owner_id)
+                except IntegrityError:
+                    raise Refusal("A merge used this incoming version. Undo the merge first with /undo store.") from None
+                self.say(message(f"Undid the last change to the {side}.", "↶") if undone
+                         else message(f"Nothing to undo on the {side}.", "·", "$text-muted"))
+            case ["/undo", *_]:
+                raise Refusal("Say which file: /undo store or /undo incoming.")
+            case ["/merge"]:
+                self.require_store()
+                if app.incoming_id is None:
+                    raise Refusal("Upload an incoming file first: type the path of the supplier CSV.")
+                # ponytail: merge pipeline (src/pipeline) not built yet
+                self.say(message("Merge isn't built yet, so nothing was changed.", "·", "$text-muted"))
+            case ["/reset"]:
+                removed = await asyncio.to_thread(workspace.reset, self.require_store())
+                self.say(message(f"Store is back to its uploaded version ({removed} changes removed).", "↶"))
+            case _:
+                raise Refusal(f"Unknown command {words[0]}. Available commands:\n{COMMANDS}")
+
+    def require_store(self) -> int:
+        if self.app.store_id is None:
+            raise Refusal("Upload a store first: type the path of your store CSV export.")
+        return self.app.store_id

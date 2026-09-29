@@ -1,11 +1,13 @@
 import sys
+from functools import cached_property
 from pathlib import Path
 
 from rich.console import Console
 from textual.app import App
 
 from orbitrows.services.cli.crash import report
-from orbitrows.services.cli.screens import IntroScreen, SourceScreen
+from orbitrows.services.cli.screens import IntroScreen, PromptScreen
+from orbitrows.services.jev.client import connect
 
 
 class OrbitRowsApp(App):
@@ -14,8 +16,14 @@ class OrbitRowsApp(App):
     def __init__(self, root: Path = Path(".")):
         super().__init__()
         self.root = root
-        self.source: Path | None = None
-        self.rows: list[dict[str, str]] = []
+        # ponytail: a session starts fresh each run; resuming the last store needs a picker
+        self.store_id: int | None = None
+        self.incoming_id: int | None = None
+        self.files: dict[str, dict] = {}  # "store"/"incoming" -> {"name", "columns"}, what Jev sees
+
+    @cached_property
+    def jev(self):
+        return connect()
 
     # ponytail: overrides Textual's private crash hook (textual 8.x); recheck on upgrade
     def _handle_exception(self, error: Exception) -> None:
@@ -23,7 +31,7 @@ class OrbitRowsApp(App):
         self._exit_renderables[:] = [report(error)]  # replace the traceback Textual would print
 
     def on_mount(self) -> None:
-        self.push_screen(SourceScreen(self.root))
+        self.push_screen(PromptScreen(self.root))
         self.push_screen(IntroScreen())
 
 
