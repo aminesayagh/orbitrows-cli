@@ -1,8 +1,8 @@
 """initial schema
 
-Revision ID: 576edf7d46c0
+Revision ID: 4b2e952c74a7
 Revises: 
-Create Date: 2026-09-28 22:17:32.879543
+Create Date: 2026-09-29 15:07:49.275285
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '576edf7d46c0'
+revision: str = '4b2e952c74a7'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -38,48 +38,48 @@ def upgrade() -> None:
     sa.Column('id', sa.BigInteger(), nullable=False),
     sa.Column('store_id', sa.BigInteger(), nullable=False),
     sa.Column('key', sa.String(length=16), nullable=False),
-    sa.Column('header', sa.Text(), nullable=False),
-    sa.Column('position', sa.BigInteger(), nullable=False),
-    sa.Column('store_context_client', sa.BigInteger(), nullable=True),
-    sa.Column('store_context_category', sa.SmallInteger(), nullable=True),
-    sa.Column('header_context', sa.Text(), nullable=True),
-    sa.Column('context_classify', sa.SmallInteger(), nullable=True),
-    sa.Column('schema', postgresql.JSONB(none_as_null=True, astext_type=sa.Text()), nullable=True),
-    sa.ForeignKeyConstraint(['store_context_client'], ['store_column.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['store_id'], ['store.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('store_id', 'key')
     )
-    op.create_index(op.f('ix_store_column_store_context_client'), 'store_column', ['store_context_client'], unique=False)
     op.create_index(op.f('ix_store_column_store_id'), 'store_column', ['store_id'], unique=False)
+    op.create_table('store_record',
+    sa.Column('id', sa.BigInteger(), nullable=False),
+    sa.Column('store_id', sa.BigInteger(), nullable=False),
+    sa.ForeignKeyConstraint(['store_id'], ['store.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_store_record_store_id'), 'store_record', ['store_id'], unique=False)
+    op.create_table('edit',
+    sa.Column('id', sa.BigInteger(), nullable=False),
+    sa.Column('store_id', sa.BigInteger(), nullable=False),
+    sa.Column('source', sa.SmallInteger(), nullable=False),
+    sa.Column('prompt', sa.Text(), nullable=True),
+    sa.Column('update', postgresql.JSONB(none_as_null=True, astext_type=sa.Text()), nullable=True),
+    sa.Column('incoming_id', sa.BigInteger(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['incoming_id'], ['incoming.id'], ),
+    sa.ForeignKeyConstraint(['store_id'], ['store.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_edit_incoming_id'), 'edit', ['incoming_id'], unique=False)
+    op.create_index(op.f('ix_edit_store_id'), 'edit', ['store_id'], unique=False)
     op.create_table('incoming_column',
     sa.Column('id', sa.BigInteger(), nullable=False),
     sa.Column('incoming_id', sa.BigInteger(), nullable=False),
     sa.Column('key', sa.String(length=16), nullable=False),
-    sa.Column('header', sa.Text(), nullable=False),
-    sa.Column('position', sa.BigInteger(), nullable=False),
-    sa.Column('incoming_context_client', sa.BigInteger(), nullable=True),
-    sa.Column('incoming_context_category', sa.SmallInteger(), nullable=True),
-    sa.Column('header_context', sa.Text(), nullable=True),
-    sa.Column('context_classify', sa.SmallInteger(), nullable=True),
-    sa.ForeignKeyConstraint(['incoming_context_client'], ['incoming_column.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['incoming_id'], ['incoming.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('incoming_id', 'key')
     )
-    op.create_index(op.f('ix_incoming_column_incoming_context_client'), 'incoming_column', ['incoming_context_client'], unique=False)
     op.create_index(op.f('ix_incoming_column_incoming_id'), 'incoming_column', ['incoming_id'], unique=False)
-    op.create_table('incoming_edit',
+    op.create_table('incoming_record',
     sa.Column('id', sa.BigInteger(), nullable=False),
     sa.Column('incoming_id', sa.BigInteger(), nullable=False),
-    sa.Column('prompt', sa.Text(), nullable=False),
-    sa.Column('update', postgresql.JSONB(none_as_null=True, astext_type=sa.Text()), nullable=False),
-    sa.Column('confidence', sa.REAL(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['incoming_id'], ['incoming.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_incoming_edit_incoming_id'), 'incoming_edit', ['incoming_id'], unique=False)
+    op.create_index(op.f('ix_incoming_record_incoming_id'), 'incoming_record', ['incoming_id'], unique=False)
     op.create_table('column_match',
     sa.Column('incoming_column_id', sa.BigInteger(), nullable=False),
     sa.Column('store_column_id', sa.BigInteger(), nullable=False),
@@ -94,40 +94,33 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('incoming_column_id', 'store_column_id')
     )
     op.create_index(op.f('ix_column_match_store_column_id'), 'column_match', ['store_column_id'], unique=False)
-    op.create_table('incoming_record',
+    op.create_table('incoming_column_revision',
     sa.Column('id', sa.BigInteger(), nullable=False),
-    sa.Column('incoming_id', sa.BigInteger(), nullable=False),
+    sa.Column('column_id', sa.BigInteger(), nullable=False),
     sa.Column('edit_id', sa.BigInteger(), nullable=True),
-    sa.ForeignKeyConstraint(['edit_id'], ['incoming_edit.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['incoming_id'], ['incoming.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
+    sa.Column('header', sa.Text(), nullable=False),
+    sa.Column('position', sa.Numeric(), nullable=False),
+    sa.Column('deleted', sa.Boolean(), nullable=False),
+    sa.Column('context_classify', sa.SmallInteger(), nullable=True),
+    sa.Column('context_category', sa.SmallInteger(), nullable=True),
+    sa.Column('context_client', sa.BigInteger(), nullable=True),
+    sa.Column('header_context', sa.Text(), nullable=True),
+    sa.ForeignKeyConstraint(['column_id'], ['incoming_column.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['context_client'], ['incoming_column.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['edit_id'], ['edit.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('column_id', 'edit_id', postgresql_nulls_not_distinct=True)
     )
-    op.create_index(op.f('ix_incoming_record_edit_id'), 'incoming_record', ['edit_id'], unique=False)
-    op.create_index(op.f('ix_incoming_record_incoming_id'), 'incoming_record', ['incoming_id'], unique=False)
-    op.create_table('store_edit',
-    sa.Column('id', sa.BigInteger(), nullable=False),
-    sa.Column('store_id', sa.BigInteger(), nullable=False),
-    sa.Column('prompt', sa.Text(), nullable=False),
-    sa.Column('update', postgresql.JSONB(none_as_null=True, astext_type=sa.Text()), nullable=False),
-    sa.Column('confidence', sa.REAL(), nullable=True),
-    sa.Column('incoming_id', sa.BigInteger(), nullable=True),
-    sa.Column('incoming_edit_id', sa.BigInteger(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['incoming_edit_id'], ['incoming_edit.id'], ),
-    sa.ForeignKeyConstraint(['incoming_id'], ['incoming.id'], ),
-    sa.ForeignKeyConstraint(['store_id'], ['store.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_store_edit_incoming_edit_id'), 'store_edit', ['incoming_edit_id'], unique=False)
-    op.create_index(op.f('ix_store_edit_incoming_id'), 'store_edit', ['incoming_id'], unique=False)
-    op.create_index(op.f('ix_store_edit_store_id'), 'store_edit', ['store_id'], unique=False)
+    op.create_index(op.f('ix_incoming_column_revision_column_id'), 'incoming_column_revision', ['column_id'], unique=False)
+    op.create_index(op.f('ix_incoming_column_revision_context_client'), 'incoming_column_revision', ['context_client'], unique=False)
+    op.create_index(op.f('ix_incoming_column_revision_edit_id'), 'incoming_column_revision', ['edit_id'], unique=False)
     op.create_table('incoming_record_revision',
     sa.Column('id', sa.BigInteger(), nullable=False),
     sa.Column('record_id', sa.BigInteger(), nullable=False),
     sa.Column('edit_id', sa.BigInteger(), nullable=True),
     sa.Column('position', sa.Numeric(), nullable=False),
     sa.Column('cells', postgresql.JSONB(none_as_null=True, astext_type=sa.Text()), nullable=True),
-    sa.ForeignKeyConstraint(['edit_id'], ['incoming_edit.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['edit_id'], ['edit.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['record_id'], ['incoming_record.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('record_id', 'edit_id', postgresql_nulls_not_distinct=True)
@@ -135,23 +128,13 @@ def upgrade() -> None:
     op.create_index('ix_incoming_record_revision_cells', 'incoming_record_revision', ['cells'], unique=False, postgresql_using='gin', postgresql_ops={'cells': 'jsonb_path_ops'})
     op.create_index(op.f('ix_incoming_record_revision_edit_id'), 'incoming_record_revision', ['edit_id'], unique=False)
     op.create_index(op.f('ix_incoming_record_revision_record_id'), 'incoming_record_revision', ['record_id'], unique=False)
-    op.create_table('store_record',
-    sa.Column('id', sa.BigInteger(), nullable=False),
-    sa.Column('store_id', sa.BigInteger(), nullable=False),
-    sa.Column('edit_id', sa.BigInteger(), nullable=True),
-    sa.ForeignKeyConstraint(['edit_id'], ['store_edit.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['store_id'], ['store.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_store_record_edit_id'), 'store_record', ['edit_id'], unique=False)
-    op.create_index(op.f('ix_store_record_store_id'), 'store_record', ['store_id'], unique=False)
     op.create_table('merge_row',
     sa.Column('id', sa.BigInteger(), nullable=False),
     sa.Column('edit_id', sa.BigInteger(), nullable=False),
     sa.Column('incoming_record_id', sa.BigInteger(), nullable=False),
     sa.Column('record_id', sa.BigInteger(), nullable=True),
     sa.Column('issues', postgresql.JSONB(none_as_null=True, astext_type=sa.Text()), nullable=True),
-    sa.ForeignKeyConstraint(['edit_id'], ['store_edit.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['edit_id'], ['edit.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['incoming_record_id'], ['incoming_record.id'], ),
     sa.ForeignKeyConstraint(['record_id'], ['store_record.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
@@ -160,13 +143,34 @@ def upgrade() -> None:
     op.create_index(op.f('ix_merge_row_edit_id'), 'merge_row', ['edit_id'], unique=False)
     op.create_index(op.f('ix_merge_row_incoming_record_id'), 'merge_row', ['incoming_record_id'], unique=False)
     op.create_index(op.f('ix_merge_row_record_id'), 'merge_row', ['record_id'], unique=False)
+    op.create_table('store_column_revision',
+    sa.Column('id', sa.BigInteger(), nullable=False),
+    sa.Column('column_id', sa.BigInteger(), nullable=False),
+    sa.Column('edit_id', sa.BigInteger(), nullable=True),
+    sa.Column('header', sa.Text(), nullable=False),
+    sa.Column('position', sa.Numeric(), nullable=False),
+    sa.Column('deleted', sa.Boolean(), nullable=False),
+    sa.Column('context_classify', sa.SmallInteger(), nullable=True),
+    sa.Column('context_category', sa.SmallInteger(), nullable=True),
+    sa.Column('context_client', sa.BigInteger(), nullable=True),
+    sa.Column('header_context', sa.Text(), nullable=True),
+    sa.Column('schema', postgresql.JSONB(none_as_null=True, astext_type=sa.Text()), nullable=True),
+    sa.ForeignKeyConstraint(['column_id'], ['store_column.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['context_client'], ['store_column.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['edit_id'], ['edit.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('column_id', 'edit_id', postgresql_nulls_not_distinct=True)
+    )
+    op.create_index(op.f('ix_store_column_revision_column_id'), 'store_column_revision', ['column_id'], unique=False)
+    op.create_index(op.f('ix_store_column_revision_context_client'), 'store_column_revision', ['context_client'], unique=False)
+    op.create_index(op.f('ix_store_column_revision_edit_id'), 'store_column_revision', ['edit_id'], unique=False)
     op.create_table('store_record_revision',
     sa.Column('id', sa.BigInteger(), nullable=False),
     sa.Column('record_id', sa.BigInteger(), nullable=False),
     sa.Column('edit_id', sa.BigInteger(), nullable=True),
     sa.Column('position', sa.Numeric(), nullable=False),
     sa.Column('cells', postgresql.JSONB(none_as_null=True, astext_type=sa.Text()), nullable=True),
-    sa.ForeignKeyConstraint(['edit_id'], ['store_edit.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['edit_id'], ['edit.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['record_id'], ['store_record.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('record_id', 'edit_id', postgresql_nulls_not_distinct=True)
@@ -184,33 +188,34 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_store_record_revision_edit_id'), table_name='store_record_revision')
     op.drop_index('ix_store_record_revision_cells', table_name='store_record_revision', postgresql_using='gin', postgresql_ops={'cells': 'jsonb_path_ops'})
     op.drop_table('store_record_revision')
+    op.drop_index(op.f('ix_store_column_revision_edit_id'), table_name='store_column_revision')
+    op.drop_index(op.f('ix_store_column_revision_context_client'), table_name='store_column_revision')
+    op.drop_index(op.f('ix_store_column_revision_column_id'), table_name='store_column_revision')
+    op.drop_table('store_column_revision')
     op.drop_index(op.f('ix_merge_row_record_id'), table_name='merge_row')
     op.drop_index(op.f('ix_merge_row_incoming_record_id'), table_name='merge_row')
     op.drop_index(op.f('ix_merge_row_edit_id'), table_name='merge_row')
     op.drop_table('merge_row')
-    op.drop_index(op.f('ix_store_record_store_id'), table_name='store_record')
-    op.drop_index(op.f('ix_store_record_edit_id'), table_name='store_record')
-    op.drop_table('store_record')
     op.drop_index(op.f('ix_incoming_record_revision_record_id'), table_name='incoming_record_revision')
     op.drop_index(op.f('ix_incoming_record_revision_edit_id'), table_name='incoming_record_revision')
     op.drop_index('ix_incoming_record_revision_cells', table_name='incoming_record_revision', postgresql_using='gin', postgresql_ops={'cells': 'jsonb_path_ops'})
     op.drop_table('incoming_record_revision')
-    op.drop_index(op.f('ix_store_edit_store_id'), table_name='store_edit')
-    op.drop_index(op.f('ix_store_edit_incoming_id'), table_name='store_edit')
-    op.drop_index(op.f('ix_store_edit_incoming_edit_id'), table_name='store_edit')
-    op.drop_table('store_edit')
-    op.drop_index(op.f('ix_incoming_record_incoming_id'), table_name='incoming_record')
-    op.drop_index(op.f('ix_incoming_record_edit_id'), table_name='incoming_record')
-    op.drop_table('incoming_record')
+    op.drop_index(op.f('ix_incoming_column_revision_edit_id'), table_name='incoming_column_revision')
+    op.drop_index(op.f('ix_incoming_column_revision_context_client'), table_name='incoming_column_revision')
+    op.drop_index(op.f('ix_incoming_column_revision_column_id'), table_name='incoming_column_revision')
+    op.drop_table('incoming_column_revision')
     op.drop_index(op.f('ix_column_match_store_column_id'), table_name='column_match')
     op.drop_table('column_match')
-    op.drop_index(op.f('ix_incoming_edit_incoming_id'), table_name='incoming_edit')
-    op.drop_table('incoming_edit')
+    op.drop_index(op.f('ix_incoming_record_incoming_id'), table_name='incoming_record')
+    op.drop_table('incoming_record')
     op.drop_index(op.f('ix_incoming_column_incoming_id'), table_name='incoming_column')
-    op.drop_index(op.f('ix_incoming_column_incoming_context_client'), table_name='incoming_column')
     op.drop_table('incoming_column')
+    op.drop_index(op.f('ix_edit_store_id'), table_name='edit')
+    op.drop_index(op.f('ix_edit_incoming_id'), table_name='edit')
+    op.drop_table('edit')
+    op.drop_index(op.f('ix_store_record_store_id'), table_name='store_record')
+    op.drop_table('store_record')
     op.drop_index(op.f('ix_store_column_store_id'), table_name='store_column')
-    op.drop_index(op.f('ix_store_column_store_context_client'), table_name='store_column')
     op.drop_table('store_column')
     op.drop_index(op.f('ix_incoming_store_id'), table_name='incoming')
     op.drop_table('incoming')

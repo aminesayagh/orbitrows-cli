@@ -53,7 +53,23 @@ class Incoming(Created, Base):
     store_id: Mapped[int] = ref("store.id", **CASCADE)
 
 
-# --- columns -----------------------------------------------------------------
+# --- edits -------------------------------------------------------------------
+
+
+class Edit(Created, Base):
+    """One timeline per store: store AND incoming revisions point here, so one prompt can edit both as one edit."""
+    __tablename__ = "edit"
+    id: Mapped[int] = mapped_column(primary_key=True)  # increasing = edit order
+    store_id: Mapped[int] = ref("store.id", **CASCADE)
+    source: Mapped[int] = mapped_column(SmallInteger)  # 0 prompt, 1 merge, 2 profile, 3 manual
+    prompt: Mapped[str | None] = mapped_column(Text)
+    update: Mapped[dict[str, Any] | None]  # the executed Mongo update JSON
+    # Set = merge. NO ACTION: reject the merge before deleting the incoming it merged.
+    incoming_id: Mapped[int | None] = ref("incoming.id")
+
+
+# --- columns: identity + revision --------------------------------------------
+# Identities hold only what never changes; everything else is a revision (doc §2).
 
 
 class StoreColumn(Base):
@@ -61,14 +77,7 @@ class StoreColumn(Base):
     __table_args__ = (UniqueConstraint("store_id", "key"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     store_id: Mapped[int] = ref("store.id", **CASCADE)
-    key: Mapped[str] = mapped_column(String(16))
-    header: Mapped[str] = mapped_column(Text, default="")
-    position: Mapped[int]
-    store_context_client: Mapped[int | None] = ref("store_column.id", ondelete="SET NULL")
-    store_context_category: Mapped[int | None] = mapped_column(SmallInteger)  # 0 currency, 1 unit, 2 language
-    header_context: Mapped[str | None] = mapped_column(Text)
-    context_classify: Mapped[int | None] = mapped_column(SmallInteger)  # 0 dedicated, 1 header, 2 both, 3 none, 4 uncertain
-    schema: Mapped[dict[str, Any] | None]
+    key: Mapped[str] = mapped_column(String(16))  # "c1": the key in cells, never changes
 
 
 class IncomingColumn(Base):
@@ -77,12 +86,43 @@ class IncomingColumn(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     incoming_id: Mapped[int] = ref("incoming.id", **CASCADE)
     key: Mapped[str] = mapped_column(String(16))
+
+
+def _column_revision_args() -> tuple:
+    return (UniqueConstraint("column_id", "edit_id", postgresql_nulls_not_distinct=True),)
+
+
+class StoreColumnRevision(Base):
+    __tablename__ = "store_column_revision"
+    __table_args__ = _column_revision_args()
+    id: Mapped[int] = mapped_column(primary_key=True)  # ORM PK; (column_id, edit_id) has a nullable part
+    column_id: Mapped[int] = ref("store_column.id", **CASCADE)
+    edit_id: Mapped[int | None] = ref("edit.id", **CASCADE)  # null = as uploaded
+    header: Mapped[str] = mapped_column(Text, default="")  # "" = no header
+    position: Mapped[Decimal] = mapped_column(Numeric)
+    deleted: Mapped[bool] = mapped_column(default=False)  # a flag, since an empty header is legitimate
+    context_classify: Mapped[int | None] = mapped_column(SmallInteger)  # 0 dedicated, 1 header, 2 both, 3 none, 4 uncertain
+    # 0 currency, 1 physical_unit, 2 counting_unit, 3 compound_unit, 4 percentage, 5 language, 6 other, 7 unknown (doc §7)
+    context_category: Mapped[int | None] = mapped_column(SmallInteger)
+    context_client: Mapped[int | None] = ref("store_column.id", ondelete="SET NULL")  # the IDENTITY carrying the context
+    header_context: Mapped[str | None] = mapped_column(Text)  # unit read from the header ("kg")
+    schema: Mapped[dict[str, Any] | None]  # Table Schema field; store only
+
+
+class IncomingColumnRevision(Base):
+    __tablename__ = "incoming_column_revision"
+    __table_args__ = _column_revision_args()
+    id: Mapped[int] = mapped_column(primary_key=True)
+    column_id: Mapped[int] = ref("incoming_column.id", **CASCADE)
+    edit_id: Mapped[int | None] = ref("edit.id", **CASCADE)
     header: Mapped[str] = mapped_column(Text, default="")
-    position: Mapped[int]
-    incoming_context_client: Mapped[int | None] = ref("incoming_column.id", ondelete="SET NULL")
-    incoming_context_category: Mapped[int | None] = mapped_column(SmallInteger)
-    header_context: Mapped[str | None] = mapped_column(Text)
+    position: Mapped[Decimal] = mapped_column(Numeric)
+    deleted: Mapped[bool] = mapped_column(default=False)
     context_classify: Mapped[int | None] = mapped_column(SmallInteger)
+    context_category: Mapped[int | None] = mapped_column(SmallInteger)
+    context_client: Mapped[int | None] = ref("incoming_column.id", ondelete="SET NULL")
+    header_context: Mapped[str | None] = mapped_column(Text)
+    # no schema: profiling is store-only
 
 
 class ColumnMatch(Base):
@@ -97,45 +137,20 @@ class ColumnMatch(Base):
     level_confidence: Mapped[float | None]
 
 
-# --- edits -------------------------------------------------------------------
-
-
-class IncomingEdit(Created, Base):
-    __tablename__ = "incoming_edit"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    incoming_id: Mapped[int] = ref("incoming.id", **CASCADE)
-    prompt: Mapped[str] = mapped_column(Text)
-    update: Mapped[dict[str, Any]]
-    confidence: Mapped[float | None]  # ponytail: meaning still undefined (doc §7)
-
-
-class StoreEdit(Created, Base):
-    __tablename__ = "store_edit"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    store_id: Mapped[int] = ref("store.id", **CASCADE)
-    prompt: Mapped[str] = mapped_column(Text)
-    update: Mapped[dict[str, Any]]
-    confidence: Mapped[float | None]
-    # Set = this edit is a merge. NO ACTION: reject the merge before deleting/undoing what it merged.
-    incoming_id: Mapped[int | None] = ref("incoming.id")
-    incoming_edit_id: Mapped[int | None] = ref("incoming_edit.id")
-
-
-# --- records + revisions -----------------------------------------------------
+# --- records: identity + revision --------------------------------------------
 
 
 class StoreRecord(Base):
     __tablename__ = "store_record"
     id: Mapped[int] = mapped_column(primary_key=True)
     store_id: Mapped[int] = ref("store.id", **CASCADE)
-    edit_id: Mapped[int | None] = ref("store_edit.id", **CASCADE)  # null = uploaded
+    # no edit_id: whether it exists at version k is answered by its revisions
 
 
 class IncomingRecord(Base):
     __tablename__ = "incoming_record"
     id: Mapped[int] = mapped_column(primary_key=True)
     incoming_id: Mapped[int] = ref("incoming.id", **CASCADE)
-    edit_id: Mapped[int | None] = ref("incoming_edit.id", **CASCADE)
 
 
 def _revision_args(table: str) -> tuple:
@@ -151,7 +166,7 @@ class StoreRecordRevision(Base):
     __table_args__ = _revision_args(__tablename__)
     id: Mapped[int] = mapped_column(primary_key=True)  # ORM needs a PK; (record_id, edit_id) has a nullable part
     record_id: Mapped[int] = ref("store_record.id", **CASCADE)
-    edit_id: Mapped[int | None] = ref("store_edit.id", **CASCADE)  # null = uploaded content
+    edit_id: Mapped[int | None] = ref("edit.id", **CASCADE)  # null = uploaded content
     position: Mapped[Decimal] = mapped_column(Numeric)  # exact, so midpoints never collide
     cells: Mapped[dict[str, Any] | None]  # raw CSV strings keyed by column key; null = deleted
 
@@ -161,7 +176,7 @@ class IncomingRecordRevision(Base):
     __table_args__ = _revision_args(__tablename__)
     id: Mapped[int] = mapped_column(primary_key=True)
     record_id: Mapped[int] = ref("incoming_record.id", **CASCADE)
-    edit_id: Mapped[int | None] = ref("incoming_edit.id", **CASCADE)
+    edit_id: Mapped[int | None] = ref("edit.id", **CASCADE)
     position: Mapped[Decimal] = mapped_column(Numeric)
     cells: Mapped[dict[str, Any] | None]
 
@@ -175,7 +190,7 @@ class MergeRow(Base):
         UniqueConstraint("edit_id", "incoming_record_id", "record_id", postgresql_nulls_not_distinct=True),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
-    edit_id: Mapped[int] = ref("store_edit.id", **CASCADE)
+    edit_id: Mapped[int] = ref("edit.id", **CASCADE)
     incoming_record_id: Mapped[int] = ref("incoming_record.id")
     record_id: Mapped[int | None] = ref("store_record.id", **CASCADE)  # null = no product matched
     issues: Mapped[dict[str, Any] | None]  # {"c9": {"status": ..., "reason": ...}}; null = clean

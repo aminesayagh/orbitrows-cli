@@ -39,6 +39,8 @@ Commands: `/preview` (20 rows, 6 columns), `/undo store`, `/undo incoming`, `/me
 ```
 src/                imported as `orbitrows`
   pipeline/         one module per stage: context, columns, rows, cells
+    context.py      Jev column profile on upload: type, context role, category, which columns it describes
+    units.py        header_context: GLiNER2 finds the unit in a header, the dictionary normalises it ("Poids (kilos)" -> kg)
   services/
     cli/            terminal UI
       app.py        Textual app and the `orbitrows` entry point

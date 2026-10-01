@@ -23,3 +23,4 @@ def load_csv(path: Path) -> tuple[list[str], list[list[str]]]:
     if not rows:
         raise ValueError(f"{path.name}: no data rows")
     return header, rows
+

@@ -10,9 +10,10 @@ from textual.geometry import Offset
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Input, Static
 from textual_autocomplete import DropdownItem, PathAutoComplete, TargetState
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import OperationalError
 from typesafe_sdk import TypeSafeError
 
+from orbitrows.pipeline.context import classify_columns
 from orbitrows.services.csv.reader import load_csv
 from orbitrows.services.db import workspace
 from orbitrows.services.jev.intent import classify
@@ -153,9 +154,22 @@ COMMANDS = """\
 [b]/undo store[/]       undo the last change to the store
 [b]/undo incoming[/]    undo the last change to the incoming file
 [b]/merge[/]            merge the incoming file into the store
-[b]/reset[/]            go back to the store as it was uploaded"""
+[b]/reset[/]            go back to the files as they were uploaded"""
 
 PREVIEW_ROWS, PREVIEW_COLUMNS = 20, 6
+
+
+def context_summary(context: dict, name) -> str:
+    """One line per column that carries a context. Flags (uncertain, unresolved) wait for the merge."""
+    lines = []
+    for key, c in context.items():
+        if c.role in ("dedicated_context", "both") and c.category:
+            described = [name(k) for k, other in context.items() if other.client == key]
+            unit = f" {c.header_context}" if c.header_context else ""
+            lines.append(f"{name(key)} → {c.category}{unit}" + (f"  [dim]for {', '.join(described)}[/]" if described else ""))
+        elif c.role == "header_context" and c.header_context:
+            lines.append(f"{name(key)} → {c.category} {c.header_context}")
+    return "Column context\n  " + "\n  ".join(lines) if lines else "No unit, currency or language columns found."
 
 
 class PromptScreen(Screen):
@@ -180,6 +194,7 @@ class PromptScreen(Screen):
         super().__init__()
         self.root = root
         self.busy = False
+        self.pending: asyncio.Future | None = None  # an open question to the user; the next line answers it
 
     def compose(self) -> ComposeResult:
         log = VerticalScroll(id="log")
@@ -217,6 +232,11 @@ class PromptScreen(Screen):
 
     def submit(self, value: str) -> None:
         if not value.strip():
+            return
+        if self.pending and not self.pending.done():  # the line answers the open question
+            self.query_one("#entry", Input).clear()
+            self.say(message(f"[dim]{escape(value)}[/]", ">", "$text-muted"))
+            self.pending.set_result(value.strip())
             return
         if self.busy:
             self.refuse("Still working on your last request.")
@@ -260,7 +280,7 @@ class PromptScreen(Screen):
         need("DATABASE_URL")
         app = self.app
         if app.store_id is None:
-            side, app.store_id = "store", await asyncio.to_thread(workspace.upload_store, header, rows)
+            side, app.store_id = "store", await self.upload_store(path, header, rows)
         else:
             side, app.incoming_id = "incoming", await asyncio.to_thread(
                 workspace.upload_incoming, app.store_id, header, rows
@@ -271,6 +291,36 @@ class PromptScreen(Screen):
             f"Loaded [b]{path.name}[/] as the [b]{side}[/]  [dim]{len(rows)} rows · {len(header)} columns[/]\n  {columns}",
             "✓", GRADIENT[0],
         ))
+
+    async def upload_store(self, path: Path, header: list[str], rows: list[list[str]]) -> int:
+        """Column types + context (Jev) → user settles conflicts → one DB transaction."""
+        need("OPENROUTER_API_KEY")
+        step = lambda text: self.say(message(f"[dim]{text}…[/]", "◌", "$text-muted"))
+        context, conflicts = await classify_columns(self.app.jev, header, rows, step=step)
+        name = lambda key: header[int(key[1:]) - 1] or f"column {key[1:]}"
+        for conflict in conflicts:
+            options = [f"{name(k)}  [dim](Jev {p:.0%})[/]" for k, p in conflict.options] + ["none"]
+            pick = await self.question(f"[b]{name(conflict.key)}[/]: which column gives its context?", options)
+            if pick < len(conflict.options):
+                context[conflict.key].client = conflict.options[pick][0]
+        step("Saving")
+        store_id = await asyncio.to_thread(workspace.upload_store, header, rows, context)
+        self.say(message(context_summary(context, name), "◇", GRADIENT[2]))
+        return store_id
+
+    async def question(self, text: str, options: list[str]) -> int:
+        """Ask in the log; the next submitted line answers. Returns the 0-based option."""
+        listing = "\n".join(f"  [b]{i}[/]  {option}" for i, option in enumerate(options, 1))
+        while True:
+            self.say(message(f"{text}\n{listing}", "?", GRADIENT[1]))
+            self.pending = asyncio.get_running_loop().create_future()
+            try:
+                answer = await self.pending
+            finally:
+                self.pending = None
+            if answer.isdigit() and 1 <= int(answer) <= len(options):
+                return int(answer) - 1
+            self.refuse(f"Type a number from 1 to {len(options)}.")
 
     async def ask(self, prompt: str) -> None:
         need("OPENROUTER_API_KEY")
@@ -314,15 +364,20 @@ class PromptScreen(Screen):
                     f"{count(len(rows), total, 'rows')} · {count(min(len(headers), PREVIEW_COLUMNS), len(headers), 'columns')}[/]"
                 ), table)
             case ["/undo", "store" | "incoming" as side]:
-                owner_id = self.require_store() if side == "store" else app.incoming_id
-                if owner_id is None:
+                store_id = self.require_store()
+                if side == "incoming" and app.incoming_id is None:
                     raise Refusal("There's no incoming file yet.")
-                try:
-                    undone = await asyncio.to_thread(workspace.undo, side, owner_id)
-                except IntegrityError:
-                    raise Refusal("A merge used this incoming version. Undo the merge first with /undo store.") from None
-                self.say(message(f"Undid the last change to the {side}.", "↶") if undone
-                         else message(f"Nothing to undo on the {side}.", "·", "$text-muted"))
+                # One timeline for the session (doc §6): only the latest edit can be undone.
+                result = await asyncio.to_thread(workspace.undo, store_id, side)
+                other = "incoming" if side == "store" else "store"
+                self.say({
+                    "undone": message(f"Undid the last change to the {side}.", "↶"),
+                    "nothing": message(f"Nothing to undo on the {side}.", "·", "$text-muted"),
+                    "other_side": message(
+                        f"The last change was on the {other} file. Changes are undone in order: /undo {other} first.",
+                        "·", "$text-muted",
+                    ),
+                }[result])
             case ["/undo", *_]:
                 raise Refusal("Say which file: /undo store or /undo incoming.")
             case ["/merge"]:
@@ -333,7 +388,7 @@ class PromptScreen(Screen):
                 self.say(message("Merge isn't built yet, so nothing was changed.", "·", "$text-muted"))
             case ["/reset"]:
                 removed = await asyncio.to_thread(workspace.reset, self.require_store())
-                self.say(message(f"Store is back to its uploaded version ({removed} changes removed).", "↶"))
+                self.say(message(f"Back to the files as uploaded ({removed} changes removed).", "↶"))
             case _:
                 raise Refusal(f"Unknown command {words[0]}. Available commands:\n{COMMANDS}")
 

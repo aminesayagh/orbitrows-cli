@@ -9,6 +9,7 @@ import os
 import pytest
 from sqlalchemy import delete
 
+from orbitrows.pipeline.context import ColumnProfile, Conflict
 from orbitrows.services.jev.intent import Intent
 
 
@@ -33,7 +34,10 @@ def test_completes_the_word_under_the_cursor(tmp_path):
 async def test_prompt_routing(tmp_path, monkeypatch):
     from orbitrows.services.cli import screens
     from orbitrows.services.db import connect
-    from orbitrows.services.db.models import Store
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+
+    from orbitrows.services.db.models import Store, StoreColumn, StoreColumnRevision
 
     (tmp_path / "data").mkdir()
     header = "sku;name;price;c4;c5;c6;c7;c8"  # 8 columns, 25 rows: preview shows 6 and 20
@@ -52,7 +56,17 @@ async def test_prompt_routing(tmp_path, monkeypatch):
         seen.append((prompt, sorted(files)))
         return answers[prompt]
 
+    async def fake_columns(jev, header, rows, step=lambda text: None):
+        step("Jev: classifying column context")
+        context = {f"c{i}": ColumnProfile("none", 0.9) for i in range(1, len(header) + 1)}
+        context["c3"].type = "number"
+        context["c4"] = ColumnProfile("dedicated_context", 0.95, category="currency")
+        context["c5"] = ColumnProfile("dedicated_context", 0.9, category="other")
+        context["c2"].client = "c4"
+        return context, [Conflict("c3", [("c4", 0.81), ("c5", 0.64)])]  # price claimed by c4 and c5
+
     monkeypatch.setattr(screens, "classify", fake_classify)
+    monkeypatch.setattr(screens, "classify_columns", fake_columns)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test")
     app = OrbitRowsApp(tmp_path)
     try:
@@ -64,13 +78,30 @@ async def test_prompt_routing(tmp_path, monkeypatch):
             async def send(value):
                 before = len(texts(screen))
                 screen.submit(value)
-                await app.workers.wait_for_complete()
-                await pilot.pause()
+                for _ in range(500):  # until done, or waiting for the user's answer
+                    await pilot.pause(0.01)
+                    if not screen.busy or (screen.pending and not screen.pending.done()):
+                        break
                 return "\n".join(texts(screen)[before + 1 :])  # replies, without the echo
 
             assert "Upload a store first" in await send("fix names")  # prompt, no file, no store
             assert "Cannot read" in await send("empty.csv")
-            assert "as the store" in await send("data/store.csv")  # file, no store
+            assert "price: which column gives its context?" in await send("data/store.csv")  # file, no store
+            assert "Type a number from 1 to 3" in await send("9")
+            reply = await send("2")  # c5
+            assert "as the store" in reply and "c4 → currency  for name" in reply
+            with Session(connect()) as db:
+                ids = {k: i for k, i in db.execute(
+                    select(StoreColumn.key, StoreColumn.id).where(StoreColumn.store_id == app.store_id))}
+                cols = {k: r for k, r in db.execute(
+                    select(StoreColumn.key, StoreColumnRevision).join(StoreColumnRevision, StoreColumnRevision.column_id == StoreColumn.id)
+                    .where(StoreColumn.store_id == app.store_id, StoreColumnRevision.edit_id.is_(None)))}
+            assert cols["c1"].schema == {"name": "sku", "type": "string"}
+            assert cols["c3"].schema == {"name": "price", "type": "number"}  # type from Jev
+            assert cols["c2"].context_client == ids["c4"]  # Jev's link, to the column identity
+            assert cols["c3"].context_client == ids["c5"]  # the user's answer
+            assert (cols["c4"].context_classify, cols["c4"].context_category) == (0, 0)
+            assert cols["c5"].context_category == 6  # other
             assert app.files["store"]["columns"][:3] == ["sku", "name", "price"]
             assert "for the store" in await send("fix names")  # prompt on the only file
             assert "no incoming" in await send("/undo incoming")

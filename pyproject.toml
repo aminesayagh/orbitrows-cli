@@ -9,10 +9,14 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.20.0",
+    "babel>=2.18.0",
+    "gliner2[local]>=2.0.0",
+    "pint>=0.26.1",
     "psycopg[binary]>=3.3.6",
     "sqlalchemy>=2.1.1",
     "textual>=8.2.8",
     "textual-autocomplete>=4.0.6",
+    "torch>=2.14.0",
     "typesafe-sdk>=0.7.1",
 ]
 
@@ -35,3 +39,12 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+# CPU-only PyTorch for GLiNER2 (the build the header benchmark measured); much smaller than the CUDA build.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
