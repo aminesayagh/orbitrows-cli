@@ -8,14 +8,12 @@ from textual.content import Content
 from textual.containers import Center, Horizontal, Vertical, VerticalScroll
 from textual.geometry import Offset
 from textual.screen import Screen
-from textual.widgets import DataTable, Footer, Input, Static
+from textual.widgets import Footer, Input, Static
 from textual_autocomplete import DropdownItem, PathAutoComplete, TargetState
-from sqlalchemy.exc import OperationalError
 from typesafe_sdk import TypeSafeError
 
 from orbitrows.pipeline.context import classify_columns
 from orbitrows.services.csv.reader import load_csv
-from orbitrows.services.db import workspace
 from orbitrows.services.jev.intent import classify
 
 LOGO = """\
@@ -156,9 +154,6 @@ COMMANDS = """\
 [b]/merge[/]            merge the incoming file into the store
 [b]/reset[/]            go back to the files as they were uploaded"""
 
-PREVIEW_ROWS, PREVIEW_COLUMNS = 20, 6
-
-
 def context_summary(context: dict, name) -> str:
     """One line per column that carries a context. Flags (uncertain, unresolved) wait for the merge."""
     lines = []
@@ -180,7 +175,6 @@ class PromptScreen(Screen):
     #log {{ height: 1fr; padding: 0 1; scrollbar-size-vertical: 1; }}
     #banner {{ margin: 1 0; }}
     .message {{ margin-bottom: 1; }}
-    .preview {{ height: auto; max-height: 22; margin-bottom: 1; }}
     #prompt {{ dock: bottom; height: auto; }}
     #box {{ height: 3; border: round {GRADIENT[4]}; padding: 0 1; }}
     #box:focus-within {{ border: round {GRADIENT[1]}; }}
@@ -222,7 +216,7 @@ class PromptScreen(Screen):
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self.submit(event.value)
 
-    def say(self, *widgets: Static | DataTable) -> None:
+    def say(self, *widgets: Static) -> None:
         log = self.query_one("#log", VerticalScroll)
         log.mount_all(widgets)
         log.scroll_end(animate=False)
@@ -254,8 +248,6 @@ class PromptScreen(Screen):
                 await self.route(*split_input(value, self.root))
         except Refusal as e:
             self.refuse(str(e))
-        except OperationalError:
-            self.refuse("Can't reach the database. Check DATABASE_URL in .env and that PostgreSQL is running.")
         except TypeSafeError as e:
             self.refuse(f"Jev couldn't answer ({type(e).__name__}). Nothing was changed; try again.")
         finally:
@@ -263,7 +255,7 @@ class PromptScreen(Screen):
 
     async def route(self, prompt: str, path: Path | None) -> None:
         """The cases: no store yet → the file becomes the store; with a store → it becomes the incoming."""
-        if path is None and self.app.store_id is None:
+        if path is None and "store" not in self.app.files:
             raise Refusal("Upload a store first: type the path of your store CSV export.")
         if path is not None:
             await self.upload(path)
@@ -277,14 +269,11 @@ class PromptScreen(Screen):
             header, rows = load_csv(path)
         except ValueError as e:
             raise Refusal(f"Cannot read {e}") from None
-        need("DATABASE_URL")
         app = self.app
-        if app.store_id is None:
-            side, app.store_id = "store", await self.upload_store(path, header, rows)
+        if "store" not in app.files:
+            side, app.context = "store", await self.upload_store(header, rows)
         else:
-            side, app.incoming_id = "incoming", await asyncio.to_thread(
-                workspace.upload_incoming, app.store_id, header, rows
-            )
+            side = "incoming"  # ponytail: not stored anywhere; the rows go out of scope here
         app.files[side] = {"name": path.name, "columns": header}
         columns = "  ".join(f"[{GRADIENT[i % len(GRADIENT)]}]{h or '(empty)'}[/]" for i, h in enumerate(header))
         self.say(message(
@@ -292,8 +281,8 @@ class PromptScreen(Screen):
             "✓", GRADIENT[0],
         ))
 
-    async def upload_store(self, path: Path, header: list[str], rows: list[list[str]]) -> int:
-        """Column types + context (Jev) → user settles conflicts → one DB transaction."""
+    async def upload_store(self, header: list[str], rows: list[list[str]]) -> dict:
+        """Column types + context (Jev) → user settles conflicts. Returns the profile, keyed c1, c2…"""
         need("OPENROUTER_API_KEY")
         step = lambda text: self.say(message(f"[dim]{text}…[/]", "◌", "$text-muted"))
         context, conflicts = await classify_columns(self.app.jev, header, rows, step=step)
@@ -303,10 +292,8 @@ class PromptScreen(Screen):
             pick = await self.question(f"[b]{name(conflict.key)}[/]: which column gives its context?", options)
             if pick < len(conflict.options):
                 context[conflict.key].client = conflict.options[pick][0]
-        step("Saving")
-        store_id = await asyncio.to_thread(workspace.upload_store, header, rows, context)
         self.say(message(context_summary(context, name), "◇", GRADIENT[2]))
-        return store_id
+        return context
 
     async def question(self, text: str, options: list[str]) -> int:
         """Ask in the log; the next submitted line answers. Returns the 0-based option."""
@@ -336,7 +323,7 @@ class PromptScreen(Screen):
             await self.command(words)
             return
         if not intent.on_topic:
-            hint = "" if self.app.incoming_id else " If it's about a supplier file, load that file first by typing its path."
+            hint = "" if "incoming" in self.app.files else " If it's about a supplier file, load that file first by typing its path."
             raise Refusal(
                 "Your CSV files can't answer that, so nothing was changed. Ask about your data or change it, "
                 f"or use a command: /preview /undo /merge /reset.{hint}"
@@ -353,46 +340,27 @@ class PromptScreen(Screen):
         app = self.app
         match words:
             case ["/preview"]:
-                store_id = self.require_store()
-                headers, rows, total = await asyncio.to_thread(workspace.current, "store", store_id, PREVIEW_ROWS)
-                table = DataTable(show_cursor=False, zebra_stripes=True, classes="preview")
-                table.add_columns(*(h or f"({i})" for i, h in enumerate(headers[:PREVIEW_COLUMNS], 1)))
-                table.add_rows(row[:PREVIEW_COLUMNS] for row in rows)
-                count = lambda shown, total, what: f"{shown} of {total} {what}" if total > shown else f"{total} {what}"
-                self.say(message(
-                    "Latest store version  [dim]"
-                    f"{count(len(rows), total, 'rows')} · {count(min(len(headers), PREVIEW_COLUMNS), len(headers), 'columns')}[/]"
-                ), table)
+                self.require_store()
+                self.say(message("Preview isn't built yet: there is no storage, so nothing was changed.", "·", "$text-muted"))
             case ["/undo", "store" | "incoming" as side]:
-                store_id = self.require_store()
-                if side == "incoming" and app.incoming_id is None:
+                self.require_store()
+                if side not in app.files:
                     raise Refusal("There's no incoming file yet.")
-                # One timeline for the session (doc §6): only the latest edit can be undone.
-                result = await asyncio.to_thread(workspace.undo, store_id, side)
-                other = "incoming" if side == "store" else "store"
-                self.say({
-                    "undone": message(f"Undid the last change to the {side}.", "↶"),
-                    "nothing": message(f"Nothing to undo on the {side}.", "·", "$text-muted"),
-                    "other_side": message(
-                        f"The last change was on the {other} file. Changes are undone in order: /undo {other} first.",
-                        "·", "$text-muted",
-                    ),
-                }[result])
+                self.say(message("Undo isn't built yet: there is no storage, so nothing was changed.", "·", "$text-muted"))
             case ["/undo", *_]:
                 raise Refusal("Say which file: /undo store or /undo incoming.")
             case ["/merge"]:
                 self.require_store()
-                if app.incoming_id is None:
+                if "incoming" not in app.files:
                     raise Refusal("Upload an incoming file first: type the path of the supplier CSV.")
                 # ponytail: merge pipeline (src/pipeline) not built yet
                 self.say(message("Merge isn't built yet, so nothing was changed.", "·", "$text-muted"))
             case ["/reset"]:
-                removed = await asyncio.to_thread(workspace.reset, self.require_store())
-                self.say(message(f"Back to the files as uploaded ({removed} changes removed).", "↶"))
+                self.require_store()
+                self.say(message("Reset isn't built yet: there is no storage, so nothing was changed.", "·", "$text-muted"))
             case _:
                 raise Refusal(f"Unknown command {words[0]}. Available commands:\n{COMMANDS}")
 
-    def require_store(self) -> int:
-        if self.app.store_id is None:
+    def require_store(self) -> None:
+        if "store" not in self.app.files:
             raise Refusal("Upload a store first: type the path of your store CSV export.")
-        return self.app.store_id

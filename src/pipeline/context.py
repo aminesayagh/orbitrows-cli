@@ -20,9 +20,7 @@ INCOMING_ACTIVITY = "A supplier CSV is classified before its columns are matched
 SAMPLE_ROWS = 5
 DESCRIBES_MIN = 0.5
 
-# DB values of context_classify and …_context_category (doc/database-structure.md).
-CLASSIFY = {"dedicated_context": 0, "header_context": 1, "both": 2, "none": 3, "uncertain": 4}
-# DB value = index. Stored as is: no folding of categories into one another.
+# Kept as is: no folding of categories into one another.
 CATEGORIES = ["currency", "physical_unit", "counting_unit", "compound_unit", "percentage", "language", "other", "unknown"]
 CARRIES = ("dedicated_context", "both")  # columns whose cells give context to other columns
 

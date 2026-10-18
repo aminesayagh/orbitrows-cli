@@ -4,7 +4,7 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 
 ## Store upload: column profile
 
-- [ ] **Is the column type useful?** Jev classifies each column's type (`string`, `enum`, `integer`, `number`, `boolean`, `date`, `datetime`), stored in `store_column.schema`.
+- [ ] **Is the column type useful?** Jev classifies each column's type (`string`, `enum`, `integer`, `number`, `boolean`, `date`, `datetime`), kept in the column profile (`ColumnProfile.type`).
   - Planned use: generating the staging version at merge time.
   - If the staging step doesn't need it, drop the type question. It only takes a Choice out of the first Jev request (`TYPE_CRITERIA` in `src/pipeline/context.py`).
 - [ ] **The merge needs more than `{"name", "type"}` in `schema`** (raised by the `poc` session). The PoC's conversion algorithms read:
@@ -22,7 +22,7 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
   - The links and categories were still right.
   - Check whether a role confidence threshold is needed.
 - [ ] **Flags are deferred to the merge.** Nothing is flagged at upload. These cases must be raised when the merge uses the column:
-  - an uncertain role (`context_classify = 4`);
+  - an uncertain role;
   - the category `other` (`3`);
   - a `header_context` whose header didn't resolve (`header_context` is null);
   - a context column that describes nothing.
@@ -71,9 +71,7 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 
 ## Commands
 
-- [ ] **`/undo` semantics:** to discuss. Today it deletes the latest edit (a hard delete with cascade), and you don't want a real delete.
-  - Since the schema moved to one `edit` timeline per session, undo is a stack across both files. `/undo store` refuses when the latest change was on the incoming (and the reverse), and says to undo that one first.
-  - `/reset` now removes every edit of the session, on both files.
+- [ ] **`/preview`, `/undo`, `/reset` are placeholders** since the database was dropped. Their behaviour comes back with the storage design.
 - [ ] **`/merge`:** it checks its preconditions only; the merge pipeline isn't built.
 
 ## CLI
@@ -82,12 +80,3 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 - [ ] **A path containing spaces isn't recognised as a file** in the prompt line.
 - [ ] **Running a prompt** (turning it into a MongoDB-style update and applying it) isn't built. Today the CLI only says which file a prompt targets.
 
-## Database
-
-- [ ] **An optional CHECK tying `edit.source = 1` (merge) to `incoming_id IS NOT NULL`.** It's not in the design yet; add it if you want the database to enforce it.
-- [ ] **Column edits are now versioned** (`…_column_revision`), but nothing in the CLI writes them yet. The design says a rename re-runs the context detection for that column.
-- [ ] **PostgreSQL vs SQLite:** we're staying on PostgreSQL for now. Reconsider if shop owners must install the CLI themselves, since SQLite needs no server. What switching would cost:
-  - text positions;
-  - partial unique indexes;
-  - no GIN index;
-  - foreign keys turned on per connection.

@@ -4,10 +4,8 @@ from orbitrows.services.cli.app import OrbitRowsApp
 from orbitrows.services.cli.screens import CsvPathAutoComplete, PromptScreen
 
 
-import os
 
 import pytest
-from sqlalchemy import delete
 
 from orbitrows.pipeline.context import ColumnProfile, Conflict
 from orbitrows.services.jev.intent import Intent
@@ -30,14 +28,8 @@ def test_completes_the_word_under_the_cursor(tmp_path):
     assert names("fix prices") == []  # prefix only, no fuzzy match on prompt words
 
 
-@pytest.mark.skipif("DATABASE_URL" not in os.environ, reason="DATABASE_URL not set")
 async def test_prompt_routing(tmp_path, monkeypatch):
     from orbitrows.services.cli import screens
-    from orbitrows.services.db import connect
-    from sqlalchemy import select
-    from sqlalchemy.orm import Session
-
-    from orbitrows.services.db.models import Store, StoreColumn, StoreColumnRevision
 
     (tmp_path / "data").mkdir()
     header = "sku;name;price;c4;c5;c6;c7;c8"  # 8 columns, 25 rows: preview shows 6 and 20
@@ -69,66 +61,50 @@ async def test_prompt_routing(tmp_path, monkeypatch):
     monkeypatch.setattr(screens, "classify_columns", fake_columns)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test")
     app = OrbitRowsApp(tmp_path)
-    try:
-        async with app.run_test() as pilot:
-            await pilot.press("enter")  # leave the intro
-            screen = app.screen
-            assert isinstance(screen, PromptScreen)
+    async with app.run_test() as pilot:
+        await pilot.press("enter")  # leave the intro
+        screen = app.screen
+        assert isinstance(screen, PromptScreen)
 
-            async def send(value):
-                before = len(texts(screen))
-                screen.submit(value)
-                for _ in range(500):  # until done, or waiting for the user's answer
-                    await pilot.pause(0.01)
-                    if not screen.busy or (screen.pending and not screen.pending.done()):
-                        break
-                return "\n".join(texts(screen)[before + 1 :])  # replies, without the echo
+        async def send(value):
+            before = len(texts(screen))
+            screen.submit(value)
+            for _ in range(500):  # until done, or waiting for the user's answer
+                await pilot.pause(0.01)
+                if not screen.busy or (screen.pending and not screen.pending.done()):
+                    break
+            return "\n".join(texts(screen)[before + 1 :])  # replies, without the echo
 
-            assert "Upload a store first" in await send("fix names")  # prompt, no file, no store
-            assert "Cannot read" in await send("empty.csv")
-            assert "price: which column gives its context?" in await send("data/store.csv")  # file, no store
-            assert "Type a number from 1 to 3" in await send("9")
-            reply = await send("2")  # c5
-            assert "as the store" in reply and "c4 → currency  for name" in reply
-            with Session(connect()) as db:
-                ids = {k: i for k, i in db.execute(
-                    select(StoreColumn.key, StoreColumn.id).where(StoreColumn.store_id == app.store_id))}
-                cols = {k: r for k, r in db.execute(
-                    select(StoreColumn.key, StoreColumnRevision).join(StoreColumnRevision, StoreColumnRevision.column_id == StoreColumn.id)
-                    .where(StoreColumn.store_id == app.store_id, StoreColumnRevision.edit_id.is_(None)))}
-            assert cols["c1"].schema == {"name": "sku", "type": "string"}
-            assert cols["c3"].schema == {"name": "price", "type": "number"}  # type from Jev
-            assert cols["c2"].context_client == ids["c4"]  # Jev's link, to the column identity
-            assert cols["c3"].context_client == ids["c5"]  # the user's answer
-            assert (cols["c4"].context_classify, cols["c4"].context_category) == (0, 0)
-            assert cols["c5"].context_category == 6  # other
-            assert app.files["store"]["columns"][:3] == ["sku", "name", "price"]
-            assert "for the store" in await send("fix names")  # prompt on the only file
-            assert "no incoming" in await send("/undo incoming")
+        assert "Upload a store first" in await send("fix names")  # prompt, no file, no store
+        assert "Cannot read" in await send("empty.csv")
+        assert "price: which column gives its context?" in await send("data/store.csv")  # file, no store
+        assert "Type a number from 1 to 3" in await send("9")
+        reply = await send("2")  # c5
+        assert "as the store" in reply and "c4 → currency  for name" in reply
+        cols = app.context
+        assert cols["c3"].type == "number"  # type from Jev
+        assert cols["c2"].client == "c4"  # Jev's link
+        assert cols["c3"].client == "c5"  # the user's answer
+        assert (cols["c4"].role, cols["c4"].category) == ("dedicated_context", "currency")
+        assert app.files["store"]["columns"][:3] == ["sku", "name", "price"]
+        assert "for the store" in await send("fix names")  # prompt on the only file
+        assert "no incoming" in await send("/undo incoming")
 
-            reply = await send("hello data/supplier.csv")  # file + prompt, with a store
-            assert "as the incoming" in reply and "can't answer that" in reply
-            assert "store and the incoming" in await send("update both")
-            assert seen == [("fix names", ["store"]), ("hello", ["incoming", "store"]),
-                            ("update both", ["incoming", "store"])]
+        reply = await send("hello data/supplier.csv")  # file + prompt, with a store
+        assert "as the incoming" in reply and "can't answer that" in reply
+        assert "store and the incoming" in await send("update both")
+        assert seen == [("fix names", ["store"]), ("hello", ["incoming", "store"]),
+                        ("update both", ["incoming", "store"])]
 
-            assert "20 of 25 rows · 6 of 8 columns" in await send("/preview")
-            table = screen.query_one(screens.DataTable)
-            assert table.row_count == 20 and len(table.columns) == 6
-            assert table.get_row_at(1) == ["002", "Cap", "", "", "", ""]  # empty cells left out, shown blank
+        assert "Preview isn't built yet" in await send("/preview")
 
-            assert "Undo which file?" in await send("go back please")  # both files loaded, no target
-            reply = await send("undo the store")
-            assert "/undo store" in reply and "Nothing to undo on the store" in reply
-            assert "Latest store version" in await send("show me the store")
-            assert "Nothing to undo on the store" in await send("/undo store")
-            assert "0 changes removed" in await send("/reset")
-            assert "isn't built yet" in await send("/merge")
-            assert "Unknown command /nope" in await send("/nope")
-    finally:
-        if app.store_id:
-            with connect().begin() as conn:
-                conn.execute(delete(Store).where(Store.id == app.store_id))  # cascades to everything
+        assert "Undo which file?" in await send("go back please")  # both files loaded, no target
+        reply = await send("undo the store")
+        assert "/undo store" in reply and "Undo isn't built yet" in reply
+        assert "Preview isn't built yet" in await send("show me the store")
+        assert "Reset isn't built yet" in await send("/reset")
+        assert "isn't built yet" in await send("/merge")
+        assert "Unknown command /nope" in await send("/nope")
 
 
 def test_candidates_skip_unreadable_entries(tmp_path):

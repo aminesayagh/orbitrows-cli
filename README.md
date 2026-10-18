@@ -12,8 +12,7 @@ The design comes from the approved PoC (`../poc`).
 
 ```bash
 uv sync
-cp .env.example .env   # then fill in OPENROUTER_API_KEY and DATABASE_URL
-uv run --env-file .env alembic upgrade head   # create/update the PostgreSQL schema (PG15+)
+cp .env.example .env   # then fill in OPENROUTER_API_KEY
 uv run --env-file .env orbitrows
 ```
 
@@ -32,7 +31,7 @@ One prompt field. Type a CSV path, a request in plain words, or both in one line
 
 Jev first checks that every prompt is about the CSV files; anything else is refused. When both files are loaded, it decides whether the prompt changes the store, the incoming, or both.
 
-Commands: `/preview` (20 rows, 6 columns), `/undo store`, `/undo incoming`, `/merge`, `/reset`. They can also be asked in words ("go back please", "start over", "merge them"): Jev recognises them in the same request as the checks above.
+Nothing is stored yet: files live in memory for the session. Commands: `/preview`, `/undo store`, `/undo incoming`, `/merge`, `/reset` (all placeholders until storage is designed). They can also be asked in words ("go back please", "start over", "merge them"): Jev recognises them in the same request as the checks above.
 
 ## Layout
 
@@ -48,18 +47,14 @@ src/                imported as `orbitrows`
       crash.py      unexpected errors -> short message + log file
     csv/
       reader.py     CSV loading (delimiter sniffing, validation)
-    db/
-      models.py     PostgreSQL schema (see doc/database-structure.md)
-      workspace.py  upload, latest version, undo, reset
     jev/
       client.py     Jev client (OpenRouter, jev-1.13)
       intent.py     is a prompt on topic, and for which file
-migrations/         Alembic migrations (`alembic revision --autogenerate -m ...` after editing models.py)
 tests/
 ```
 
 ## Tests
 
 ```bash
-uv run --env-file .env pytest   # test_db.py is skipped without DATABASE_URL
+uv run --env-file .env pytest
 ```
