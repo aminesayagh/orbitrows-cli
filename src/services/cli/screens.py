@@ -15,6 +15,7 @@ from typesafe_sdk import TypeSafeError
 from orbitrows.pipeline.context import classify_columns
 from orbitrows.services.csv.reader import load_csv
 from orbitrows.services.jev.intent import classify
+from orbitrows.services.storage import registry
 
 LOGO = """\
  ██████╗ ██████╗ ██████╗ ██╗████████╗██████╗  ██████╗ ██╗    ██╗███████╗
@@ -26,7 +27,7 @@ LOGO = """\
 GRADIENT = ["#5eead4", "#38bdf8", "#60a5fa", "#818cf8", "#a78bfa", "#c084fc"]
 
 STEPS = """\
-[b $accent]1[/]  Load your store export and the incoming supplier file
+[b $accent]1[/]  Load your store's CSV files, then the incoming supplier file
 [b $accent]2[/]  Jev reads the columns and proposes how they map
 [b $accent]3[/]  Rows are matched to products by SKU, name and variants
 [b $accent]4[/]  You review every proposed change before anything is applied"""
@@ -131,15 +132,13 @@ class Refusal(Exception):
     """A request we can't do; its text is shown to the user as is."""
 
 
-def split_input(value: str, root: Path) -> tuple[str, Path | None]:
-    """(prompt, csv path). A word ending in .csv is the file, the other words are the prompt."""
+def split_input(value: str, root: Path) -> tuple[str, list[Path]]:
+    """(prompt, csv paths). Words ending in .csv are the files, the other words are the prompt."""
     # ponytail: paths with spaces aren't supported; quote-aware parsing if users need them
     words = value.split()
     files = [w for w in words if w.lower().endswith(".csv")]
-    if len(files) > 1:
-        raise Refusal("One file at a time, please.")
     prompt = " ".join(w for w in words if w not in files)
-    return prompt, (root / Path(files[0]).expanduser() if files else None)  # absolute path overrides root
+    return prompt, [root / Path(f).expanduser() for f in dict.fromkeys(files)]  # absolute path overrides root
 
 
 def need(variable: str) -> None:
@@ -199,7 +198,7 @@ class PromptScreen(Screen):
                 id="banner",
             )
             yield message(
-                "Start with your [b]store export[/]: type its path below. Then add a supplier file, "
+                "Start with your [b]store's CSV files[/]: type their paths below, one or more. Then add a supplier file, "
                 "or ask for changes in plain words. You can do both in one line."
             )
         with Vertical(id="prompt"):
@@ -253,35 +252,58 @@ class PromptScreen(Screen):
         finally:
             self.busy = False
 
-    async def route(self, prompt: str, path: Path | None) -> None:
-        """The cases: no store yet → the file becomes the store; with a store → it becomes the incoming."""
-        if path is None and "store" not in self.app.files:
-            raise Refusal("Upload a store first: type the path of your store CSV export.")
-        if path is not None:
-            await self.upload(path)
+    async def route(self, prompt: str, paths: list[Path]) -> None:
+        """The first message must bring the store's CSV files (one or more); after that, a file is the incoming."""
+        if "store" not in self.app.files:
+            if not paths:
+                raise Refusal("Start with your store: type the paths of its CSV files (one or more).")
+            await self.create_store(paths)
+        elif paths:
+            if len(paths) > 1:
+                raise Refusal("One incoming file at a time, please.")
+            await self.upload_incoming(paths[0])
         if prompt:
             await self.ask(prompt)
 
-    async def upload(self, path: Path) -> None:
+    def read(self, path: Path) -> tuple[list[str], list[list[str]]]:
         if not path.is_file():
             raise Refusal(f"File not found: {path}")
         try:
-            header, rows = load_csv(path)
+            return load_csv(path)
         except ValueError as e:
             raise Refusal(f"Cannot read {e}") from None
-        app = self.app
-        if "store" not in app.files:
-            side, app.context = "store", await self.upload_store(header, rows)
-        else:
-            side = "incoming"  # ponytail: not stored anywhere; the rows go out of scope here
-        app.files[side] = {"name": path.name, "columns": header}
+
+    def loaded(self, path: Path, side: str, header: list[str], rows: list[list[str]]) -> None:
+        self.app.files.setdefault(side, []).append({"name": path.name, "columns": header})
         columns = "  ".join(f"[{GRADIENT[i % len(GRADIENT)]}]{h or '(empty)'}[/]" for i, h in enumerate(header))
         self.say(message(
             f"Loaded [b]{path.name}[/] as the [b]{side}[/]  [dim]{len(rows)} rows · {len(header)} columns[/]\n  {columns}",
             "✓", GRADIENT[0],
         ))
 
-    async def upload_store(self, header: list[str], rows: list[list[str]]) -> dict:
+    async def create_store(self, paths: list[Path]) -> None:
+        """Every file is read first, so a bad one refuses the store before anything is registered."""
+        tables = [(path, *self.read(path)) for path in paths]
+        need("OPENROUTER_API_KEY")
+        # ponytail: named after its first file; ask the client for a name when stores are listed and reopened
+        store_id = await asyncio.to_thread(registry.create, paths[0].stem)
+        try:
+            for path, header, rows in tables:
+                self.app.context[path.name] = await self.profile(header, rows)
+                self.loaded(path, "store", header, rows)
+        except BaseException:
+            registry.set_status(store_id, registry.FAILED)  # not awaited: also runs when the task is cancelled
+            self.app.files.pop("store", None)
+            self.app.context.clear()
+            raise
+        await asyncio.to_thread(registry.set_status, store_id, registry.READY)
+        self.app.store_id = store_id
+
+    async def upload_incoming(self, path: Path) -> None:
+        header, rows = self.read(path)
+        self.loaded(path, "incoming", header, rows)  # ponytail: not stored anywhere; the rows go out of scope here
+
+    async def profile(self, header: list[str], rows: list[list[str]]) -> dict:
         """Column types + context (Jev) → user settles conflicts. Returns the profile, keyed c1, c2…"""
         need("OPENROUTER_API_KEY")
         step = lambda text: self.say(message(f"[dim]{text}…[/]", "◌", "$text-muted"))
@@ -363,4 +385,4 @@ class PromptScreen(Screen):
 
     def require_store(self) -> None:
         if "store" not in self.app.files:
-            raise Refusal("Upload a store first: type the path of your store CSV export.")
+            raise Refusal("Start with your store: type the paths of its CSV files (one or more).")

@@ -1,13 +1,12 @@
-from textual_autocomplete import TargetState
-
-from orbitrows.services.cli.app import OrbitRowsApp
-from orbitrows.services.cli.screens import CsvPathAutoComplete, PromptScreen
-
-
+from contextlib import closing
 
 import pytest
+from textual_autocomplete import TargetState
+from typesafe_sdk import TypeSafeError
 
 from orbitrows.pipeline.context import ColumnProfile, Conflict
+from orbitrows.services.cli.app import OrbitRowsApp
+from orbitrows.services.cli.screens import CsvPathAutoComplete, PromptScreen
 from orbitrows.services.jev.intent import Intent
 
 
@@ -35,6 +34,7 @@ async def test_prompt_routing(tmp_path, monkeypatch):
     header = "sku;name;price;c4;c5;c6;c7;c8"  # 8 columns, 25 rows: preview shows 6 and 20
     rows = ["001;Tee;9,90;;;;;", "002;Cap;;;;;;"] + [f"{n:03};Item {n};1;;;;;" for n in range(3, 26)]
     (tmp_path / "data" / "store.csv").write_text("\n".join([header, *rows]) + "\n")
+    (tmp_path / "data" / "variants.csv").write_text("sku,color\n001,black\n")
     (tmp_path / "data" / "supplier.csv").write_text("ref,prix\n001,10\n")
     (tmp_path / "empty.csv").write_text("")
     answers = {"fix names": Intent(True, True, False), "hello": Intent(False, False, False),
@@ -51,6 +51,8 @@ async def test_prompt_routing(tmp_path, monkeypatch):
     async def fake_columns(jev, header, rows, step=lambda text: None):
         step("Jev: classifying column context")
         context = {f"c{i}": ColumnProfile("none", 0.9) for i in range(1, len(header) + 1)}
+        if "price" not in header:
+            return context, []
         context["c3"].type = "number"
         context["c4"] = ColumnProfile("dedicated_context", 0.95, category="currency")
         context["c5"] = ColumnProfile("dedicated_context", 0.9, category="other")
@@ -60,6 +62,7 @@ async def test_prompt_routing(tmp_path, monkeypatch):
     monkeypatch.setattr(screens, "classify", fake_classify)
     monkeypatch.setattr(screens, "classify_columns", fake_columns)
     monkeypatch.setenv("OPENROUTER_API_KEY", "test")
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
     app = OrbitRowsApp(tmp_path)
     async with app.run_test() as pilot:
         await pilot.press("enter")  # leave the intro
@@ -75,21 +78,28 @@ async def test_prompt_routing(tmp_path, monkeypatch):
                     break
             return "\n".join(texts(screen)[before + 1 :])  # replies, without the echo
 
-        assert "Upload a store first" in await send("fix names")  # prompt, no file, no store
-        assert "Cannot read" in await send("empty.csv")
-        assert "price: which column gives its context?" in await send("data/store.csv")  # file, no store
+        assert "Start with your store" in await send("fix names")  # the first message must bring files
+        assert "Cannot read" in await send("data/store.csv empty.csv")  # one bad file refuses the store
+        assert stores() == [] and "store" not in app.files  # read before registering
+        # Two store files in one message: both are profiled and loaded, the store is registered once.
+        assert "price: which column gives its context?" in await send("data/store.csv data/variants.csv")
         assert "Type a number from 1 to 3" in await send("9")
         reply = await send("2")  # c5
-        assert "as the store" in reply and "c4 → currency  for name" in reply
-        cols = app.context
+        assert "Loaded store.csv as the store" in reply and "Loaded variants.csv as the store" in reply
+        assert "c4 → currency  for name" in reply
+        [(store_id, name, status)] = stores()
+        assert (app.store_id, name, status) == (store_id, "store", 1) and store_id.startswith("st_")
+        assert [f["name"] for f in app.files["store"]] == ["store.csv", "variants.csv"]
+        cols = app.context["store.csv"]
         assert cols["c3"].type == "number"  # type from Jev
         assert cols["c2"].client == "c4"  # Jev's link
         assert cols["c3"].client == "c5"  # the user's answer
         assert (cols["c4"].role, cols["c4"].category) == ("dedicated_context", "currency")
-        assert app.files["store"]["columns"][:3] == ["sku", "name", "price"]
+        assert app.files["store"][0]["columns"][:3] == ["sku", "name", "price"]
         assert "for the store" in await send("fix names")  # prompt on the only file
         assert "no incoming" in await send("/undo incoming")
 
+        assert "One incoming file at a time" in await send("data/supplier.csv data/variants.csv")
         reply = await send("hello data/supplier.csv")  # file + prompt, with a store
         assert "as the incoming" in reply and "can't answer that" in reply
         assert "store and the incoming" in await send("update both")
@@ -105,6 +115,38 @@ async def test_prompt_routing(tmp_path, monkeypatch):
         assert "Reset isn't built yet" in await send("/reset")
         assert "isn't built yet" in await send("/merge")
         assert "Unknown command /nope" in await send("/nope")
+        assert len(stores()) == 1  # an incoming file is not a store
+
+
+def stores() -> list[tuple]:
+    from orbitrows.services.storage import registry
+
+    with closing(registry.connect()) as db:
+        return db.execute("SELECT id, name, status FROM store").fetchall()
+
+
+async def test_failed_import_marks_the_store_failed(tmp_path, monkeypatch):
+    from orbitrows.services.cli import screens
+
+    (tmp_path / "store.csv").write_text("sku;name\n001;Tee\n")
+
+    async def broken(jev, header, rows, step=lambda text: None):
+        raise TypeSafeError("down")
+
+    monkeypatch.setattr(screens, "classify_columns", broken)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test")
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
+    app = OrbitRowsApp(tmp_path)
+    async with app.run_test() as pilot:
+        await pilot.press("enter")
+        app.screen.submit("store.csv")
+        for _ in range(500):
+            await pilot.pause(0.01)
+            if not app.screen.busy:
+                break
+        assert "Jev couldn't answer" in "\n".join(texts(app.screen))
+    [(_, _, status)] = stores()
+    assert status == -1 and app.store_id is None and app.files == {}
 
 
 def test_candidates_skip_unreadable_entries(tmp_path):

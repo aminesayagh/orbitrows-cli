@@ -18,20 +18,21 @@ uv run --env-file .env orbitrows
 
 ## Using it
 
-One prompt field. Type a CSV path, a request in plain words, or both in one line.
+One prompt field. Type CSV paths, a request in plain words, or both in one line. The first message must include the store's CSV files.
 
-| Prompt | File | Store loaded | Result |
+| Prompt | Files | Store loaded | Result |
 |---|---|---|---|
-| yes | no | no | error: upload a store first |
-| no | yes | no | the file becomes the store |
-| yes | yes | no | the file becomes the store, the prompt applies to it |
-| no | yes | yes | the file becomes the incoming |
-| yes | yes | yes | the file becomes the incoming, Jev decides which file the prompt is for |
+| yes | no | no | error: the first message must bring the store's CSV files |
+| either | one or more | no | the files become the store (one store, registered in `stores.db`); a prompt then applies to it |
+| either | one | yes | the file becomes the incoming; a prompt then goes to Jev, which decides which file it is for |
+| either | several | yes | error: one incoming file at a time |
 | yes | no | yes | Jev decides which file the prompt is for |
+
+Each new store gets a row in the registry, `~/.local/share/pilotstore/stores.db` (`$XDG_DATA_HOME` moves it): its id (`st_` + 8 hex), its name (the first file's name for now), and its status (`0` importing, `1` ready, `-1` failed). The CSV files themselves aren't saved yet.
 
 Jev first checks that every prompt is about the CSV files; anything else is refused. When both files are loaded, it decides whether the prompt changes the store, the incoming, or both.
 
-Nothing is stored yet: files live in memory for the session. Commands: `/preview`, `/undo store`, `/undo incoming`, `/merge`, `/reset` (all placeholders until storage is designed). They can also be asked in words ("go back please", "start over", "merge them"): Jev recognises them in the same request as the checks above.
+Apart from the registry, files live in memory for the session. Commands: `/preview`, `/undo store`, `/undo incoming`, `/merge`, `/reset` (all placeholders until storage is designed). They can also be asked in words ("go back please", "start over", "merge them"): Jev recognises them in the same request as the checks above.
 
 ## Layout
 
@@ -47,6 +48,8 @@ src/                imported as `orbitrows`
       crash.py      unexpected errors -> short message + log file
     csv/
       reader.py     CSV loading (delimiter sniffing, validation)
+    storage/
+      registry.py   stores.db: the list of imported stores (CLI plan §3.3)
     jev/
       client.py     Jev client (OpenRouter, jev-1.13)
       intent.py     is a prompt on topic, and for which file

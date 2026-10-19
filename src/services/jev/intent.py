@@ -91,7 +91,7 @@ class Intent:
 
 
 async def classify(client: AsyncTypeSafeClient, message: str, files: dict[str, dict]) -> Intent:
-    """`files` maps "store"/"incoming" to {"name": ..., "columns": [...]}; only the loaded ones.
+    """`files` maps "store"/"incoming" to [{"name": ..., "columns": [...]}, ...]; only the loaded ones.
 
     With a single file loaded, a prompt can only target that file, so the target questions are skipped.
     """

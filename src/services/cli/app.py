@@ -17,8 +17,9 @@ class OrbitRowsApp(App):
         super().__init__()
         self.root = root
         # ponytail: in memory, a session starts fresh each run; nothing is persisted until storage is designed
-        self.files: dict[str, dict] = {}  # "store"/"incoming" -> {"name", "columns"}, what Jev sees
-        self.context: dict | None = None  # the store's column profile (Jev + the user's conflict answers)
+        self.files: dict[str, list[dict]] = {}  # "store"/"incoming" -> [{"name", "columns"}], what Jev sees
+        self.store_id: str | None = None  # the store's id in the registry (stores.db)
+        self.context: dict[str, dict] = {}  # file name -> its column profile (Jev + the user's conflict answers)
 
     @cached_property
     def jev(self):
