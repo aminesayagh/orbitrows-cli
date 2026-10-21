@@ -8,11 +8,12 @@ No SQL is produced: the node is the output. SQLite itself checks it, by creating
 """
 import re
 import sqlite3
-from typing import Literal
+from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field, model_validator
 
 from ..units.dictionary import plain
+from .dml import Select
 
 # ponytail: SQLite has no API listing its types; these are the STRICT-table types (ANY left out: it means no type)
 SQLITE_TYPES = ("INTEGER", "REAL", "TEXT", "BLOB")
@@ -82,10 +83,59 @@ def ddl(t: NewTable, tables: dict | None = None) -> str:
 
 
 class CreateTable(BaseModel):
-    """CREATE TABLE: the node the import produces for one table."""
+    """CREATE TABLE, empty or filled from a select ("a backup copy of suppliers"): written as CREATE TABLE then
+    INSERT … SELECT, so the declared types, keys and STRICT hold (SQLite's CREATE TABLE … AS SELECT drops them)."""
     id: str
     type: Literal["create_table"] = "create_table"
     definition: NewTable
+    query: Select | None = Field(None, exclude_if=lambda q: q is None)   # CLI: the import's dumps stay as they were
+
+    @model_validator(mode="after")
+    def query_fits(self):
+        if self.query is not None and len(self.query.columns) != len(self.definition.columns):
+            raise ValueError("the query returns one value per column of the new table")
+        return self
+
+
+# Schema edits (guide §12): one SQL statement per action, applied in order
+class TableRef(BaseModel):
+    type: Literal["database_table"]
+    reference: str
+
+
+class AddColumn(BaseModel):
+    type: Literal["add_column"]
+    definition: NewColumn
+
+
+class RenameColumn(BaseModel):
+    type: Literal["rename_column"]
+    column: str
+    new_name: str
+
+
+class RenameTable(BaseModel):
+    type: Literal["rename_table"]
+    new_name: str
+
+
+class DropColumn(BaseModel):
+    type: Literal["drop_column"]
+    column: str
+
+
+class AlterTable(BaseModel):
+    id: str
+    type: Literal["alter_table"]
+    target: TableRef
+    actions: list[Annotated[Union[AddColumn, RenameColumn, RenameTable, DropColumn], Field(discriminator="type")]] = \
+        Field(min_length=1)
+
+
+class DropTable(BaseModel):
+    id: str
+    type: Literal["drop_table"]
+    target: TableRef
 
 
 def check_references(tables: list[NewTable]) -> list[tuple]:
@@ -106,6 +156,41 @@ def check_references(tables: list[NewTable]) -> list[tuple]:
                     if types[a] != target_types[b]:
                         problems.append((t.table_id, f"TYPE_MISMATCH {a} {types[a]} → {target.table_id}.{b} {target_types[b]}"))
     return problems
+
+
+def _strict_type(declared: str) -> str:
+    """SQLite's affinity rules (sqlite.org/datatype3.html §3.1) → a STRICT type."""
+    d = declared.upper()
+    if "INT" in d:
+        return "INTEGER"
+    if any(w in d for w in ("CHAR", "CLOB", "TEXT")):
+        return "TEXT"
+    if "BLOB" in d or not d:
+        return "BLOB"
+    # ponytail: REAL, FLOAT, DOUBLE, and NUMERIC/DECIMAL (no STRICT equivalent) → REAL; finer AST types: notice #4
+    return "REAL"
+
+
+def schema_from_sqlite(db: sqlite3.Connection) -> list[CreateTable]:
+    """The create_table nodes of an existing SQLite database (production stores arrive as SQLite): ids t_<table> and
+    c_<column>, types by affinity, NOT NULL, primary keys and foreign keys with their actions, read from the database."""
+    nodes = []
+    for (table,) in db.execute("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY rowid"):
+        info = db.execute(f'PRAGMA table_info("{table}")').fetchall()          # cid, name, type, notnull, default, pk
+        fks = {}
+        for _, seq, target, col, to, on_update, on_delete, _ in db.execute(f'PRAGMA foreign_key_list("{table}")'):
+            fk = fks.setdefault((target, on_update, on_delete), ([], []))
+            fk[0].append(f"c_{col}")
+            fk[1].append(f"c_{to}")
+        nodes.append(CreateTable(id=f"r_create_{table}", definition=NewTable(
+            table_id=f"t_{table}", sql_name=table,
+            columns=[NewColumn(column_id=f"c_{n}", sql_name=n, header=n, sql_type=_strict_type(t), nullable=not (nn or pk))
+                     for _, n, t, nn, _, pk in info],
+            primary_key=[f"c_{r[1]}" for r in sorted(info, key=lambda r: r[5]) if r[5]],
+            foreign_keys=[ForeignKey(columns=a, references=TableColumns(table=f"t_{target}", columns=b),
+                                     on_update=up.lower().replace(" ", "_"), on_delete=de.lower().replace(" ", "_"))
+                          for (target, up, de), (a, b) in fks.items()])))
+    return nodes
 
 
 def sql_name(text: str, taken=(), default="col") -> str:

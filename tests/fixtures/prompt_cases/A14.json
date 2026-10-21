@@ -1,0 +1,806 @@
+{
+ "id": "A14",
+ "group": "end to end",
+ "prompt": "Show the variants that are not black and cost more than 300.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "SELECT * FROM variants WHERE (color IS NULL OR color <> 'black') AND price_mad > 300"
+   ],
+   "ordered": [
+    false
+   ]
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Show the variants that are not black and cost more than 300.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Show the variants that are not black and cost more than 300.",
+      "start": 0,
+      "end": 60,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     }
+    ],
+    "order": [
+     "r1"
+    ],
+    "links": "r1",
+    "references": [],
+    "warnings": [],
+    "raw_references": [],
+    "jev": {
+     "coref": {
+      "m0_role": [
+       "not_reference",
+       {
+        "reference": 0.0,
+        "not_reference": 1.0,
+        "unsure": 0.0
+       }
+      ],
+      "m0_target": [
+       "ambiguous",
+       {
+        "created": 0.04,
+        "ambiguous": 0.96
+       }
+      ]
+     },
+     "cuts": [],
+     "cut_answers": [],
+     "link_answers": [],
+     "inputs": {}
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "select",
+      "reports_back": true
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "select",
+      {
+       "select": 1.0,
+       "insert": 0.0,
+       "update": 0.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.98,
+     "r1_several": 0.12
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "l1",
+      "request": "r1",
+      "text": "not",
+      "start": 27,
+      "end": 30,
+      "linked": [
+       {
+        "column": "t_products.c_name",
+        "match": "contains",
+        "stored": [
+         "Notebook"
+        ],
+        "searched": "not"
+       },
+       {
+        "column": "t_variants.c_sku",
+        "match": "contains",
+        "stored": [
+         "NOTE-A5"
+        ],
+        "searched": "not"
+       }
+      ],
+      "role": "not_value"
+     },
+     {
+      "id": "l2",
+      "request": "r1",
+      "text": "black",
+      "start": 31,
+      "end": 36,
+      "linked": [
+       {
+        "column": "t_variants.c_color",
+        "match": "exact",
+        "stored": [
+         "black"
+        ],
+        "searched": "black"
+       }
+      ],
+      "role": "lookup",
+      "column": "t_variants.c_color",
+      "match": "exact",
+      "stored": [
+       "black"
+      ],
+      "searched": "black"
+     },
+     {
+      "id": "v2",
+      "request": "r1",
+      "text": "cost",
+      "start": 41,
+      "end": 45,
+      "role": "not_value"
+     }
+    ],
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "l1_role": [
+       "not_value",
+       {
+        "lookup": 0.09,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.91
+       }
+      ],
+      "l1_named": [
+       "not_said",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.04,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.01,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.13,
+        "t_variants.c_color": 0.25,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.01,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.01,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.55
+       }
+      ],
+      "l2_role": [
+       "lookup",
+       {
+        "lookup": 0.96,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.04
+       }
+      ],
+      "l2_named": [
+       "t_variants.c_color",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 1.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.0
+       }
+      ],
+      "v2_role": [
+       "not_value",
+       {
+        "lookup": 0.11,
+        "written": 0.0,
+        "number": 0.08,
+        "not_value": 0.81
+       }
+      ],
+      "v2_named": [
+       "t_variants.c_cost_mad",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.84,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.01,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.15
+       }
+      ],
+      "l1_written": 0.25,
+      "l1_own": 0.07,
+      "l2_written": 0.27,
+      "l2_own": 0.15,
+      "v2_written": 0.59,
+      "v2_own": 0.11
+     },
+     "candidates": {
+      "l2": [
+       {
+        "column": "t_variants.c_color",
+        "match": "exact",
+        "stored": [
+         "black"
+        ],
+        "searched": "black"
+       }
+      ]
+     },
+     "call_2": {}
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "from": {
+       "type": "database_table",
+       "reference": "t_variants"
+      },
+      "reads": []
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_variants",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 0.0,
+       "t_variants": 1.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r1_uses_t_categories": 0.06,
+     "r1_uses_t_suppliers": 0.07,
+     "r1_uses_t_products": 0.08,
+     "r1_uses_t_variants": 0.98,
+     "r1_uses_t_inventory": 0.07,
+     "r1_uses_t_sales": 0.06
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "outputs": "all"
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "r1_whole": 0.88,
+      "r1_counts": 0.05,
+      "r1_shows_t_variants.c_variant_id": 0.41,
+      "r1_shows_t_variants.c_sku": 0.24,
+      "r1_shows_t_variants.c_color": 0.32,
+      "r1_shows_t_variants.c_size": 0.24,
+      "r1_shows_t_variants.c_price_mad": 0.17,
+      "r1_shows_t_variants.c_cost_mad": 0.4,
+      "r1_shows_t_variants.c_weight_g": 0.08,
+      "r1_shows_t_variants.c_barcode": 0.08,
+      "r1_shows_t_products.c_name": 0.07,
+      "r1_shows_t_products.c_brand": 0.07,
+      "r1_shows_t_products.c_status": 0.06,
+      "r1_shows_t_products.c_description": 0.04,
+      "r1_shows_t_products.c_created_at": 0.05,
+      "r1_shows_t_suppliers.c_name": 0.05,
+      "r1_shows_t_suppliers.c_country": 0.05,
+      "r1_shows_t_suppliers.c_contact_email": 0.04,
+      "r1_shows_t_suppliers.c_lead_days": 0.05,
+      "r1_shows_t_categories.c_name": 0.05
+     },
+     "call_2": {}
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "all_rows": false,
+      "columns": [
+       "t_variants.c_color",
+       "t_variants.c_cost_mad"
+      ],
+      "sorted": false,
+      "limited": false,
+      "grouped": false,
+      "predicates": [
+       {
+        "column": "t_variants.c_color",
+        "operator": "=",
+        "negated": true,
+        "condition": {
+         "type": "any",
+         "children": [
+          {
+           "type": "null_check",
+           "expression": {
+            "type": "column",
+            "source": "t_variants",
+            "reference": "c_color"
+           },
+           "operator": "is_null"
+          },
+          {
+           "type": "not",
+           "operand": {
+            "type": "comparison",
+            "operator": "=",
+            "left": {
+             "type": "column",
+             "source": "t_variants",
+             "reference": "c_color"
+            },
+            "right": {
+             "type": "literal",
+             "value": "black"
+            }
+           }
+          }
+         ]
+        },
+        "rows": 12
+       },
+       {
+        "column": "t_variants.c_cost_mad",
+        "operator": ">",
+        "negated": false,
+        "condition": {
+         "type": "comparison",
+         "operator": ">",
+         "left": {
+          "type": "column",
+          "source": "t_variants",
+          "reference": "c_cost_mad"
+         },
+         "right": {
+          "type": "literal",
+          "value": 300.0
+         }
+        },
+        "rows": 0
+       }
+      ]
+     }
+    },
+    "warnings": [
+     {
+      "request": "r1",
+      "problem": "no record matches the condition on t_variants.c_cost_mad"
+     }
+    ],
+    "parameters": {
+     "r1": [
+      {
+       "text": "300",
+       "start": 56,
+       "end": 59,
+       "value": 300.0,
+       "unit": null
+      }
+     ]
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.05,
+      "r1_chooses_t_variants.c_variant_id": 0.1,
+      "r1_chooses_t_variants.c_sku": 0.09,
+      "r1_chooses_t_variants.c_color": 0.97,
+      "r1_chooses_t_variants.c_size": 0.08,
+      "r1_chooses_t_variants.c_price_mad": 0.23,
+      "r1_chooses_t_variants.c_cost_mad": 0.84,
+      "r1_chooses_t_variants.c_weight_g": 0.07,
+      "r1_chooses_t_variants.c_barcode": 0.08,
+      "r1_sorted": 0.04,
+      "r1_limited": 0.05,
+      "r1_grouped": 0.03
+     },
+     "stage_2": {
+      "r1|t_variants.c_color|op": [
+       "=",
+       {
+        "=": 0.97,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 0.01,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.01,
+        "contains": 0.0,
+        "starts_with": 0.0,
+        "ends_with": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.01
+       }
+      ],
+      "r1|t_variants.c_cost_mad|op": [
+       ">",
+       {
+        "=": 0.0,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 1.0,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.0
+       }
+      ],
+      "r1|t_variants.c_cost_mad|value": [
+       "n0",
+       {
+        "n0": 0.96,
+        "c:t_variants.c_price_mad": 0.0,
+        "none": 0.04
+       }
+      ],
+      "r1|t_variants.c_cost_mad|upper": [
+       "none",
+       {
+        "n0": 0.12,
+        "c:t_variants.c_price_mad": 0.0,
+        "none": 0.88
+       }
+      ],
+      "r1|t_variants.c_color|not": 0.98,
+      "r1|t_variants.c_cost_mad|not": 0.16
+     }
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "where": {
+       "type": "all",
+       "children": [
+        {
+         "type": "any",
+         "children": [
+          {
+           "type": "null_check",
+           "expression": {
+            "type": "column",
+            "source": "t_variants",
+            "reference": "c_color"
+           },
+           "operator": "is_null"
+          },
+          {
+           "type": "not",
+           "operand": {
+            "type": "comparison",
+            "operator": "=",
+            "left": {
+             "type": "column",
+             "source": "t_variants",
+             "reference": "c_color"
+            },
+            "right": {
+             "type": "literal",
+             "value": "black"
+            }
+           }
+          }
+         ]
+        },
+        {
+         "type": "comparison",
+         "operator": ">",
+         "left": {
+          "type": "column",
+          "source": "t_variants",
+          "reference": "c_cost_mad"
+         },
+         "right": {
+          "type": "literal",
+          "value": 300.0
+         }
+        }
+       ]
+      }
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1|tree": [
+      "all",
+      {
+       "all": 1.0,
+       "any": 0.0
+      }
+     ]
+    }
+   },
+   "formula": {
+    "requests": {},
+    "warnings": []
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "select",
+       "from": {
+        "type": "database_table",
+        "reference": "t_variants",
+        "alias": "v"
+       },
+       "scope": {
+        "type": "filtered",
+        "where": {
+         "type": "all",
+         "children": [
+          {
+           "type": "any",
+           "children": [
+            {
+             "type": "null_check",
+             "expression": {
+              "type": "column",
+              "source": "v",
+              "reference": "c_color"
+             },
+             "operator": "is_null"
+            },
+            {
+             "type": "not",
+             "operand": {
+              "type": "comparison",
+              "operator": "=",
+              "left": {
+               "type": "column",
+               "source": "v",
+               "reference": "c_color"
+              },
+              "right": {
+               "type": "literal",
+               "value": "black"
+              }
+             }
+            }
+           ]
+          },
+          {
+           "type": "comparison",
+           "operator": ">",
+           "left": {
+            "type": "column",
+            "source": "v",
+            "reference": "c_cost_mad"
+           },
+           "right": {
+            "type": "literal",
+            "value": 300.0
+           }
+          }
+         ]
+        }
+       },
+       "columns": [
+        {
+         "expression": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_variant_id"
+         },
+         "alias": "variant_id"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_product_id"
+         },
+         "alias": "product_id"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_sku"
+         },
+         "alias": "sku"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_color"
+         },
+         "alias": "color"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_size"
+         },
+         "alias": "size"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_price_mad"
+         },
+         "alias": "price_mad"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_cost_mad"
+         },
+         "alias": "cost_mad"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_weight_g"
+         },
+         "alias": "weight_g"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_barcode"
+         },
+         "alias": "barcode"
+        }
+       ]
+      },
+      "sql": [
+       "SELECT \"v\".\"variant_id\" AS \"variant_id\", \"v\".\"product_id\" AS \"product_id\", \"v\".\"sku\" AS \"sku\", \"v\".\"color\" AS \"color\", \"v\".\"size\" AS \"size\", \"v\".\"price_mad\" AS \"price_mad\", \"v\".\"cost_mad\" AS \"cost_mad\", \"v\".\"weight_g\" AS \"weight_g\", \"v\".\"barcode\" AS \"barcode\" FROM \"variants\" AS \"v\" WHERE ((\"v\".\"color\" IS NULL) OR (NOT (\"v\".\"color\" = 'black'))) AND (\"v\".\"cost_mad\" > 300.0)"
+      ],
+      "returns": [],
+      "rows": 0
+     }
+    ],
+    "questions": [
+     {
+      "step": "conditions",
+      "request": "r1",
+      "problem": "no record matches the condition on t_variants.c_cost_mad"
+     }
+    ],
+    "errors": []
+   },
+   "seconds": 3.9,
+   "jev": {
+    "calls": 8,
+    "input_tokens": 24704,
+    "output_tokens": 3424,
+    "seconds": 2.1
+   }
+  }
+ }
+}

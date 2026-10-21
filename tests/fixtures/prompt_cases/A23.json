@@ -1,0 +1,999 @@
+{
+ "id": "A23",
+ "group": "fix: two actions in one sentence (finding 2)",
+ "prompt": "Before you show me their names, lower the price of the black variants by 5%.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "UPDATE variants SET price_mad = price_mad * 0.95 WHERE color = 'black'",
+    "SELECT p.name FROM variants v JOIN products p USING (product_id) WHERE v.color = 'black'"
+   ],
+   "ordered": [
+    false
+   ]
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Before you show me their names, lower the price of the black variants by 5%.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Before you show me their names",
+      "start": 0,
+      "end": 30,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": "r2",
+      "input": "rows"
+     },
+     {
+      "id": "r2",
+      "text": "lower the price of the black variants by 5%.",
+      "start": 32,
+      "end": 76,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     }
+    ],
+    "order": [
+     "r2",
+     "r1"
+    ],
+    "links": "r2 THEN r1",
+    "references": [
+     {
+      "start": 19,
+      "end": 24,
+      "text": "their",
+      "score": 0.89,
+      "kind": "forward",
+      "target": "the black variants",
+      "request": "r1",
+      "target_request": "r2"
+     }
+    ],
+    "warnings": [
+     {
+      "request": "r2",
+      "problem": "uncertain link",
+      "best": "none",
+      "probability": 0.72
+     },
+     {
+      "request": "r1",
+      "problem": "whether it works on the rows of the other part: uncertain",
+      "probability": 0.37
+     },
+     {
+      "request": "r2",
+      "problem": "what 'them' / 'those' refers to: uncertain",
+      "probability": 0.23
+     }
+    ],
+    "raw_references": [
+     {
+      "start": 19,
+      "end": 24,
+      "text": "their",
+      "score": 0.89,
+      "kind": "forward",
+      "target": "the black variants",
+      "target_start": 51,
+      "target_end": 69
+     }
+    ],
+    "recut": {
+     "request": "r1",
+     "at": 32,
+     "probability": 0.93,
+     "options": {
+      "c0": "'Before you show me their names' | 'lower the price of the black variants by 5%.'",
+      "none": "No cut: the parts cannot stand alone."
+     }
+    },
+    "jev": {
+     "coref": {
+      "m0_role": [
+       "not_reference",
+       {
+        "reference": 0.0,
+        "not_reference": 1.0,
+        "unsure": 0.0
+       }
+      ],
+      "m0_target": [
+       "ambiguous",
+       {
+        "m1": 0.21,
+        "m2": 0.04,
+        "m3": 0.04,
+        "created": 0.0,
+        "ambiguous": 0.71
+       }
+      ],
+      "m1_role": [
+       "not_reference",
+       {
+        "reference": 0.0,
+        "not_reference": 1.0,
+        "unsure": 0.0
+       }
+      ],
+      "m1_target": [
+       "ambiguous",
+       {
+        "m0": 0.26,
+        "m2": 0.05,
+        "m3": 0.02,
+        "created": 0.0,
+        "ambiguous": 0.67
+       }
+      ],
+      "m2_role": [
+       "reference",
+       {
+        "reference": 0.65,
+        "not_reference": 0.19,
+        "unsure": 0.16
+       }
+      ],
+      "m2_target": [
+       "m3",
+       {
+        "m0": 0.0,
+        "m1": 0.0,
+        "m3": 0.89,
+        "created": 0.0,
+        "ambiguous": 0.11
+       }
+      ],
+      "m3_role": [
+       "not_reference",
+       {
+        "reference": 0.11,
+        "not_reference": 0.86,
+        "unsure": 0.03
+       }
+      ],
+      "m3_target": [
+       "ambiguous",
+       {
+        "m0": 0.0,
+        "m1": 0.0,
+        "m2": 0.21,
+        "created": 0.0,
+        "ambiguous": 0.79
+       }
+      ]
+     },
+     "cuts": [],
+     "cut_answers": [],
+     "link_answers": [
+      {
+       "choice": "r2",
+       "probabilities": {
+        "r2": 0.98,
+        "none": 0.02
+       }
+      },
+      {
+       "choice": "none",
+       "probabilities": {
+        "r1": 0.28,
+        "none": 0.72
+       }
+      }
+     ],
+     "inputs": {},
+     "recut": {
+      "cut": [
+       "c0",
+       {
+        "c0": 0.93,
+        "none": 0.07
+       }
+      ]
+     },
+     "describes": {
+      "describes": 0.23,
+      "rows": 0.37
+     }
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "select",
+      "reports_back": true,
+      "input": "affected_rows"
+     },
+     "r2": {
+      "statement": "update",
+      "reports_back": false
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "select",
+      {
+       "select": 0.96,
+       "insert": 0.0,
+       "update": 0.01,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.03
+      }
+     ],
+     "r2_statement": [
+      "update",
+      {
+       "select": 0.0,
+       "insert": 0.0,
+       "update": 1.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.72,
+     "r1_several": 0.43,
+     "r2_back": 0.08,
+     "r2_several": 0.13
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "v1",
+      "request": "r2",
+      "text": "price",
+      "start": 42,
+      "end": 47,
+      "role": "not_value"
+     },
+     {
+      "id": "l1",
+      "request": "r2",
+      "text": "black",
+      "start": 55,
+      "end": 60,
+      "linked": [
+       {
+        "column": "t_variants.c_color",
+        "match": "exact",
+        "stored": [
+         "black"
+        ],
+        "searched": "black"
+       }
+      ],
+      "role": "lookup",
+      "column": "t_variants.c_color",
+      "match": "exact",
+      "stored": [
+       "black"
+      ],
+      "searched": "black"
+     }
+    ],
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "v1_role": [
+       "not_value",
+       {
+        "lookup": 0.05,
+        "written": 0.07,
+        "number": 0.02,
+        "not_value": 0.86
+       }
+      ],
+      "v1_named": [
+       "t_variants.c_price_mad",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.8,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.2
+       }
+      ],
+      "l1_role": [
+       "lookup",
+       {
+        "lookup": 1.0,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.0
+       }
+      ],
+      "l1_named": [
+       "t_variants.c_color",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.99,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.01
+       }
+      ],
+      "v1_written": 0.47,
+      "v1_own": 0.14,
+      "l1_written": 0.22,
+      "l1_own": 0.13
+     },
+     "candidates": {
+      "l1": [
+       {
+        "column": "t_variants.c_color",
+        "match": "exact",
+        "stored": [
+         "black"
+        ],
+        "searched": "black"
+       }
+      ]
+     },
+     "call_2": {}
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "from": {
+       "type": "request_result",
+       "request_id": "r2"
+      },
+      "reads": [
+       "t_variants"
+      ]
+     },
+     "r2": {
+      "target": {
+       "type": "database_table",
+       "reference": "t_variants"
+      },
+      "reads": []
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_variants",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 0.15,
+       "t_variants": 0.84,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.01
+      }
+     ],
+     "r2_main": [
+      "t_variants",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 0.0,
+       "t_variants": 1.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r1_same": 0.93,
+     "r1_uses_t_categories": 0.1,
+     "r1_uses_t_suppliers": 0.09,
+     "r1_uses_t_products": 0.15,
+     "r1_uses_t_variants": 0.85,
+     "r1_uses_t_inventory": 0.1,
+     "r1_uses_t_sales": 0.08,
+     "r2_uses_t_categories": 0.06,
+     "r2_uses_t_suppliers": 0.06,
+     "r2_uses_t_products": 0.09,
+     "r2_uses_t_variants": 0.98,
+     "r2_uses_t_inventory": 0.07,
+     "r2_uses_t_sales": 0.07
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "flagged": true,
+      "outputs": [
+       {
+        "column": "t_products.c_name",
+        "aggregate": "value",
+        "expression": {
+         "type": "column",
+         "source": "t_products",
+         "reference": "c_name"
+        }
+       }
+      ]
+     },
+     "r2": {
+      "assignments": [
+       {
+        "column": "t_variants.c_price_mad",
+        "value": {
+         "type": "arithmetic",
+         "operator": "*",
+         "left": {
+          "type": "column",
+          "source": "t_variants",
+          "reference": "c_price_mad"
+         },
+         "right": {
+          "type": "literal",
+          "value": 0.95
+         }
+        },
+        "from": "formula"
+       }
+      ]
+     }
+    },
+    "warnings": [
+     {
+      "request": "r1",
+      "problem": "shows t_products.c_name uncertain",
+      "probability": 0.67
+     }
+    ],
+    "jev": {
+     "call_1": {
+      "r1_whole": 0.21,
+      "r1_counts": 0.07,
+      "r1_shows_t_variants.c_variant_id": 0.16,
+      "r1_shows_t_variants.c_sku": 0.15,
+      "r1_shows_t_variants.c_color": 0.19,
+      "r1_shows_t_variants.c_size": 0.1,
+      "r1_shows_t_variants.c_price_mad": 0.1,
+      "r1_shows_t_variants.c_cost_mad": 0.07,
+      "r1_shows_t_variants.c_weight_g": 0.06,
+      "r1_shows_t_variants.c_barcode": 0.1,
+      "r1_shows_t_products.c_name": 0.67,
+      "r1_shows_t_products.c_brand": 0.2,
+      "r1_shows_t_products.c_status": 0.1,
+      "r1_shows_t_products.c_description": 0.11,
+      "r1_shows_t_products.c_created_at": 0.08,
+      "r1_shows_t_suppliers.c_name": 0.11,
+      "r1_shows_t_suppliers.c_country": 0.07,
+      "r1_shows_t_suppliers.c_contact_email": 0.07,
+      "r1_shows_t_suppliers.c_lead_days": 0.06,
+      "r1_shows_t_categories.c_name": 0.15,
+      "r2_changes_t_variants.c_variant_id": 0.03,
+      "r2_changes_t_variants.c_product_id": 0.03,
+      "r2_changes_t_variants.c_sku": 0.02,
+      "r2_changes_t_variants.c_color": 0.03,
+      "r2_changes_t_variants.c_size": 0.03,
+      "r2_changes_t_variants.c_price_mad": 0.97,
+      "r2_changes_t_variants.c_cost_mad": 0.03,
+      "r2_changes_t_variants.c_weight_g": 0.02,
+      "r2_changes_t_variants.c_barcode": 0.02
+     },
+     "call_2": {
+      "r1_t_products.c_name_aggregate": [
+       "value",
+       {
+        "value": 1.0,
+        "count": 0.0,
+        "count_distinct": 0.0,
+        "sum": 0.0,
+        "avg": 0.0,
+        "min": 0.0,
+        "max": 0.0
+       }
+      ]
+     }
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "flagged": true,
+      "all_rows": true,
+      "columns": [],
+      "rows_from": "r2",
+      "sorted": false,
+      "limited": false,
+      "grouped": false
+     },
+     "r2": {
+      "all_rows": false,
+      "columns": [
+       "t_variants.c_color"
+      ],
+      "predicates": [
+       {
+        "column": "t_variants.c_color",
+        "operator": "=",
+        "negated": false,
+        "condition": {
+         "type": "comparison",
+         "operator": "=",
+         "left": {
+          "type": "column",
+          "source": "t_variants",
+          "reference": "c_color"
+         },
+         "right": {
+          "type": "literal",
+          "value": "black"
+         }
+        },
+        "rows": 5
+       }
+      ]
+     }
+    },
+    "warnings": [
+     {
+      "request": "r1",
+      "problem": "all rows uncertain",
+      "probability": 0.6
+     }
+    ],
+    "parameters": {
+     "r1": [],
+     "r2": [
+      {
+       "text": "5%",
+       "start": 41,
+       "end": 43,
+       "value": 5.0,
+       "unit": {
+        "kind": "percentage",
+        "unit": "%"
+       }
+      }
+     ]
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.6,
+      "r1_chooses_t_variants.c_variant_id": 0.1,
+      "r1_chooses_t_variants.c_sku": 0.08,
+      "r1_chooses_t_variants.c_color": 0.08,
+      "r1_chooses_t_variants.c_size": 0.08,
+      "r1_chooses_t_variants.c_price_mad": 0.08,
+      "r1_chooses_t_variants.c_cost_mad": 0.07,
+      "r1_chooses_t_variants.c_weight_g": 0.06,
+      "r1_chooses_t_variants.c_barcode": 0.07,
+      "r1_sorted": 0.06,
+      "r1_limited": 0.09,
+      "r1_grouped": 0.06,
+      "r2_all": 0.05,
+      "r2_chooses_t_variants.c_variant_id": 0.11,
+      "r2_chooses_t_variants.c_sku": 0.07,
+      "r2_chooses_t_variants.c_color": 0.97,
+      "r2_chooses_t_variants.c_size": 0.07,
+      "r2_chooses_t_variants.c_price_mad": 0.1,
+      "r2_chooses_t_variants.c_cost_mad": 0.06,
+      "r2_chooses_t_variants.c_weight_g": 0.05,
+      "r2_chooses_t_variants.c_barcode": 0.07
+     },
+     "stage_2": {
+      "r2|t_variants.c_color|op": [
+       "=",
+       {
+        "=": 1.0,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 0.0,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.0,
+        "contains": 0.0,
+        "starts_with": 0.0,
+        "ends_with": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.0
+       }
+      ],
+      "r2|t_variants.c_color|not": 0.07
+     }
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "rows_from": "r2",
+      "where": null
+     },
+     "r2": {
+      "where": {
+       "type": "comparison",
+       "operator": "=",
+       "left": {
+        "type": "column",
+        "source": "t_variants",
+        "reference": "c_color"
+       },
+       "right": {
+        "type": "literal",
+        "value": "black"
+       }
+      }
+     }
+    },
+    "warnings": [],
+    "jev": {}
+   },
+   "formula": {
+    "requests": {
+     "r2.t_variants.c_price_mad": {
+      "records": [
+       {
+        "role": "calculation",
+        "function": "*",
+        "left": {
+         "column": "t_variants.c_price_mad"
+        },
+        "right": {
+         "value": 0.95,
+         "source": "5%"
+        },
+        "text": "lower the price of the black variants by 5%",
+        "start": 0,
+        "end": 43,
+        "rule_id": "jev.decrease",
+        "occurrences": [
+         "n1"
+        ],
+        "status": "accepted"
+       },
+       {
+        "role": "assignment",
+        "function": "assign",
+        "left": {
+         "column": "t_variants.c_price_mad"
+        },
+        "right": {
+         "unresolved": true
+        },
+        "text": "lower the price",
+        "start": 0,
+        "end": 15,
+        "rule_id": "parse.target",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "where",
+        "function": null,
+        "left": {
+         "pred": "p1"
+        },
+        "right": null,
+        "text": "black",
+        "start": 23,
+        "end": 28,
+        "rule_id": "jev.where",
+        "occurrences": [],
+        "status": "accepted"
+       }
+      ],
+      "pass1_ambiguities": [],
+      "map": {
+       "r1.left": "current"
+      },
+      "status": "ok",
+      "questions": [],
+      "flagged": [],
+      "kind": "number"
+     }
+    },
+    "warnings": []
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r2",
+      "ast": {
+       "id": "r2",
+       "type": "update",
+       "target": {
+        "type": "database_table",
+        "reference": "t_variants",
+        "alias": "v"
+       },
+       "scope": {
+        "type": "filtered",
+        "where": {
+         "type": "comparison",
+         "operator": "=",
+         "left": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_color"
+         },
+         "right": {
+          "type": "literal",
+          "value": "black"
+         }
+        }
+       },
+       "assignments": [
+        {
+         "column": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_price_mad"
+         },
+         "value": {
+          "type": "arithmetic",
+          "operator": "*",
+          "left": {
+           "type": "column",
+           "source": "v",
+           "reference": "c_price_mad"
+          },
+          "right": {
+           "type": "literal",
+           "value": 0.95
+          }
+         }
+        }
+       ]
+      },
+      "returning": "variant_id",
+      "sql": [
+       "UPDATE \"variants\" AS \"v\" SET \"price_mad\" = (\"v\".\"price_mad\" * 0.95) WHERE \"v\".\"color\" = 'black'"
+      ],
+      "rows": 5
+     },
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "select",
+       "from": {
+        "type": "database_table",
+        "reference": "t_variants",
+        "alias": "v"
+       },
+       "scope": {
+        "type": "filtered",
+        "where": {
+         "type": "membership",
+         "operator": "in",
+         "expression": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_variant_id"
+         },
+         "values": [
+          {
+           "type": "literal",
+           "value": 101
+          },
+          {
+           "type": "literal",
+           "value": 102
+          },
+          {
+           "type": "literal",
+           "value": 105
+          },
+          {
+           "type": "literal",
+           "value": 108
+          },
+          {
+           "type": "literal",
+           "value": 112
+          }
+         ]
+        }
+       },
+       "columns": [
+        {
+         "expression": {
+          "type": "subquery",
+          "query": {
+           "id": "q1",
+           "type": "select",
+           "from": {
+            "type": "database_table",
+            "reference": "t_products",
+            "alias": "p"
+           },
+           "columns": [
+            {
+             "expression": {
+              "type": "column",
+              "source": "p",
+              "reference": "c_name"
+             },
+             "alias": "c0"
+            }
+           ],
+           "scope": {
+            "type": "filtered",
+            "where": {
+             "type": "comparison",
+             "operator": "=",
+             "left": {
+              "type": "column",
+              "source": "p",
+              "reference": "c_product_id"
+             },
+             "right": {
+              "type": "column",
+              "source": "v",
+              "reference": "c_product_id"
+             }
+            }
+           },
+           "limit": 1
+          }
+         },
+         "alias": "name"
+        }
+       ]
+      },
+      "rows_from": "r2",
+      "sql": [
+       "SELECT (SELECT \"p\".\"name\" AS \"c0\" FROM \"products\" AS \"p\" WHERE \"p\".\"product_id\" = \"v\".\"product_id\" LIMIT 1) AS \"name\" FROM \"variants\" AS \"v\" WHERE \"v\".\"variant_id\" IN (101, 102, 105, 108, 112)"
+      ],
+      "returns": [
+       [
+        "Orbit Tee"
+       ],
+       [
+        "Orbit Tee"
+       ],
+       [
+        "Orbit Hoodie"
+       ],
+       [
+        "Wireless Mouse"
+       ],
+       [
+        "Cotton Cap"
+       ]
+      ],
+      "rows": 5
+     }
+    ],
+    "questions": [
+     {
+      "step": "requests",
+      "request": "r2",
+      "problem": "uncertain link",
+      "best": "none",
+      "probability": 0.72
+     },
+     {
+      "step": "requests",
+      "request": "r1",
+      "problem": "whether it works on the rows of the other part: uncertain",
+      "probability": 0.37
+     },
+     {
+      "step": "requests",
+      "request": "r2",
+      "problem": "what 'them' / 'those' refers to: uncertain",
+      "probability": 0.23
+     },
+     {
+      "step": "parts",
+      "request": "r1",
+      "problem": "shows t_products.c_name uncertain",
+      "probability": 0.67
+     },
+     {
+      "step": "conditions",
+      "request": "r1",
+      "problem": "all rows uncertain",
+      "probability": 0.6
+     }
+    ],
+    "errors": []
+   },
+   "seconds": 6.2,
+   "jev": {
+    "calls": 14,
+    "input_tokens": 42432,
+    "output_tokens": 4625,
+    "seconds": 3.8
+   }
+  }
+ }
+}

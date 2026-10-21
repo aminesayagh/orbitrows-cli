@@ -1,0 +1,945 @@
+{
+ "id": "A27",
+ "group": "fix: those after a grouped read (Codex review, bug 5): asked, nothing changed",
+ "prompt": "Show the number of products per brand, then archive those.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "SELECT brand, COUNT(*) FROM products GROUP BY brand"
+   ],
+   "ordered": [
+    false
+   ]
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Show the number of products per brand, then archive those.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Show the number of products per brand",
+      "start": 0,
+      "end": 37,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     },
+     {
+      "id": "r2",
+      "text": "archive those.",
+      "start": 44,
+      "end": 58,
+      "marker": null,
+      "joined_by": "then",
+      "waits_for": "r1",
+      "input": "rows"
+     }
+    ],
+    "order": [
+     "r1",
+     "r2"
+    ],
+    "links": "r1 THEN r2",
+    "references": [],
+    "warnings": [
+     {
+      "problem": "unresolved reference",
+      "text": "those",
+      "request": "r2",
+      "probability": 0.66
+     }
+    ],
+    "raw_references": [
+     {
+      "start": 52,
+      "end": 57,
+      "text": "those",
+      "score": 0.66,
+      "kind": "ambiguous",
+      "target": ""
+     }
+    ],
+    "jev": {
+     "coref": {
+      "m0_role": [
+       "not_reference",
+       {
+        "reference": 0.03,
+        "not_reference": 0.97,
+        "unsure": 0.0
+       }
+      ],
+      "m0_target": [
+       "m1",
+       {
+        "m1": 0.33,
+        "m2": 0.31,
+        "created": 0.23,
+        "ambiguous": 0.13
+       }
+      ],
+      "m1_role": [
+       "not_reference",
+       {
+        "reference": 0.01,
+        "not_reference": 0.99,
+        "unsure": 0.0
+       }
+      ],
+      "m1_target": [
+       "ambiguous",
+       {
+        "m2": 0.36,
+        "created": 0.07,
+        "ambiguous": 0.57
+       }
+      ],
+      "m2_role": [
+       "reference",
+       {
+        "reference": 0.69,
+        "not_reference": 0.22,
+        "unsure": 0.09
+       }
+      ],
+      "m2_target": [
+       "m1",
+       {
+        "m0": 0.16,
+        "m1": 0.66,
+        "created": 0.02,
+        "ambiguous": 0.16
+       }
+      ]
+     },
+     "cuts": [
+      [
+       39,
+       43
+      ]
+     ],
+     "cut_answers": [
+      {
+       "choice": "new_request",
+       "probabilities": {
+        "new_request": 0.98,
+        "continuation": 0.02,
+        "context_transition": 0.0
+       }
+      }
+     ],
+     "link_answers": [
+      {
+       "choice": "none",
+       "probabilities": {
+        "r2": 0.0,
+        "none": 1.0
+       }
+      },
+      {
+       "choice": "r1",
+       "probabilities": {
+        "r1": 0.92,
+        "none": 0.08
+       }
+      }
+     ],
+     "inputs": {
+      "r1": [
+       "rows",
+       {
+        "rows": 0.72,
+        "structure": 0.02,
+        "table_state": 0.26
+       }
+      ],
+      "r2": [
+       "rows",
+       {
+        "rows": 0.99,
+        "structure": 0.0,
+        "table_state": 0.01
+       }
+      ]
+     }
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "select",
+      "reports_back": true
+     },
+     "r2": {
+      "statement": "update",
+      "reports_back": false,
+      "flagged": true,
+      "input": "request_result"
+     }
+    },
+    "warnings": [
+     {
+      "request": "r2",
+      "problem": "statement uncertain",
+      "answer": "update",
+      "probability": 0.66
+     }
+    ],
+    "jev": {
+     "r1_statement": [
+      "select",
+      {
+       "select": 1.0,
+       "insert": 0.0,
+       "update": 0.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r2_statement": [
+      "update",
+      {
+       "select": 0.0,
+       "insert": 0.01,
+       "update": 0.66,
+       "delete": 0.31,
+       "alter_table": 0.0,
+       "create_table": 0.01,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.01
+      }
+     ],
+     "r1_back": 0.98,
+     "r1_several": 0.08,
+     "r2_back": 0.1,
+     "r2_several": 0.19
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "v1",
+      "request": "r1",
+      "text": "number",
+      "start": 9,
+      "end": 15,
+      "role": "not_value"
+     },
+     {
+      "id": "v2",
+      "request": "r1",
+      "text": "products",
+      "start": 19,
+      "end": 27,
+      "role": "not_value"
+     },
+     {
+      "id": "v3",
+      "request": "r1",
+      "text": "brand",
+      "start": 32,
+      "end": 37,
+      "role": "not_value"
+     },
+     {
+      "id": "l1",
+      "request": "r2",
+      "text": "archive",
+      "start": 44,
+      "end": 51,
+      "linked": [
+       {
+        "column": "t_products.c_status",
+        "match": "typo",
+        "stored": [
+         "archived"
+        ],
+        "searched": "archive"
+       }
+      ],
+      "role": "written"
+     }
+    ],
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "v1_role": [
+       "not_value",
+       {
+        "lookup": 0.0,
+        "written": 0.0,
+        "number": 0.12,
+        "not_value": 0.88
+       }
+      ],
+      "v1_named": [
+       "not_said",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.04,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.03,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.23,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.7
+       }
+      ],
+      "v2_role": [
+       "not_value",
+       {
+        "lookup": 0.02,
+        "written": 0.0,
+        "number": 0.01,
+        "not_value": 0.97
+       }
+      ],
+      "v2_named": [
+       "t_products",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.01,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.01,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.95,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.03
+       }
+      ],
+      "v3_role": [
+       "not_value",
+       {
+        "lookup": 0.05,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.95
+       }
+      ],
+      "v3_named": [
+       "t_products.c_brand",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.97,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.03
+       }
+      ],
+      "l1_role": [
+       "written",
+       {
+        "lookup": 0.08,
+        "written": 0.9,
+        "number": 0.0,
+        "not_value": 0.02
+       }
+      ],
+      "l1_named": [
+       "t_products.c_status",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.97,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.03
+       }
+      ],
+      "v1_written": 0.25,
+      "v1_own": 0.08,
+      "v2_written": 0.46,
+      "v2_own": 0.19,
+      "v3_written": 0.96,
+      "v3_own": 0.14,
+      "l1_written": 0.2,
+      "l1_own": 0.09
+     },
+     "candidates": {},
+     "call_2": {}
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "from": {
+       "type": "database_table",
+       "reference": "t_products"
+      },
+      "reads": []
+     },
+     "r2": {
+      "target": {
+       "type": "database_table",
+       "reference": "t_products"
+      },
+      "reads": []
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_products",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 1.0,
+       "t_variants": 0.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r2_main": [
+      "t_products",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 0.99,
+       "t_variants": 0.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.01
+      }
+     ],
+     "r1_uses_t_categories": 0.07,
+     "r1_uses_t_suppliers": 0.08,
+     "r1_uses_t_products": 0.98,
+     "r1_uses_t_variants": 0.09,
+     "r1_uses_t_inventory": 0.06,
+     "r1_uses_t_sales": 0.06,
+     "r2_uses_t_categories": 0.09,
+     "r2_uses_t_suppliers": 0.09,
+     "r2_uses_t_products": 0.92,
+     "r2_uses_t_variants": 0.1,
+     "r2_uses_t_inventory": 0.09,
+     "r2_uses_t_sales": 0.08
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "outputs": [
+       {
+        "column": null,
+        "aggregate": "count",
+        "expression": {
+         "type": "aggregate",
+         "function": "count"
+        }
+       },
+       {
+        "column": "t_products.c_brand",
+        "aggregate": "count",
+        "expression": {
+         "type": "aggregate",
+         "function": "count",
+         "argument": {
+          "type": "column",
+          "source": "t_products",
+          "reference": "c_brand"
+         },
+         "distinct": false
+        }
+       }
+      ],
+      "sql": [
+       "SELECT COUNT(*) AS \"o0\", COUNT(\"t_products\".\"brand\") AS \"o1\" FROM \"products\" AS \"t_products\""
+      ]
+     },
+     "r2": {
+      "assignments": [
+       {
+        "column": "t_products.c_status",
+        "value": {
+         "type": "literal",
+         "value": "archived"
+        },
+        "from": "formula"
+       }
+      ],
+      "sql": [
+       "UPDATE \"products\" AS \"t_products\" SET \"status\" = 'archived'"
+      ]
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "r1_whole": 0.1,
+      "r1_counts": 0.96,
+      "r1_shows_t_products.c_product_id": 0.55,
+      "r1_shows_t_products.c_name": 0.1,
+      "r1_shows_t_products.c_brand": 0.97,
+      "r1_shows_t_products.c_status": 0.1,
+      "r1_shows_t_products.c_description": 0.05,
+      "r1_shows_t_products.c_created_at": 0.06,
+      "r1_shows_t_suppliers.c_name": 0.04,
+      "r1_shows_t_suppliers.c_country": 0.05,
+      "r1_shows_t_suppliers.c_contact_email": 0.04,
+      "r1_shows_t_suppliers.c_lead_days": 0.05,
+      "r1_shows_t_categories.c_name": 0.06,
+      "r2_changes_t_products.c_product_id": 0.08,
+      "r2_changes_t_products.c_name": 0.06,
+      "r2_changes_t_products.c_brand": 0.07,
+      "r2_changes_t_products.c_category_id": 0.06,
+      "r2_changes_t_products.c_supplier_id": 0.05,
+      "r2_changes_t_products.c_status": 0.89,
+      "r2_changes_t_products.c_description": 0.09,
+      "r2_changes_t_products.c_created_at": 0.08
+     },
+     "call_2": {
+      "r1_t_products.c_product_id_aggregate": [
+       "count",
+       {
+        "value": 0.0,
+        "count": 1.0,
+        "count_distinct": 0.0,
+        "sum": 0.0,
+        "avg": 0.0,
+        "min": 0.0,
+        "max": 0.0
+       }
+      ],
+      "r1_t_products.c_brand_aggregate": [
+       "count",
+       {
+        "value": 0.02,
+        "count": 0.97,
+        "count_distinct": 0.01,
+        "sum": 0.0,
+        "avg": 0.0,
+        "min": 0.0,
+        "max": 0.0
+       }
+      ],
+      "r2_t_products.c_status_how": [
+       "set_value",
+       {
+        "set_value": 0.93,
+        "column": 0.0,
+        "prefix": 0.0,
+        "suffix": 0.01,
+        "replace": 0.01,
+        "empty": 0.04
+       }
+      ],
+      "r2_t_products.c_status_number": [
+       "none",
+       {
+        "none": 1.0
+       }
+      ],
+      "r2_t_products.c_status_column": [
+       "none",
+       {
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.06,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "none": 0.9400000000000001
+       }
+      ],
+      "r2_t_products.c_status_text": [
+       "x3",
+       {
+        "x0": 0.03,
+        "x1": 0.0,
+        "x2": 0.0,
+        "x3": 0.94,
+        "none": 0.03
+       }
+      ],
+      "r2_t_products.c_status_old": [
+       "x3",
+       {
+        "x0": 0.07,
+        "x1": 0.1,
+        "x2": 0.0,
+        "x3": 0.71,
+        "none": 0.12
+       }
+      ]
+     }
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "all_rows": true,
+      "columns": [],
+      "sorted": false,
+      "limited": false,
+      "grouped": true
+     },
+     "r2": {
+      "all_rows": false,
+      "columns": [],
+      "rows_from": "r1"
+     }
+    },
+    "warnings": [],
+    "parameters": {
+     "r1": [],
+     "r2": []
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.94,
+      "r1_chooses_t_products.c_product_id": 0.09,
+      "r1_chooses_t_products.c_name": 0.09,
+      "r1_chooses_t_products.c_brand": 0.09,
+      "r1_chooses_t_products.c_status": 0.09,
+      "r1_chooses_t_products.c_description": 0.07,
+      "r1_chooses_t_products.c_created_at": 0.06,
+      "r1_sorted": 0.04,
+      "r1_limited": 0.07,
+      "r1_grouped": 0.95,
+      "r2_all": 0.1,
+      "r2_chooses_t_products.c_product_id": 0.12,
+      "r2_chooses_t_products.c_name": 0.07,
+      "r2_chooses_t_products.c_brand": 0.09,
+      "r2_chooses_t_products.c_status": 0.12,
+      "r2_chooses_t_products.c_description": 0.05,
+      "r2_chooses_t_products.c_created_at": 0.06
+     },
+     "stage_2": {}
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "where": null,
+      "group_by": [
+       {
+        "type": "column",
+        "source": "t_products",
+        "reference": "c_brand"
+       }
+      ]
+     },
+     "r2": {
+      "rows_from": "r1",
+      "where": null
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1|group": [
+      "t_products.c_brand",
+      {
+       "t_products.c_product_id": 0.0,
+       "t_products.c_name": 0.0,
+       "t_products.c_brand": 1.0,
+       "t_products.c_category_id": 0.0,
+       "t_products.c_supplier_id": 0.0,
+       "t_products.c_status": 0.0,
+       "t_products.c_description": 0.0,
+       "t_products.c_created_at": 0.0
+      }
+     ]
+    }
+   },
+   "formula": {
+    "requests": {
+     "r2.t_products.c_status": {
+      "records": [
+       {
+        "role": "calculation",
+        "function": "set",
+        "left": null,
+        "right": {
+         "value": "archived",
+         "source": "archive"
+        },
+        "text": "archive",
+        "start": 0,
+        "end": 7,
+        "rule_id": "jev.text_set",
+        "occurrences": [],
+        "status": "accepted"
+       }
+      ],
+      "pass1_ambiguities": [],
+      "map": {},
+      "status": "ok",
+      "questions": [],
+      "flagged": [],
+      "kind": "text"
+     }
+    },
+    "warnings": []
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "select",
+       "from": {
+        "type": "database_table",
+        "reference": "t_products",
+        "alias": "p"
+       },
+       "scope": {
+        "type": "all_rows"
+       },
+       "columns": [
+        {
+         "expression": {
+          "type": "aggregate",
+          "function": "count"
+         },
+         "alias": "count"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "p",
+          "reference": "c_brand"
+         },
+         "alias": "brand"
+        }
+       ],
+       "group_by": [
+        {
+         "type": "column",
+         "source": "p",
+         "reference": "c_brand"
+        }
+       ]
+      },
+      "sql": [
+       "SELECT COUNT(*) AS \"count\", \"p\".\"brand\" AS \"brand\" FROM \"products\" AS \"p\" GROUP BY \"p\".\"brand\""
+      ],
+      "returns": [
+       [
+        1,
+        null
+       ],
+       [
+        3,
+        "Casa"
+       ],
+       [
+        4,
+        "Orbit"
+       ],
+       [
+        1,
+        "PaperHub"
+       ],
+       [
+        2,
+        "Volt"
+       ],
+       [
+        1,
+        "volt"
+       ]
+      ],
+      "rows": 6
+     }
+    ],
+    "questions": [
+     {
+      "step": "requests",
+      "problem": "unresolved reference",
+      "text": "those",
+      "request": "r2",
+      "probability": 0.66
+     },
+     {
+      "step": "operation",
+      "request": "r2",
+      "problem": "statement uncertain",
+      "answer": "update",
+      "probability": 0.66
+     },
+     {
+      "step": "assembly",
+      "request": "r2",
+      "problem": "not built: takes the rows of r1, which are groups or totals, not records: which records are meant?"
+     }
+    ],
+    "errors": []
+   },
+   "seconds": 4.7,
+   "jev": {
+    "calls": 11,
+    "input_tokens": 39500,
+    "output_tokens": 5338,
+    "seconds": 2.8
+   }
+  }
+ }
+}

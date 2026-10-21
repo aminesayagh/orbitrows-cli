@@ -1,0 +1,916 @@
+{
+ "id": "A47",
+ "group": "text and date changes, operations steps (2026-10-16): text branch",
+ "prompt": "Set the status of the products to active, but archived for the Orbit products.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "UPDATE products SET status = CASE WHEN brand = 'Orbit' THEN 'archived' ELSE 'active' END"
+   ],
+   "ordered": []
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Set the status of the products to active, but archived for the Orbit products.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Set the status of the products to active, but archived for the Orbit products.",
+      "start": 0,
+      "end": 78,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     }
+    ],
+    "order": [
+     "r1"
+    ],
+    "links": "r1",
+    "references": [],
+    "warnings": [],
+    "raw_references": [],
+    "jev": {
+     "coref": {
+      "m0_role": [
+       "not_reference",
+       {
+        "reference": 0.04,
+        "not_reference": 0.94,
+        "unsure": 0.02
+       }
+      ],
+      "m0_target": [
+       "ambiguous",
+       {
+        "m1": 0.21,
+        "created": 0.0,
+        "ambiguous": 0.79
+       }
+      ],
+      "m1_role": [
+       "not_reference",
+       {
+        "reference": 0.01,
+        "not_reference": 0.99,
+        "unsure": 0.0
+       }
+      ],
+      "m1_target": [
+       "m0",
+       {
+        "m0": 0.59,
+        "created": 0.0,
+        "ambiguous": 0.41
+       }
+      ]
+     },
+     "cuts": [
+      [
+       34,
+       34
+      ],
+      [
+       40,
+       41
+      ]
+     ],
+     "cut_answers": [
+      {
+       "choice": "continuation",
+       "probabilities": {
+        "new_request": 0.1,
+        "continuation": 0.9,
+        "context_transition": 0.0
+       }
+      },
+      {
+       "choice": "new_request",
+       "probabilities": {
+        "new_request": 0.66,
+        "continuation": 0.34,
+        "context_transition": 0.0
+       }
+      }
+     ],
+     "link_answers": [],
+     "inputs": {}
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "update",
+      "reports_back": false
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "update",
+      {
+       "select": 0.0,
+       "insert": 0.0,
+       "update": 1.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.06,
+     "r1_several": 0.32
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "v1",
+      "request": "r1",
+      "text": "status",
+      "start": 8,
+      "end": 14,
+      "role": "not_value"
+     },
+     {
+      "id": "l1",
+      "request": "r1",
+      "text": "active",
+      "start": 34,
+      "end": 40,
+      "linked": [
+       {
+        "column": "t_products.c_status",
+        "match": "exact",
+        "stored": [
+         "active"
+        ],
+        "searched": "active"
+       }
+      ],
+      "role": "written"
+     },
+     {
+      "id": "l2",
+      "request": "r1",
+      "text": "archived",
+      "start": 46,
+      "end": 54,
+      "linked": [
+       {
+        "column": "t_products.c_status",
+        "match": "exact",
+        "stored": [
+         "archived"
+        ],
+        "searched": "archived"
+       }
+      ],
+      "role": "written"
+     },
+     {
+      "id": "l3",
+      "request": "r1",
+      "text": "Orbit",
+      "start": 63,
+      "end": 68,
+      "linked": [
+       {
+        "column": "t_products.c_brand",
+        "match": "exact",
+        "stored": [
+         "Orbit"
+        ],
+        "searched": "Orbit"
+       },
+       {
+        "column": "t_products.c_name",
+        "match": "contains",
+        "stored": [
+         "Orbit Hoodie",
+         "Orbit Tee",
+         "Orbit Tee Kids"
+        ],
+        "searched": "Orbit"
+       }
+      ],
+      "role": "lookup",
+      "column": "t_products.c_brand",
+      "match": "exact",
+      "stored": [
+       "Orbit"
+      ],
+      "searched": "Orbit"
+     }
+    ],
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "v1_role": [
+       "not_value",
+       {
+        "lookup": 0.02,
+        "written": 0.17,
+        "number": 0.0,
+        "not_value": 0.81
+       }
+      ],
+      "v1_named": [
+       "t_products.c_status",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.97,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.03
+       }
+      ],
+      "l1_role": [
+       "written",
+       {
+        "lookup": 0.03,
+        "written": 0.97,
+        "number": 0.0,
+        "not_value": 0.0
+       }
+      ],
+      "l1_named": [
+       "t_products.c_status",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 1.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.0
+       }
+      ],
+      "l2_role": [
+       "written",
+       {
+        "lookup": 0.1,
+        "written": 0.9,
+        "number": 0.0,
+        "not_value": 0.0
+       }
+      ],
+      "l2_named": [
+       "t_products.c_status",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 1.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.0
+       }
+      ],
+      "l3_role": [
+       "lookup",
+       {
+        "lookup": 1.0,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.0
+       }
+      ],
+      "l3_named": [
+       "t_products.c_brand",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.02,
+        "t_products.c_brand": 0.87,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.02,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.09
+       }
+      ],
+      "v1_written": 0.77,
+      "v1_own": 0.12,
+      "l1_written": 0.5,
+      "l1_own": 0.11,
+      "l2_written": 0.41,
+      "l2_own": 0.1,
+      "l3_written": 0.14,
+      "l3_own": 0.16
+     },
+     "candidates": {
+      "l3": [
+       {
+        "column": "t_products.c_brand",
+        "match": "exact",
+        "stored": [
+         "Orbit"
+        ],
+        "searched": "Orbit"
+       },
+       {
+        "column": "t_products.c_name",
+        "match": "contains",
+        "stored": [
+         "Orbit Hoodie",
+         "Orbit Tee",
+         "Orbit Tee Kids"
+        ],
+        "searched": "Orbit"
+       }
+      ]
+     },
+     "call_2": {
+      "l3_pick": [
+       "t_products.c_brand",
+       {
+        "t_products.c_brand": 0.89,
+        "t_products.c_name": 0.04,
+        "none": 0.01,
+        "text": 0.06
+       }
+      ]
+     }
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "target": {
+       "type": "database_table",
+       "reference": "t_products"
+      },
+      "reads": []
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_products",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 1.0,
+       "t_variants": 0.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r1_uses_t_categories": 0.07,
+     "r1_uses_t_suppliers": 0.07,
+     "r1_uses_t_products": 0.98,
+     "r1_uses_t_variants": 0.08,
+     "r1_uses_t_inventory": 0.05,
+     "r1_uses_t_sales": 0.05
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "assignments": [
+       {
+        "column": "t_products.c_status",
+        "value": {
+         "type": "case",
+         "branches": [
+          {
+           "when": {
+            "type": "comparison",
+            "operator": "=",
+            "left": {
+             "type": "column",
+             "source": "t_products",
+             "reference": "c_brand"
+            },
+            "right": {
+             "type": "literal",
+             "value": "Orbit"
+            }
+           },
+           "then": {
+            "type": "literal",
+            "value": "archived"
+           }
+          }
+         ],
+         "else": {
+          "type": "literal",
+          "value": "active"
+         }
+        },
+        "from": "formula"
+       }
+      ],
+      "flagged": true,
+      "sql": [
+       "UPDATE \"products\" AS \"t_products\" SET \"status\" = 'active'"
+      ]
+     }
+    },
+    "warnings": [
+     {
+      "request": "r1",
+      "problem": "text of t_products.c_status uncertain",
+      "answer": "x0",
+      "probability": 0.58
+     }
+    ],
+    "jev": {
+     "call_1": {
+      "r1_changes_t_products.c_product_id": 0.05,
+      "r1_changes_t_products.c_name": 0.04,
+      "r1_changes_t_products.c_brand": 0.06,
+      "r1_changes_t_products.c_category_id": 0.04,
+      "r1_changes_t_products.c_supplier_id": 0.03,
+      "r1_changes_t_products.c_status": 0.95,
+      "r1_changes_t_products.c_description": 0.04,
+      "r1_changes_t_products.c_created_at": 0.04
+     },
+     "call_2": {
+      "r1_t_products.c_status_how": [
+       "set_value",
+       {
+        "set_value": 0.95,
+        "column": 0.0,
+        "prefix": 0.0,
+        "suffix": 0.01,
+        "replace": 0.04,
+        "empty": 0.0
+       }
+      ],
+      "r1_t_products.c_status_number": [
+       "none",
+       {
+        "none": 1.0
+       }
+      ],
+      "r1_t_products.c_status_column": [
+       "t_products.c_brand",
+       {
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.01,
+        "t_products.c_brand": 0.57,
+        "t_products.c_category_id": 0.02,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "none": 0.4
+       }
+      ],
+      "r1_t_products.c_status_text": [
+       "x0",
+       {
+        "x0": 0.58,
+        "x1": 0.21,
+        "x2": 0.0,
+        "x3": 0.0,
+        "none": 0.21
+       }
+      ],
+      "r1_t_products.c_status_old": [
+       "none",
+       {
+        "x0": 0.25,
+        "x1": 0.18,
+        "x2": 0.01,
+        "x3": 0.01,
+        "none": 0.55
+       }
+      ]
+     }
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "all_rows": false,
+      "columns": [
+       "t_products.c_brand"
+      ],
+      "flagged": true,
+      "predicates": [
+       {
+        "column": "t_products.c_brand",
+        "operator": "=",
+        "negated": true,
+        "condition": {
+         "type": "any",
+         "children": [
+          {
+           "type": "null_check",
+           "expression": {
+            "type": "column",
+            "source": "t_products",
+            "reference": "c_brand"
+           },
+           "operator": "is_null"
+          },
+          {
+           "type": "not",
+           "operand": {
+            "type": "comparison",
+            "operator": "=",
+            "left": {
+             "type": "column",
+             "source": "t_products",
+             "reference": "c_brand"
+            },
+            "right": {
+             "type": "literal",
+             "value": "Orbit"
+            }
+           }
+          }
+         ]
+        },
+        "rows": 8
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "parameters": {
+     "r1": []
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.06,
+      "r1_chooses_t_products.c_product_id": 0.08,
+      "r1_chooses_t_products.c_name": 0.09,
+      "r1_chooses_t_products.c_brand": 0.96,
+      "r1_chooses_t_products.c_status": 0.15,
+      "r1_chooses_t_products.c_description": 0.06,
+      "r1_chooses_t_products.c_created_at": 0.05
+     },
+     "stage_2": {
+      "r1|t_products.c_brand|op": [
+       "=",
+       {
+        "=": 0.98,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 0.0,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.01,
+        "contains": 0.01,
+        "starts_with": 0.0,
+        "ends_with": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.0
+       }
+      ],
+      "r1|t_products.c_brand|not": 0.6
+     }
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "where": null
+     }
+    },
+    "warnings": [],
+    "jev": {}
+   },
+   "formula": {
+    "requests": {
+     "r1.t_products.c_status": {
+      "records": [
+       {
+        "role": "calculation",
+        "function": "set",
+        "left": null,
+        "right": {
+         "value": "active",
+         "source": "active"
+        },
+        "text": "Set the status of the products to active",
+        "start": 0,
+        "end": 40,
+        "rule_id": "jev.text_set",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "assignment",
+        "function": "assign",
+        "left": {
+         "column": "t_products.c_status"
+        },
+        "right": {
+         "unresolved": true
+        },
+        "text": "Set the status",
+        "start": 0,
+        "end": 14,
+        "rule_id": "parse.target",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "calculation",
+        "function": "set",
+        "left": null,
+        "right": {
+         "value": "archived",
+         "source": "archived"
+        },
+        "text": "archived",
+        "start": 46,
+        "end": 54,
+        "rule_id": "jev.text_set",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "branch_condition",
+        "function": null,
+        "left": {
+         "pred": "p1"
+        },
+        "right": null,
+        "text": "Orbit",
+        "start": 63,
+        "end": 68,
+        "rule_id": "repair.two_values_one_condition",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "branch",
+        "function": "case",
+        "left": {
+         "pred": "p1"
+        },
+        "right": null,
+        "text": "Orbit",
+        "start": 63,
+        "end": 68,
+        "rule_id": "repair.two_values_one_condition",
+        "occurrences": [],
+        "status": "accepted"
+       }
+      ],
+      "pass1_ambiguities": [],
+      "map": {
+       "r5.then": "r3",
+       "r5.else": "r1"
+      },
+      "status": "ok",
+      "questions": [],
+      "flagged": [],
+      "kind": "text"
+     }
+    },
+    "warnings": []
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "update",
+       "target": {
+        "type": "database_table",
+        "reference": "t_products",
+        "alias": "p"
+       },
+       "scope": {
+        "type": "all_rows"
+       },
+       "assignments": [
+        {
+         "column": {
+          "type": "column",
+          "source": "p",
+          "reference": "c_status"
+         },
+         "value": {
+          "type": "case",
+          "branches": [
+           {
+            "when": {
+             "type": "comparison",
+             "operator": "=",
+             "left": {
+              "type": "column",
+              "source": "p",
+              "reference": "c_brand"
+             },
+             "right": {
+              "type": "literal",
+              "value": "Orbit"
+             }
+            },
+            "then": {
+             "type": "literal",
+             "value": "archived"
+            }
+           }
+          ],
+          "else": {
+           "type": "literal",
+           "value": "active"
+          }
+         }
+        }
+       ]
+      },
+      "sql": [
+       "UPDATE \"products\" AS \"p\" SET \"status\" = CASE WHEN \"p\".\"brand\" = 'Orbit' THEN 'archived' ELSE 'active' END"
+      ],
+      "rows": 12
+     }
+    ],
+    "questions": [
+     {
+      "step": "parts",
+      "request": "r1",
+      "problem": "text of t_products.c_status uncertain",
+      "answer": "x0",
+      "probability": 0.58
+     },
+     {
+      "step": "assembly",
+      "request": "r1",
+      "problem": "changes every record of products",
+      "rows": 12
+     }
+    ],
+    "errors": []
+   },
+   "seconds": 4.4,
+   "jev": {
+    "calls": 12,
+    "input_tokens": 32848,
+    "output_tokens": 4724,
+    "seconds": 3.0
+   }
+  }
+ }
+}

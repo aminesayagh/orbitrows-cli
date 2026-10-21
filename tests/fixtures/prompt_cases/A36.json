@@ -1,0 +1,860 @@
+{
+ "id": "A36",
+ "group": "numeric changes, operations steps: a limit against the old value",
+ "prompt": "Raise the price of the white variants by 10%, but keep the old price if the new one is lower.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "UPDATE variants SET price_mad = MAX(price_mad * 1.1, price_mad) WHERE color = 'white'"
+   ],
+   "ordered": []
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Raise the price of the white variants by 10%, but keep the old price if the new one is lower.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Raise the price of the white variants by 10%, but keep the old price if the new one is lower.",
+      "start": 0,
+      "end": 93,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     }
+    ],
+    "order": [
+     "r1"
+    ],
+    "links": "r1",
+    "references": [],
+    "warnings": [],
+    "raw_references": [],
+    "jev": {
+     "coref": {},
+     "cuts": [
+      [
+       46,
+       49
+      ]
+     ],
+     "cut_answers": [
+      {
+       "choice": "continuation",
+       "probabilities": {
+        "new_request": 0.01,
+        "continuation": 0.99,
+        "context_transition": 0.0
+       }
+      }
+     ],
+     "link_answers": [],
+     "inputs": {}
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "update",
+      "reports_back": false
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "update",
+      {
+       "select": 0.0,
+       "insert": 0.0,
+       "update": 1.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.08,
+     "r1_several": 0.16
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "v1",
+      "request": "r1",
+      "text": "price",
+      "start": 10,
+      "end": 15,
+      "role": "not_value"
+     },
+     {
+      "id": "l1",
+      "request": "r1",
+      "text": "white",
+      "start": 23,
+      "end": 28,
+      "linked": [
+       {
+        "column": "t_variants.c_color",
+        "match": "exact",
+        "stored": [
+         "white"
+        ],
+        "searched": "white"
+       }
+      ],
+      "role": "lookup",
+      "column": "t_variants.c_color",
+      "match": "exact",
+      "stored": [
+       "white"
+      ],
+      "searched": "white"
+     },
+     {
+      "id": "v3",
+      "request": "r1",
+      "text": "price",
+      "start": 63,
+      "end": 68,
+      "role": "not_value",
+      "flagged": true
+     },
+     {
+      "id": "l2",
+      "request": "r1",
+      "text": "one",
+      "start": 80,
+      "end": 83,
+      "linked": [
+       {
+        "column": "t_variants.c_size",
+        "match": "contains",
+        "stored": [
+         "one-size"
+        ],
+        "searched": "one"
+       }
+      ],
+      "role": "lookup",
+      "flagged": true,
+      "column": "t_variants.c_size",
+      "match": "contains",
+      "stored": [
+       "one-size"
+      ],
+      "searched": "one"
+     }
+    ],
+    "warnings": [
+     {
+      "value": "v3",
+      "problem": "role uncertain",
+      "answer": "not_value",
+      "probability": 0.66
+     },
+     {
+      "value": "l2",
+      "problem": "role uncertain",
+      "answer": "lookup",
+      "probability": 0.52
+     },
+     {
+      "value": "l2",
+      "problem": "contains match: did you mean one-size?"
+     }
+    ],
+    "jev": {
+     "call_1": {
+      "v1_role": [
+       "not_value",
+       {
+        "lookup": 0.04,
+        "written": 0.15,
+        "number": 0.04,
+        "not_value": 0.77
+       }
+      ],
+      "v1_named": [
+       "t_variants.c_price_mad",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.88,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.12
+       }
+      ],
+      "l1_role": [
+       "lookup",
+       {
+        "lookup": 1.0,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.0
+       }
+      ],
+      "l1_named": [
+       "t_variants.c_color",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.99,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.01
+       }
+      ],
+      "v3_role": [
+       "not_value",
+       {
+        "lookup": 0.06,
+        "written": 0.22,
+        "number": 0.06,
+        "not_value": 0.66
+       }
+      ],
+      "v3_named": [
+       "t_variants.c_price_mad",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.76,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.24
+       }
+      ],
+      "l2_role": [
+       "lookup",
+       {
+        "lookup": 0.52,
+        "written": 0.0,
+        "number": 0.02,
+        "not_value": 0.46
+       }
+      ],
+      "l2_named": [
+       "t_variants.c_size",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.66,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.34
+       }
+      ],
+      "v1_written": 0.44,
+      "v1_own": 0.13,
+      "l1_written": 0.24,
+      "l1_own": 0.14,
+      "v3_written": 0.45,
+      "v3_own": 0.14,
+      "l2_written": 0.14,
+      "l2_own": 0.12
+     },
+     "candidates": {
+      "l1": [
+       {
+        "column": "t_variants.c_color",
+        "match": "exact",
+        "stored": [
+         "white"
+        ],
+        "searched": "white"
+       }
+      ],
+      "l2": [
+       {
+        "column": "t_variants.c_size",
+        "match": "contains",
+        "stored": [
+         "one-size"
+        ],
+        "searched": "one"
+       }
+      ]
+     },
+     "call_2": {
+      "l2_pick": [
+       "t_variants.c_size",
+       {
+        "t_variants.c_size": 0.95,
+        "none": 0.04,
+        "text": 0.01
+       }
+      ]
+     }
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "target": {
+       "type": "database_table",
+       "reference": "t_variants"
+      },
+      "reads": []
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_variants",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 0.0,
+       "t_variants": 1.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r1_uses_t_categories": 0.06,
+     "r1_uses_t_suppliers": 0.07,
+     "r1_uses_t_products": 0.1,
+     "r1_uses_t_variants": 0.98,
+     "r1_uses_t_inventory": 0.08,
+     "r1_uses_t_sales": 0.06
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "assignments": []
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "r1_changes_t_variants.c_variant_id": 0.04,
+      "r1_changes_t_variants.c_product_id": 0.04,
+      "r1_changes_t_variants.c_sku": 0.04,
+      "r1_changes_t_variants.c_color": 0.05,
+      "r1_changes_t_variants.c_size": 0.03,
+      "r1_changes_t_variants.c_price_mad": 0.97,
+      "r1_changes_t_variants.c_cost_mad": 0.04,
+      "r1_changes_t_variants.c_weight_g": 0.03,
+      "r1_changes_t_variants.c_barcode": 0.03
+     },
+     "call_2": {}
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "all_rows": false,
+      "columns": [
+       "t_variants.c_color",
+       "t_variants.c_size"
+      ],
+      "predicates": [
+       {
+        "column": "t_variants.c_color",
+        "operator": "=",
+        "negated": false,
+        "condition": {
+         "type": "comparison",
+         "operator": "=",
+         "left": {
+          "type": "column",
+          "source": "t_variants",
+          "reference": "c_color"
+         },
+         "right": {
+          "type": "literal",
+          "value": "white"
+         }
+        },
+        "rows": 3
+       },
+       {
+        "column": "t_variants.c_size",
+        "operator": "=",
+        "negated": false,
+        "condition": {
+         "type": "comparison",
+         "operator": "=",
+         "left": {
+          "type": "column",
+          "source": "t_variants",
+          "reference": "c_size"
+         },
+         "right": {
+          "type": "literal",
+          "value": "one-size"
+         }
+        },
+        "rows": 1
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "parameters": {
+     "r1": [
+      {
+       "text": "10%",
+       "start": 41,
+       "end": 44,
+       "value": 10.0,
+       "unit": {
+        "kind": "percentage",
+        "unit": "%"
+       }
+      }
+     ]
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.04,
+      "r1_chooses_t_variants.c_variant_id": 0.09,
+      "r1_chooses_t_variants.c_sku": 0.09,
+      "r1_chooses_t_variants.c_color": 0.95,
+      "r1_chooses_t_variants.c_size": 0.44,
+      "r1_chooses_t_variants.c_price_mad": 0.14,
+      "r1_chooses_t_variants.c_cost_mad": 0.06,
+      "r1_chooses_t_variants.c_weight_g": 0.06,
+      "r1_chooses_t_variants.c_barcode": 0.06
+     },
+     "stage_2": {
+      "r1|t_variants.c_color|op": [
+       "=",
+       {
+        "=": 1.0,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 0.0,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.0,
+        "contains": 0.0,
+        "starts_with": 0.0,
+        "ends_with": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.0
+       }
+      ],
+      "r1|t_variants.c_size|op": [
+       "=",
+       {
+        "=": 0.93,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 0.0,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.02,
+        "contains": 0.0,
+        "starts_with": 0.0,
+        "ends_with": 0.0,
+        "is_empty": 0.02,
+        "is_not_empty": 0.03
+       }
+      ],
+      "r1|t_variants.c_color|not": 0.07,
+      "r1|t_variants.c_size|not": 0.08
+     }
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "where": {
+       "type": "all",
+       "children": [
+        {
+         "type": "comparison",
+         "operator": "=",
+         "left": {
+          "type": "column",
+          "source": "t_variants",
+          "reference": "c_color"
+         },
+         "right": {
+          "type": "literal",
+          "value": "white"
+         }
+        },
+        {
+         "type": "comparison",
+         "operator": "=",
+         "left": {
+          "type": "column",
+          "source": "t_variants",
+          "reference": "c_size"
+         },
+         "right": {
+          "type": "literal",
+          "value": "one-size"
+         }
+        }
+       ]
+      }
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1|tree": [
+      "all",
+      {
+       "all": 0.94,
+       "any": 0.06
+      }
+     ]
+    }
+   },
+   "formula": {
+    "requests": {
+     "r1.t_variants.c_price_mad": {
+      "records": [
+       {
+        "role": "calculation",
+        "function": "*",
+        "left": {
+         "column": "t_variants.c_price_mad"
+        },
+        "right": {
+         "value": 1.1,
+         "source": "10%"
+        },
+        "text": "Raise the price of the white variants by 10%",
+        "start": 0,
+        "end": 44,
+        "rule_id": "jev.increase",
+        "occurrences": [
+         "n1"
+        ],
+        "status": "accepted"
+       },
+       {
+        "role": "assignment",
+        "function": "assign",
+        "left": {
+         "column": "t_variants.c_price_mad"
+        },
+        "right": {
+         "unresolved": true
+        },
+        "text": "Raise the price",
+        "start": 0,
+        "end": 15,
+        "rule_id": "parse.target",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "where",
+        "function": null,
+        "left": {
+         "pred": "p1"
+        },
+        "right": null,
+        "text": "white",
+        "start": 23,
+        "end": 28,
+        "rule_id": "jev.where",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "guard",
+        "function": "clamp_min",
+        "left": {
+         "unresolved": true
+        },
+        "right": {
+         "column": "t_variants.c_price_mad"
+        },
+        "text": "price",
+        "start": 63,
+        "end": 68,
+        "rule_id": "jev.column_lower_limit",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "unresolved_condition",
+        "function": null,
+        "left": {
+         "pred": "p2"
+        },
+        "right": null,
+        "text": "one",
+        "start": 80,
+        "end": 83,
+        "rule_id": "jev.unresolved_condition",
+        "occurrences": [],
+        "status": "accepted"
+       }
+      ],
+      "pass1_ambiguities": [
+       {
+        "problem": "answer kept but uncertain",
+        "question": "p2_role",
+        "answer": "unresolved_condition",
+        "probability": 0.54,
+        "status": "flagged"
+       }
+      ],
+      "map": {
+       "r1.left": "current",
+       "r4.left": "r1"
+      },
+      "status": "ask",
+      "questions": [
+       {
+        "problem": "does 'one' choose the records or a different formula?"
+       }
+      ],
+      "flagged": [],
+      "kind": "number"
+     }
+    },
+    "warnings": [
+     {
+      "request": "r1",
+      "problem": "formula of t_variants.c_price_mad: uncertain answers (p2_role=unresolved_condition 0.54)"
+     },
+     {
+      "request": "r1",
+      "problem": "does 'one' choose the records, or a different formula for them?"
+     },
+     {
+      "request": "r1",
+      "problem": "formula of t_variants.c_price_mad: does 'one' choose the records or a different formula?"
+     },
+     {
+      "request": "r1",
+      "problem": "the change of t_variants.c_price_mad is not built until the questions above are answered"
+     }
+    ]
+   },
+   "assembly": {
+    "program": [],
+    "questions": [
+     {
+      "step": "values",
+      "value": "v3",
+      "problem": "role uncertain",
+      "answer": "not_value",
+      "probability": 0.66
+     },
+     {
+      "step": "values",
+      "value": "l2",
+      "problem": "role uncertain",
+      "answer": "lookup",
+      "probability": 0.52
+     },
+     {
+      "step": "values",
+      "value": "l2",
+      "problem": "contains match: did you mean one-size?"
+     },
+     {
+      "step": "formula",
+      "request": "r1",
+      "problem": "formula of t_variants.c_price_mad: uncertain answers (p2_role=unresolved_condition 0.54)"
+     },
+     {
+      "step": "formula",
+      "request": "r1",
+      "problem": "does 'one' choose the records, or a different formula for them?"
+     },
+     {
+      "step": "formula",
+      "request": "r1",
+      "problem": "formula of t_variants.c_price_mad: does 'one' choose the records or a different formula?"
+     },
+     {
+      "step": "formula",
+      "request": "r1",
+      "problem": "the change of t_variants.c_price_mad is not built until the questions above are answered"
+     },
+     {
+      "step": "assembly",
+      "request": "r1",
+      "problem": "not built: a part is missing"
+     }
+    ],
+    "errors": []
+   },
+   "seconds": 4.6,
+   "jev": {
+    "calls": 11,
+    "input_tokens": 29920,
+    "output_tokens": 4467,
+    "seconds": 2.8
+   }
+  }
+ }
+}

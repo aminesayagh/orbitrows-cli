@@ -1,0 +1,523 @@
+{
+ "id": "A50",
+ "group": "text changes, letter case (2026-10-16): lower case",
+ "prompt": "Put the colours of the variants in lower case.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "UPDATE variants SET color = LOWER(color)"
+   ],
+   "ordered": []
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Put the colours of the variants in lower case.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Put the colours of the variants in lower case.",
+      "start": 0,
+      "end": 46,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     }
+    ],
+    "order": [
+     "r1"
+    ],
+    "links": "r1",
+    "references": [],
+    "warnings": [],
+    "raw_references": [],
+    "jev": {
+     "coref": {
+      "m0_role": [
+       "not_reference",
+       {
+        "reference": 0.07,
+        "not_reference": 0.93,
+        "unsure": 0.0
+       }
+      ],
+      "m0_target": [
+       "ambiguous",
+       {
+        "created": 0.08,
+        "ambiguous": 0.92
+       }
+      ]
+     },
+     "cuts": [],
+     "cut_answers": [],
+     "link_answers": [],
+     "inputs": {}
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "update",
+      "reports_back": false
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "update",
+      {
+       "select": 0.0,
+       "insert": 0.0,
+       "update": 1.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.09,
+     "r1_several": 0.09
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "v1",
+      "request": "r1",
+      "text": "colours",
+      "start": 8,
+      "end": 15,
+      "role": "not_value"
+     },
+     {
+      "id": "v2",
+      "request": "r1",
+      "text": "variants",
+      "start": 23,
+      "end": 31,
+      "role": "not_value"
+     }
+    ],
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "v1_role": [
+       "not_value",
+       {
+        "lookup": 0.11,
+        "written": 0.07,
+        "number": 0.0,
+        "not_value": 0.82
+       }
+      ],
+      "v1_named": [
+       "t_variants.c_color",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.9,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.03,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.07
+       }
+      ],
+      "v2_role": [
+       "not_value",
+       {
+        "lookup": 0.26,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.74
+       }
+      ],
+      "v2_named": [
+       "t_variants",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.14,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.84,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.02
+       }
+      ],
+      "v1_written": 0.58,
+      "v1_own": 0.12,
+      "v2_written": 0.35,
+      "v2_own": 0.19
+     },
+     "candidates": {},
+     "call_2": {}
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "target": {
+       "type": "database_table",
+       "reference": "t_variants"
+      },
+      "reads": []
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_variants",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 0.0,
+       "t_variants": 1.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r1_uses_t_categories": 0.05,
+     "r1_uses_t_suppliers": 0.05,
+     "r1_uses_t_products": 0.06,
+     "r1_uses_t_variants": 0.98,
+     "r1_uses_t_inventory": 0.06,
+     "r1_uses_t_sales": 0.05
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "assignments": [
+       {
+        "column": "t_variants.c_color",
+        "value": {
+         "type": "function",
+         "name": "lower",
+         "arguments": [
+          {
+           "type": "column",
+           "source": "t_variants",
+           "reference": "c_color"
+          }
+         ]
+        },
+        "from": "formula"
+       }
+      ],
+      "flagged": true,
+      "sql": [
+       "UPDATE \"variants\" AS \"t_variants\" SET \"color\" = NULL"
+      ]
+     }
+    },
+    "warnings": [
+     {
+      "request": "r1",
+      "problem": "how t_variants.c_color uncertain",
+      "answer": "set_value",
+      "probability": 0.64
+     }
+    ],
+    "jev": {
+     "call_1": {
+      "r1_changes_t_variants.c_variant_id": 0.03,
+      "r1_changes_t_variants.c_product_id": 0.03,
+      "r1_changes_t_variants.c_sku": 0.04,
+      "r1_changes_t_variants.c_color": 0.97,
+      "r1_changes_t_variants.c_size": 0.04,
+      "r1_changes_t_variants.c_price_mad": 0.03,
+      "r1_changes_t_variants.c_cost_mad": 0.03,
+      "r1_changes_t_variants.c_weight_g": 0.02,
+      "r1_changes_t_variants.c_barcode": 0.03
+     },
+     "call_2": {
+      "r1_t_variants.c_color_how": [
+       "set_value",
+       {
+        "set_value": 0.64,
+        "column": 0.04,
+        "prefix": 0.0,
+        "suffix": 0.0,
+        "replace": 0.32,
+        "empty": 0.0
+       }
+      ],
+      "r1_t_variants.c_color_number": [
+       "none",
+       {
+        "none": 1.0
+       }
+      ],
+      "r1_t_variants.c_color_column": [
+       "none",
+       {
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "none": 1.0
+       }
+      ],
+      "r1_t_variants.c_color_text": [
+       "none",
+       {
+        "x0": 0.0,
+        "x1": 0.0,
+        "x2": 0.0,
+        "x3": 0.0,
+        "x4": 0.0,
+        "none": 1.0
+       }
+      ],
+      "r1_t_variants.c_color_old": [
+       "none",
+       {
+        "x0": 0.0,
+        "x1": 0.0,
+        "x2": 0.0,
+        "x3": 0.0,
+        "x4": 0.0,
+        "none": 1.0
+       }
+      ]
+     }
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "all_rows": true,
+      "columns": []
+     }
+    },
+    "warnings": [],
+    "parameters": {
+     "r1": []
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.95,
+      "r1_chooses_t_variants.c_variant_id": 0.08,
+      "r1_chooses_t_variants.c_sku": 0.08,
+      "r1_chooses_t_variants.c_color": 0.06,
+      "r1_chooses_t_variants.c_size": 0.08,
+      "r1_chooses_t_variants.c_price_mad": 0.06,
+      "r1_chooses_t_variants.c_cost_mad": 0.06,
+      "r1_chooses_t_variants.c_weight_g": 0.05,
+      "r1_chooses_t_variants.c_barcode": 0.06
+     },
+     "stage_2": {}
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "where": null
+     }
+    },
+    "warnings": [],
+    "jev": {}
+   },
+   "formula": {
+    "requests": {
+     "r1.t_variants.c_color": {
+      "records": [
+       {
+        "role": "assignment",
+        "function": "assign",
+        "left": {
+         "column": "t_variants.c_color"
+        },
+        "right": {
+         "unresolved": true
+        },
+        "text": "Put the colours",
+        "start": 0,
+        "end": 15,
+        "rule_id": "parse.target",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "calculation",
+        "function": "lower",
+        "left": {
+         "column": "t_variants.c_color"
+        },
+        "right": null,
+        "text": "colours",
+        "start": 8,
+        "end": 15,
+        "rule_id": "jev.case_lower",
+        "occurrences": [],
+        "status": "accepted"
+       }
+      ],
+      "pass1_ambiguities": [],
+      "map": {
+       "r2.left": "current"
+      },
+      "status": "ok",
+      "questions": [],
+      "flagged": [],
+      "kind": "text"
+     }
+    },
+    "warnings": []
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "update",
+       "target": {
+        "type": "database_table",
+        "reference": "t_variants",
+        "alias": "v"
+       },
+       "scope": {
+        "type": "all_rows"
+       },
+       "assignments": [
+        {
+         "column": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_color"
+         },
+         "value": {
+          "type": "function",
+          "name": "lower",
+          "arguments": [
+           {
+            "type": "column",
+            "source": "v",
+            "reference": "c_color"
+           }
+          ]
+         }
+        }
+       ]
+      },
+      "sql": [
+       "UPDATE \"variants\" AS \"v\" SET \"color\" = LOWER(\"v\".\"color\")"
+      ],
+      "rows": 17
+     }
+    ],
+    "questions": [
+     {
+      "step": "parts",
+      "request": "r1",
+      "problem": "how t_variants.c_color uncertain",
+      "answer": "set_value",
+      "probability": 0.64
+     },
+     {
+      "step": "assembly",
+      "request": "r1",
+      "problem": "changes every record of variants",
+      "rows": 17
+     }
+    ],
+    "errors": []
+   },
+   "seconds": 4.0,
+   "jev": {
+    "calls": 9,
+    "input_tokens": 20758,
+    "output_tokens": 2976,
+    "seconds": 2.3
+   }
+  }
+ }
+}

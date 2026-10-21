@@ -1,0 +1,514 @@
+{
+ "id": "A18",
+ "group": "end to end",
+ "prompt": "List the products whose name starts with Mug.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "SELECT * FROM products WHERE name LIKE 'Mug%'"
+   ],
+   "ordered": [
+    false
+   ]
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "List the products whose name starts with Mug.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "List the products whose name starts with Mug.",
+      "start": 0,
+      "end": 45,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     }
+    ],
+    "order": [
+     "r1"
+    ],
+    "links": "r1",
+    "references": [],
+    "warnings": [],
+    "raw_references": [],
+    "jev": {
+     "coref": {
+      "m0_role": [
+       "not_reference",
+       {
+        "reference": 0.0,
+        "not_reference": 1.0,
+        "unsure": 0.0
+       }
+      ],
+      "m0_target": [
+       "m1",
+       {
+        "m1": 0.5,
+        "created": 0.02,
+        "ambiguous": 0.48
+       }
+      ],
+      "m1_role": [
+       "not_reference",
+       {
+        "reference": 0.0,
+        "not_reference": 1.0,
+        "unsure": 0.0
+       }
+      ],
+      "m1_target": [
+       "ambiguous",
+       {
+        "created": 0.03,
+        "ambiguous": 0.97
+       }
+      ]
+     },
+     "cuts": [],
+     "cut_answers": [],
+     "link_answers": [],
+     "inputs": {}
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "select",
+      "reports_back": true
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "select",
+      {
+       "select": 1.0,
+       "insert": 0.0,
+       "update": 0.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.99,
+     "r1_several": 0.07
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "l1",
+      "request": "r1",
+      "text": "Mug",
+      "start": 41,
+      "end": 44,
+      "linked": [
+       {
+        "column": "t_products.c_name",
+        "match": "contains",
+        "stored": [
+         "Mug 100%",
+         "Travel Mug"
+        ],
+        "searched": "Mug"
+       },
+       {
+        "column": "t_products.c_description",
+        "match": "contains",
+        "stored": [
+         "  insulated mug  ",
+         "Printed ceramic mug"
+        ],
+        "searched": "Mug"
+       },
+       {
+        "column": "t_variants.c_sku",
+        "match": "contains",
+        "stored": [
+         "MUG-100%",
+         "MUG-BLU",
+         "MUG-RED"
+        ],
+        "searched": "Mug"
+       }
+      ],
+      "role": "lookup",
+      "column": "t_products.c_name",
+      "match": "given"
+     }
+    ],
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "l1_role": [
+       "lookup",
+       {
+        "lookup": 0.99,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.01
+       }
+      ],
+      "l1_named": [
+       "t_products.c_name",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.98,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.02
+       }
+      ],
+      "l1_written": 0.56,
+      "l1_own": 0.56
+     },
+     "candidates": {},
+     "call_2": {}
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "from": {
+       "type": "database_table",
+       "reference": "t_products"
+      },
+      "reads": []
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_products",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 1.0,
+       "t_variants": 0.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r1_uses_t_categories": 0.05,
+     "r1_uses_t_suppliers": 0.05,
+     "r1_uses_t_products": 0.98,
+     "r1_uses_t_variants": 0.05,
+     "r1_uses_t_inventory": 0.05,
+     "r1_uses_t_sales": 0.04
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "outputs": "all"
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "r1_whole": 0.8,
+      "r1_counts": 0.06,
+      "r1_shows_t_products.c_product_id": 0.2,
+      "r1_shows_t_products.c_name": 0.86,
+      "r1_shows_t_products.c_brand": 0.1,
+      "r1_shows_t_products.c_status": 0.07,
+      "r1_shows_t_products.c_description": 0.06,
+      "r1_shows_t_products.c_created_at": 0.07,
+      "r1_shows_t_suppliers.c_name": 0.04,
+      "r1_shows_t_suppliers.c_country": 0.05,
+      "r1_shows_t_suppliers.c_contact_email": 0.04,
+      "r1_shows_t_suppliers.c_lead_days": 0.05,
+      "r1_shows_t_categories.c_name": 0.04
+     },
+     "call_2": {
+      "r1_t_products.c_name_aggregate": [
+       "value",
+       {
+        "value": 1.0,
+        "count": 0.0,
+        "count_distinct": 0.0,
+        "sum": 0.0,
+        "avg": 0.0,
+        "min": 0.0,
+        "max": 0.0
+       }
+      ]
+     }
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "all_rows": false,
+      "columns": [
+       "t_products.c_name"
+      ],
+      "sorted": false,
+      "limited": false,
+      "grouped": false,
+      "predicates": [
+       {
+        "column": "t_products.c_name",
+        "operator": "starts_with",
+        "negated": false,
+        "condition": {
+         "type": "pattern",
+         "expression": {
+          "type": "column",
+          "source": "t_products",
+          "reference": "c_name"
+         },
+         "pattern": "Mug%",
+         "operator": "like",
+         "escape": "\\"
+        },
+        "rows": 1
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "parameters": {
+     "r1": [
+      {
+       "text": "Mug",
+       "start": 41,
+       "end": 44,
+       "value": null,
+       "unit": null,
+       "words": true
+      }
+     ]
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.05,
+      "r1_chooses_t_products.c_product_id": 0.08,
+      "r1_chooses_t_products.c_name": 0.95,
+      "r1_chooses_t_products.c_brand": 0.06,
+      "r1_chooses_t_products.c_status": 0.08,
+      "r1_chooses_t_products.c_description": 0.06,
+      "r1_chooses_t_products.c_created_at": 0.05,
+      "r1_sorted": 0.03,
+      "r1_limited": 0.05,
+      "r1_grouped": 0.03
+     },
+     "stage_2": {
+      "r1|t_products.c_name|op": [
+       "starts_with",
+       {
+        "=": 0.0,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 0.0,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.0,
+        "contains": 0.0,
+        "starts_with": 1.0,
+        "ends_with": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.0
+       }
+      ],
+      "r1|t_products.c_name|not": 0.05
+     }
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "where": {
+       "type": "pattern",
+       "expression": {
+        "type": "column",
+        "source": "t_products",
+        "reference": "c_name"
+       },
+       "pattern": "Mug%",
+       "operator": "like",
+       "escape": "\\"
+      }
+     }
+    },
+    "warnings": [],
+    "jev": {}
+   },
+   "formula": {
+    "requests": {},
+    "warnings": []
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "select",
+       "from": {
+        "type": "database_table",
+        "reference": "t_products",
+        "alias": "p"
+       },
+       "scope": {
+        "type": "filtered",
+        "where": {
+         "type": "pattern",
+         "expression": {
+          "type": "column",
+          "source": "p",
+          "reference": "c_name"
+         },
+         "pattern": "Mug%",
+         "operator": "like",
+         "escape": "\\"
+        }
+       },
+       "columns": [
+        {
+         "expression": {
+          "type": "column",
+          "source": "p",
+          "reference": "c_product_id"
+         },
+         "alias": "product_id"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "p",
+          "reference": "c_name"
+         },
+         "alias": "name"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "p",
+          "reference": "c_brand"
+         },
+         "alias": "brand"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "p",
+          "reference": "c_category_id"
+         },
+         "alias": "category_id"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "p",
+          "reference": "c_supplier_id"
+         },
+         "alias": "supplier_id"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "p",
+          "reference": "c_status"
+         },
+         "alias": "status"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "p",
+          "reference": "c_description"
+         },
+         "alias": "description"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "p",
+          "reference": "c_created_at"
+         },
+         "alias": "created_at"
+        }
+       ]
+      },
+      "sql": [
+       "SELECT \"p\".\"product_id\" AS \"product_id\", \"p\".\"name\" AS \"name\", \"p\".\"brand\" AS \"brand\", \"p\".\"category_id\" AS \"category_id\", \"p\".\"supplier_id\" AS \"supplier_id\", \"p\".\"status\" AS \"status\", \"p\".\"description\" AS \"description\", \"p\".\"created_at\" AS \"created_at\" FROM \"products\" AS \"p\" WHERE \"p\".\"name\" LIKE 'Mug%' ESCAPE '\\'"
+      ],
+      "returns": [
+       [
+        11,
+        "Mug 100%",
+        "Casa",
+        4,
+        3,
+        "active",
+        "Printed ceramic mug",
+        "2026-09-05"
+       ]
+      ],
+      "rows": 1
+     }
+    ],
+    "questions": [],
+    "errors": []
+   },
+   "seconds": 4.0,
+   "jev": {
+    "calls": 8,
+    "input_tokens": 17871,
+    "output_tokens": 1855,
+    "seconds": 2.3
+   }
+  }
+ }
+}

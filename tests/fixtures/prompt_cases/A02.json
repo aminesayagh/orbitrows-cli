@@ -1,0 +1,605 @@
+{
+ "id": "A02",
+ "group": "end to end",
+ "prompt": "Archive the Casa Living products.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "UPDATE products SET status = 'archived' WHERE supplier_id IN (SELECT supplier_id FROM suppliers WHERE name = 'Casa Living')"
+   ],
+   "ordered": []
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Archive the Casa Living products.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Archive the Casa Living products.",
+      "start": 0,
+      "end": 33,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     }
+    ],
+    "order": [
+     "r1"
+    ],
+    "links": "r1",
+    "references": [],
+    "warnings": [],
+    "raw_references": [],
+    "jev": {
+     "coref": {},
+     "cuts": [],
+     "cut_answers": [],
+     "link_answers": [],
+     "inputs": {}
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "update",
+      "reports_back": false
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "update",
+      {
+       "select": 0.0,
+       "insert": 0.0,
+       "update": 0.96,
+       "delete": 0.04,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.11,
+     "r1_several": 0.13
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "l1",
+      "request": "r1",
+      "text": "Archive",
+      "start": 0,
+      "end": 7,
+      "linked": [
+       {
+        "column": "t_products.c_status",
+        "match": "typo",
+        "stored": [
+         "archived"
+        ],
+        "searched": "Archive"
+       }
+      ],
+      "role": "written"
+     },
+     {
+      "id": "l2",
+      "request": "r1",
+      "text": "Casa Living",
+      "start": 12,
+      "end": 23,
+      "linked": [
+       {
+        "column": "t_suppliers.c_name",
+        "match": "exact",
+        "stored": [
+         "Casa Living"
+        ],
+        "searched": "Casa Living"
+       }
+      ],
+      "role": "lookup",
+      "column": "t_suppliers.c_name",
+      "match": "exact",
+      "stored": [
+       "Casa Living"
+      ],
+      "searched": "Casa Living"
+     }
+    ],
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "l1_role": [
+       "written",
+       {
+        "lookup": 0.09,
+        "written": 0.87,
+        "number": 0.0,
+        "not_value": 0.04
+       }
+      ],
+      "l1_named": [
+       "t_products.c_status",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.93,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.07
+       }
+      ],
+      "l2_role": [
+       "lookup",
+       {
+        "lookup": 1.0,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.0
+       }
+      ],
+      "l2_named": [
+       "t_suppliers.c_name",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.88,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.01,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.02,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.01,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.08
+       }
+      ],
+      "l1_written": 0.16,
+      "l1_own": 0.09,
+      "l2_written": 0.17,
+      "l2_own": 0.43
+     },
+     "candidates": {
+      "l2": [
+       {
+        "column": "t_suppliers.c_name",
+        "match": "exact",
+        "stored": [
+         "Casa Living"
+        ],
+        "searched": "Casa Living"
+       }
+      ]
+     },
+     "call_2": {}
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "target": {
+       "type": "database_table",
+       "reference": "t_products"
+      },
+      "reads": [
+       "t_suppliers"
+      ]
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_products",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 1.0,
+       "t_variants": 0.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r1_uses_t_categories": 0.09,
+     "r1_uses_t_suppliers": 0.87,
+     "r1_uses_t_products": 0.94,
+     "r1_uses_t_variants": 0.09,
+     "r1_uses_t_inventory": 0.08,
+     "r1_uses_t_sales": 0.07
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "assignments": [
+       {
+        "column": "t_products.c_status",
+        "value": {
+         "type": "literal",
+         "value": "archived"
+        },
+        "from": "formula"
+       }
+      ],
+      "sql": [
+       "UPDATE \"products\" AS \"t_products\" SET \"status\" = 'archived'"
+      ]
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "r1_changes_t_products.c_product_id": 0.06,
+      "r1_changes_t_products.c_name": 0.06,
+      "r1_changes_t_products.c_brand": 0.09,
+      "r1_changes_t_products.c_category_id": 0.05,
+      "r1_changes_t_products.c_supplier_id": 0.05,
+      "r1_changes_t_products.c_status": 0.93,
+      "r1_changes_t_products.c_description": 0.07,
+      "r1_changes_t_products.c_created_at": 0.06
+     },
+     "call_2": {
+      "r1_t_products.c_status_how": [
+       "set_value",
+       {
+        "set_value": 1.0,
+        "column": 0.0,
+        "prefix": 0.0,
+        "suffix": 0.0,
+        "replace": 0.0,
+        "empty": 0.0
+       }
+      ],
+      "r1_t_products.c_status_number": [
+       "none",
+       {
+        "none": 1.0
+       }
+      ],
+      "r1_t_products.c_status_column": [
+       "none",
+       {
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.08,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.02,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "none": 0.9
+       }
+      ],
+      "r1_t_products.c_status_text": [
+       "x4",
+       {
+        "x0": 0.01,
+        "x1": 0.0,
+        "x2": 0.0,
+        "x3": 0.0,
+        "x4": 0.98,
+        "none": 0.01
+       }
+      ],
+      "r1_t_products.c_status_old": [
+       "x4",
+       {
+        "x0": 0.03,
+        "x1": 0.0,
+        "x2": 0.22,
+        "x3": 0.0,
+        "x4": 0.64,
+        "none": 0.11
+       }
+      ]
+     }
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "all_rows": false,
+      "columns": [
+       "t_suppliers.c_name"
+      ],
+      "predicates": [
+       {
+        "column": "t_suppliers.c_name",
+        "operator": "=",
+        "negated": false,
+        "condition": {
+         "type": "comparison",
+         "operator": "=",
+         "left": {
+          "type": "column",
+          "source": "t_suppliers",
+          "reference": "c_name"
+         },
+         "right": {
+          "type": "literal",
+          "value": "Casa Living"
+         }
+        },
+        "rows": 1
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "parameters": {
+     "r1": []
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.05,
+      "r1_chooses_t_products.c_product_id": 0.11,
+      "r1_chooses_t_products.c_name": 0.14,
+      "r1_chooses_t_products.c_brand": 0.2,
+      "r1_chooses_t_products.c_status": 0.17,
+      "r1_chooses_t_products.c_description": 0.09,
+      "r1_chooses_t_products.c_created_at": 0.07,
+      "r1_chooses_t_suppliers.c_name": 0.93,
+      "r1_chooses_t_suppliers.c_country": 0.11,
+      "r1_chooses_t_suppliers.c_contact_email": 0.09,
+      "r1_chooses_t_suppliers.c_lead_days": 0.07
+     },
+     "stage_2": {
+      "r1|t_suppliers.c_name|op": [
+       "=",
+       {
+        "=": 0.98,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 0.0,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.0,
+        "contains": 0.02,
+        "starts_with": 0.0,
+        "ends_with": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.0
+       }
+      ],
+      "r1|t_suppliers.c_name|not": 0.06
+     }
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "where": {
+       "type": "comparison",
+       "operator": "=",
+       "left": {
+        "type": "column",
+        "source": "t_suppliers",
+        "reference": "c_name"
+       },
+       "right": {
+        "type": "literal",
+        "value": "Casa Living"
+       }
+      }
+     }
+    },
+    "warnings": [],
+    "jev": {}
+   },
+   "formula": {
+    "requests": {
+     "r1.t_products.c_status": {
+      "records": [
+       {
+        "role": "calculation",
+        "function": "set",
+        "left": null,
+        "right": {
+         "value": "archived",
+         "source": "Archive"
+        },
+        "text": "Archive",
+        "start": 0,
+        "end": 7,
+        "rule_id": "jev.text_set",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "where",
+        "function": null,
+        "left": {
+         "pred": "p1"
+        },
+        "right": null,
+        "text": "Casa Living",
+        "start": 12,
+        "end": 23,
+        "rule_id": "jev.where",
+        "occurrences": [],
+        "status": "accepted"
+       }
+      ],
+      "pass1_ambiguities": [],
+      "map": {},
+      "status": "ok",
+      "questions": [],
+      "flagged": [],
+      "kind": "text"
+     }
+    },
+    "warnings": []
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "update",
+       "target": {
+        "type": "database_table",
+        "reference": "t_products",
+        "alias": "p"
+       },
+       "scope": {
+        "type": "filtered",
+        "where": {
+         "type": "membership",
+         "operator": "in",
+         "expression": {
+          "type": "column",
+          "source": "p",
+          "reference": "c_supplier_id"
+         },
+         "query": {
+          "id": "q1",
+          "type": "select",
+          "from": {
+           "type": "database_table",
+           "reference": "t_suppliers",
+           "alias": "s"
+          },
+          "columns": [
+           {
+            "expression": {
+             "type": "column",
+             "source": "s",
+             "reference": "c_supplier_id"
+            },
+            "alias": "c0"
+           }
+          ],
+          "scope": {
+           "type": "filtered",
+           "where": {
+            "type": "comparison",
+            "operator": "=",
+            "left": {
+             "type": "column",
+             "source": "s",
+             "reference": "c_name"
+            },
+            "right": {
+             "type": "literal",
+             "value": "Casa Living"
+            }
+           }
+          }
+         }
+        }
+       },
+       "assignments": [
+        {
+         "column": {
+          "type": "column",
+          "source": "p",
+          "reference": "c_status"
+         },
+         "value": {
+          "type": "literal",
+          "value": "archived"
+         }
+        }
+       ]
+      },
+      "sql": [
+       "UPDATE \"products\" AS \"p\" SET \"status\" = 'archived' WHERE \"p\".\"supplier_id\" IN (SELECT \"s\".\"supplier_id\" AS \"c0\" FROM \"suppliers\" AS \"s\" WHERE \"s\".\"name\" = 'Casa Living')"
+      ],
+      "rows": 3
+     }
+    ],
+    "questions": [],
+    "errors": []
+   },
+   "seconds": 4.8,
+   "jev": {
+    "calls": 8,
+    "input_tokens": 20552,
+    "output_tokens": 2891,
+    "seconds": 2.3
+   }
+  }
+ }
+}

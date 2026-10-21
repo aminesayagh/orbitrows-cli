@@ -1,0 +1,823 @@
+{
+ "id": "A41",
+ "group": "fix: a branch with 'instead' / 'for all others' is not cut into two requests (2026-10-15)",
+ "prompt": "Increase the lead days of the suppliers by 1; Atlas Textile gets 5 more days instead.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "UPDATE suppliers SET lead_days = CASE WHEN name = 'Atlas Textile' THEN lead_days + 5 ELSE lead_days + 1 END"
+   ],
+   "ordered": []
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Increase the lead days of the suppliers by 1; Atlas Textile gets 5 more days instead.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Increase the lead days of the suppliers by 1; Atlas Textile gets 5 more days instead.",
+      "start": 0,
+      "end": 85,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     }
+    ],
+    "order": [
+     "r1"
+    ],
+    "links": "r1",
+    "references": [],
+    "warnings": [],
+    "raw_references": [],
+    "jev": {
+     "coref": {
+      "m0_role": [
+       "not_reference",
+       {
+        "reference": 0.02,
+        "not_reference": 0.98,
+        "unsure": 0.0
+       }
+      ],
+      "m0_target": [
+       "m1",
+       {
+        "m1": 0.83,
+        "m2": 0.03,
+        "m3": 0.0,
+        "created": 0.0,
+        "ambiguous": 0.14
+       }
+      ],
+      "m1_role": [
+       "not_reference",
+       {
+        "reference": 0.05,
+        "not_reference": 0.94,
+        "unsure": 0.01
+       }
+      ],
+      "m1_target": [
+       "ambiguous",
+       {
+        "m2": 0.15,
+        "m3": 0.01,
+        "created": 0.03,
+        "ambiguous": 0.8099999999999999
+       }
+      ],
+      "m2_role": [
+       "not_reference",
+       {
+        "reference": 0.02,
+        "not_reference": 0.98,
+        "unsure": 0.0
+       }
+      ],
+      "m2_target": [
+       "m1",
+       {
+        "m0": 0.13,
+        "m1": 0.71,
+        "m3": 0.01,
+        "created": 0.0,
+        "ambiguous": 0.15
+       }
+      ],
+      "m3_role": [
+       "not_reference",
+       {
+        "reference": 0.16,
+        "not_reference": 0.84,
+        "unsure": 0.0
+       }
+      ],
+      "m3_target": [
+       "m2",
+       {
+        "m0": 0.3,
+        "m1": 0.03,
+        "m2": 0.55,
+        "created": 0.0,
+        "ambiguous": 0.12
+       }
+      ]
+     },
+     "cuts": [],
+     "cut_answers": [],
+     "link_answers": [],
+     "inputs": {}
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "update",
+      "reports_back": false
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "update",
+      {
+       "select": 0.0,
+       "insert": 0.0,
+       "update": 1.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.07,
+     "r1_several": 0.15
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "v1",
+      "request": "r1",
+      "text": "days",
+      "start": 18,
+      "end": 22,
+      "role": "not_value"
+     },
+     {
+      "id": "l1",
+      "request": "r1",
+      "text": "Atlas Textile",
+      "start": 46,
+      "end": 59,
+      "linked": [
+       {
+        "column": "t_suppliers.c_name",
+        "match": "exact",
+        "stored": [
+         "Atlas Textile"
+        ],
+        "searched": "Atlas Textile"
+       }
+      ],
+      "role": "lookup",
+      "column": "t_suppliers.c_name",
+      "match": "exact",
+      "stored": [
+       "Atlas Textile"
+      ],
+      "searched": "Atlas Textile"
+     },
+     {
+      "id": "v3",
+      "request": "r1",
+      "text": "days",
+      "start": 72,
+      "end": 76,
+      "role": "not_value"
+     }
+    ],
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "v1_role": [
+       "not_value",
+       {
+        "lookup": 0.02,
+        "written": 0.06,
+        "number": 0.12,
+        "not_value": 0.8
+       }
+      ],
+      "v1_named": [
+       "t_suppliers.c_lead_days",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.92,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.08
+       }
+      ],
+      "l1_role": [
+       "lookup",
+       {
+        "lookup": 1.0,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.0
+       }
+      ],
+      "l1_named": [
+       "t_suppliers.c_name",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.99,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.01,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.0
+       }
+      ],
+      "v3_role": [
+       "not_value",
+       {
+        "lookup": 0.02,
+        "written": 0.09,
+        "number": 0.12,
+        "not_value": 0.77
+       }
+      ],
+      "v3_named": [
+       "t_suppliers.c_lead_days",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.78,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.22
+       }
+      ],
+      "v1_written": 0.27,
+      "v1_own": 0.07,
+      "l1_written": 0.18,
+      "l1_own": 0.97,
+      "v3_written": 0.25,
+      "v3_own": 0.07
+     },
+     "candidates": {
+      "l1": [
+       {
+        "column": "t_suppliers.c_name",
+        "match": "exact",
+        "stored": [
+         "Atlas Textile"
+        ],
+        "searched": "Atlas Textile"
+       }
+      ]
+     },
+     "call_2": {}
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "target": {
+       "type": "database_table",
+       "reference": "t_suppliers"
+      },
+      "reads": []
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_suppliers",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 1.0,
+       "t_products": 0.0,
+       "t_variants": 0.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r1_uses_t_categories": 0.05,
+     "r1_uses_t_suppliers": 0.99,
+     "r1_uses_t_products": 0.08,
+     "r1_uses_t_variants": 0.05,
+     "r1_uses_t_inventory": 0.05,
+     "r1_uses_t_sales": 0.05
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "assignments": [
+       {
+        "column": "t_suppliers.c_lead_days",
+        "value": {
+         "type": "function",
+         "name": "round",
+         "arguments": [
+          {
+           "type": "case",
+           "branches": [
+            {
+             "when": {
+              "type": "comparison",
+              "operator": "=",
+              "left": {
+               "type": "column",
+               "source": "t_suppliers",
+               "reference": "c_name"
+              },
+              "right": {
+               "type": "literal",
+               "value": "Atlas Textile"
+              }
+             },
+             "then": {
+              "type": "arithmetic",
+              "operator": "+",
+              "left": {
+               "type": "column",
+               "source": "t_suppliers",
+               "reference": "c_lead_days"
+              },
+              "right": {
+               "type": "literal",
+               "value": 5
+              }
+             }
+            }
+           ],
+           "else": {
+            "type": "arithmetic",
+            "operator": "+",
+            "left": {
+             "type": "column",
+             "source": "t_suppliers",
+             "reference": "c_lead_days"
+            },
+            "right": {
+             "type": "literal",
+             "value": 1
+            }
+           }
+          }
+         ]
+        },
+        "from": "formula"
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "r1_changes_t_suppliers.c_supplier_id": 0.05,
+      "r1_changes_t_suppliers.c_name": 0.05,
+      "r1_changes_t_suppliers.c_country": 0.04,
+      "r1_changes_t_suppliers.c_contact_email": 0.03,
+      "r1_changes_t_suppliers.c_lead_days": 0.97
+     },
+     "call_2": {}
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "all_rows": false,
+      "columns": [
+       "t_suppliers.c_name"
+      ],
+      "predicates": [
+       {
+        "column": "t_suppliers.c_name",
+        "operator": "=",
+        "negated": false,
+        "condition": {
+         "type": "comparison",
+         "operator": "=",
+         "left": {
+          "type": "column",
+          "source": "t_suppliers",
+          "reference": "c_name"
+         },
+         "right": {
+          "type": "literal",
+          "value": "Atlas Textile"
+         }
+        },
+        "rows": 1
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "parameters": {
+     "r1": [
+      {
+       "text": "1",
+       "start": 43,
+       "end": 44,
+       "value": 1.0,
+       "unit": null
+      },
+      {
+       "text": "5",
+       "start": 65,
+       "end": 66,
+       "value": 5.0,
+       "unit": null
+      }
+     ]
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.07,
+      "r1_chooses_t_suppliers.c_supplier_id": 0.1,
+      "r1_chooses_t_suppliers.c_name": 0.92,
+      "r1_chooses_t_suppliers.c_country": 0.07,
+      "r1_chooses_t_suppliers.c_contact_email": 0.07,
+      "r1_chooses_t_suppliers.c_lead_days": 0.11
+     },
+     "stage_2": {
+      "r1|t_suppliers.c_name|op": [
+       "=",
+       {
+        "=": 0.99,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 0.0,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.01,
+        "contains": 0.0,
+        "starts_with": 0.0,
+        "ends_with": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.0
+       }
+      ],
+      "r1|t_suppliers.c_name|not": 0.25
+     }
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "where": null
+     }
+    },
+    "warnings": [],
+    "jev": {}
+   },
+   "formula": {
+    "requests": {
+     "r1.t_suppliers.c_lead_days": {
+      "records": [
+       {
+        "role": "calculation",
+        "function": "+",
+        "left": {
+         "column": "t_suppliers.c_lead_days"
+        },
+        "right": {
+         "value": 1,
+         "source": "1"
+        },
+        "text": "Increase the lead days of the suppliers by 1",
+        "start": 0,
+        "end": 44,
+        "rule_id": "jev.increase",
+        "occurrences": [
+         "n1"
+        ],
+        "status": "accepted"
+       },
+       {
+        "role": "assignment",
+        "function": "assign",
+        "left": {
+         "column": "t_suppliers.c_lead_days"
+        },
+        "right": {
+         "unresolved": true
+        },
+        "text": "Increase the lead days",
+        "start": 0,
+        "end": 22,
+        "rule_id": "parse.target",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "branch_condition",
+        "function": null,
+        "left": {
+         "pred": "p1"
+        },
+        "right": null,
+        "text": "Atlas Textile",
+        "start": 46,
+        "end": 59,
+        "rule_id": "jev.branch_condition",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "branch",
+        "function": "case",
+        "left": {
+         "pred": "p1"
+        },
+        "right": null,
+        "text": "Atlas Textile",
+        "start": 46,
+        "end": 59,
+        "rule_id": "branch.case",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "calculation",
+        "function": "+",
+        "left": {
+         "column": "t_suppliers.c_lead_days"
+        },
+        "right": {
+         "value": 5,
+         "source": "5"
+        },
+        "text": "gets 5 more days",
+        "start": 60,
+        "end": 76,
+        "rule_id": "jev.increase",
+        "occurrences": [
+         "n2"
+        ],
+        "status": "accepted"
+       }
+      ],
+      "pass1_ambiguities": [
+       {
+        "problem": "answer kept but uncertain",
+        "question": "n1_column",
+        "answer": "c0",
+        "probability": 0.56,
+        "status": "flagged"
+       },
+       {
+        "problem": "answer kept but uncertain",
+        "question": "n2_column",
+        "answer": "c1",
+        "probability": 0.58,
+        "status": "flagged"
+       },
+       {
+        "problem": "answer kept but uncertain",
+        "question": "c1_use",
+        "answer": "target",
+        "probability": 0.6,
+        "status": "flagged"
+       }
+      ],
+      "map": {
+       "r1.left": "current",
+       "r4.then": "r5",
+       "r4.else": "r1",
+       "r5.left": "current"
+      },
+      "status": "ok",
+      "questions": [],
+      "flagged": [],
+      "kind": "number"
+     }
+    },
+    "warnings": [
+     {
+      "request": "r1",
+      "problem": "formula of t_suppliers.c_lead_days: uncertain answers (n1_column=c0 0.56, n2_column=c1 0.58, c1_use=target 0.6)"
+     }
+    ]
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "update",
+       "target": {
+        "type": "database_table",
+        "reference": "t_suppliers",
+        "alias": "s"
+       },
+       "scope": {
+        "type": "all_rows"
+       },
+       "assignments": [
+        {
+         "column": {
+          "type": "column",
+          "source": "s",
+          "reference": "c_lead_days"
+         },
+         "value": {
+          "type": "function",
+          "name": "round",
+          "arguments": [
+           {
+            "type": "case",
+            "branches": [
+             {
+              "when": {
+               "type": "comparison",
+               "operator": "=",
+               "left": {
+                "type": "column",
+                "source": "s",
+                "reference": "c_name"
+               },
+               "right": {
+                "type": "literal",
+                "value": "Atlas Textile"
+               }
+              },
+              "then": {
+               "type": "arithmetic",
+               "operator": "+",
+               "left": {
+                "type": "column",
+                "source": "s",
+                "reference": "c_lead_days"
+               },
+               "right": {
+                "type": "literal",
+                "value": 5
+               }
+              }
+             }
+            ],
+            "else": {
+             "type": "arithmetic",
+             "operator": "+",
+             "left": {
+              "type": "column",
+              "source": "s",
+              "reference": "c_lead_days"
+             },
+             "right": {
+              "type": "literal",
+              "value": 1
+             }
+            }
+           }
+          ]
+         }
+        }
+       ]
+      },
+      "sql": [
+       "UPDATE \"suppliers\" AS \"s\" SET \"lead_days\" = ROUND(CASE WHEN \"s\".\"name\" = 'Atlas Textile' THEN (\"s\".\"lead_days\" + 5) ELSE (\"s\".\"lead_days\" + 1) END)"
+      ],
+      "rows": 4
+     }
+    ],
+    "questions": [
+     {
+      "step": "formula",
+      "request": "r1",
+      "problem": "formula of t_suppliers.c_lead_days: uncertain answers (n1_column=c0 0.56, n2_column=c1 0.58, c1_use=target 0.6)"
+     },
+     {
+      "step": "assembly",
+      "request": "r1",
+      "problem": "changes every record of suppliers",
+      "rows": 4
+     }
+    ],
+    "errors": []
+   },
+   "seconds": 4.1,
+   "jev": {
+    "calls": 9,
+    "input_tokens": 28112,
+    "output_tokens": 3896,
+    "seconds": 2.3
+   }
+  }
+ }
+}

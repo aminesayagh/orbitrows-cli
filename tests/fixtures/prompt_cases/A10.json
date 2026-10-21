@@ -1,0 +1,497 @@
+{
+ "id": "A10",
+ "group": "end to end",
+ "prompt": "Rename the column lead_days of suppliers to delivery_days.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "ALTER TABLE suppliers RENAME COLUMN lead_days TO delivery_days"
+   ],
+   "ordered": []
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Rename the column lead_days of suppliers to delivery_days.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Rename the column lead_days of suppliers to delivery_days.",
+      "start": 0,
+      "end": 58,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     }
+    ],
+    "order": [
+     "r1"
+    ],
+    "links": "r1",
+    "references": [],
+    "warnings": [],
+    "raw_references": [],
+    "jev": {
+     "coref": {
+      "m0_role": [
+       "not_reference",
+       {
+        "reference": 0.15,
+        "not_reference": 0.85,
+        "unsure": 0.0
+       }
+      ],
+      "m0_target": [
+       "m1",
+       {
+        "m1": 0.91,
+        "m2": 0.01,
+        "m3": 0.01,
+        "created": 0.0,
+        "ambiguous": 0.07
+       }
+      ],
+      "m1_role": [
+       "not_reference",
+       {
+        "reference": 0.0,
+        "not_reference": 1.0,
+        "unsure": 0.0
+       }
+      ],
+      "m1_target": [
+       "m0",
+       {
+        "m0": 0.61,
+        "m2": 0.12,
+        "m3": 0.07,
+        "created": 0.0,
+        "ambiguous": 0.2
+       }
+      ],
+      "m2_role": [
+       "not_reference",
+       {
+        "reference": 0.0,
+        "not_reference": 1.0,
+        "unsure": 0.0
+       }
+      ],
+      "m2_target": [
+       "ambiguous",
+       {
+        "m0": 0.15,
+        "m3": 0.06,
+        "created": 0.02,
+        "ambiguous": 0.77
+       }
+      ],
+      "m3_role": [
+       "not_reference",
+       {
+        "reference": 0.0,
+        "not_reference": 1.0,
+        "unsure": 0.0
+       }
+      ],
+      "m3_target": [
+       "m1",
+       {
+        "m0": 0.16,
+        "m1": 0.69,
+        "m2": 0.01,
+        "created": 0.02,
+        "ambiguous": 0.12
+       }
+      ]
+     },
+     "cuts": [],
+     "cut_answers": [],
+     "link_answers": [],
+     "inputs": {}
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "alter_table",
+      "reports_back": false
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "alter_table",
+      {
+       "select": 0.0,
+       "insert": 0.0,
+       "update": 0.0,
+       "delete": 0.0,
+       "alter_table": 1.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.05,
+     "r1_several": 0.06
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "v1",
+      "request": "r1",
+      "text": "lead_days",
+      "start": 18,
+      "end": 27,
+      "role": "not_value"
+     },
+     {
+      "id": "v2",
+      "request": "r1",
+      "text": "suppliers",
+      "start": 31,
+      "end": 40,
+      "role": "not_value"
+     },
+     {
+      "id": "v3",
+      "request": "r1",
+      "text": "delivery_days",
+      "start": 44,
+      "end": 57,
+      "role": "written"
+     }
+    ],
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "v1_role": [
+       "not_value",
+       {
+        "lookup": 0.05,
+        "written": 0.01,
+        "number": 0.0,
+        "not_value": 0.94
+       }
+      ],
+      "v1_named": [
+       "t_suppliers.c_lead_days",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 1.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.0
+       }
+      ],
+      "v2_role": [
+       "not_value",
+       {
+        "lookup": 0.03,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.97
+       }
+      ],
+      "v2_named": [
+       "t_suppliers",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.05,
+        "t_suppliers": 0.85,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.01,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.09
+       }
+      ],
+      "v3_role": [
+       "written",
+       {
+        "lookup": 0.0,
+        "written": 0.78,
+        "number": 0.0,
+        "not_value": 0.22
+       }
+      ],
+      "v3_named": [
+       "t_suppliers.c_lead_days",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.92,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.08
+       }
+      ],
+      "v1_written": 0.54,
+      "v1_own": 0.22,
+      "v2_written": 0.11,
+      "v2_own": 0.16,
+      "v3_written": 0.37,
+      "v3_own": 0.19
+     },
+     "candidates": {},
+     "call_2": {}
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "target": {
+       "type": "database_table",
+       "reference": "t_suppliers"
+      }
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_suppliers",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 1.0,
+       "t_products": 0.0,
+       "t_variants": 0.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ]
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "actions": [
+       {
+        "type": "rename_column",
+        "column": "c_lead_days",
+        "new_name": "delivery_days"
+       }
+      ],
+      "sql": [
+       "ALTER TABLE \"suppliers\" RENAME COLUMN \"lead_days\" TO \"delivery_days\""
+      ]
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "r1_action": [
+       "rename_column",
+       {
+        "add_column": 0.0,
+        "rename_column": 1.0,
+        "drop_column": 0.0,
+        "rename_table": 0.0
+       }
+      ]
+     },
+     "call_2": {
+      "r1_new_name": [
+       "delivery_days",
+       {
+        "lead_days": 0.0,
+        "suppliers": 0.0,
+        "delivery_days": 1.0,
+        "none": 0.0
+       }
+      ],
+      "r1_column": [
+       "t_suppliers.c_lead_days",
+       {
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 1.0
+       }
+      ]
+     }
+    }
+   },
+   "conditions": {
+    "requests": {},
+    "warnings": [],
+    "parameters": {
+     "r1": []
+    },
+    "jev": {
+     "stage_1": {},
+     "stage_2": {}
+    }
+   },
+   "grouping": {
+    "requests": {},
+    "warnings": [],
+    "jev": {}
+   },
+   "formula": {
+    "requests": {},
+    "warnings": []
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "alter_table",
+       "target": {
+        "type": "database_table",
+        "reference": "t_suppliers"
+       },
+       "actions": [
+        {
+         "type": "rename_column",
+         "column": "c_lead_days",
+         "new_name": "delivery_days"
+        }
+       ]
+      },
+      "sql": [
+       "ALTER TABLE \"suppliers\" RENAME COLUMN \"lead_days\" TO \"delivery_days\""
+      ],
+      "rows": -1
+     }
+    ],
+    "questions": [],
+    "errors": []
+   },
+   "seconds": 3.1,
+   "jev": {
+    "calls": 6,
+    "input_tokens": 16077,
+    "output_tokens": 2620,
+    "seconds": 1.6
+   }
+  }
+ }
+}

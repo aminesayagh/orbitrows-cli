@@ -1,0 +1,399 @@
+{
+ "id": "A05",
+ "group": "end to end",
+ "prompt": "Count the products per brand.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "SELECT brand, COUNT(*) FROM products GROUP BY brand"
+   ],
+   "ordered": [
+    false
+   ]
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Count the products per brand.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Count the products per brand.",
+      "start": 0,
+      "end": 29,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     }
+    ],
+    "order": [
+     "r1"
+    ],
+    "links": "r1",
+    "references": [],
+    "warnings": [],
+    "raw_references": [],
+    "jev": {
+     "coref": {},
+     "cuts": [],
+     "cut_answers": [],
+     "link_answers": [],
+     "inputs": {}
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "select",
+      "reports_back": true
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "select",
+      {
+       "select": 1.0,
+       "insert": 0.0,
+       "update": 0.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.98,
+     "r1_several": 0.1
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "v1",
+      "request": "r1",
+      "text": "brand",
+      "start": 23,
+      "end": 28,
+      "role": "not_value"
+     }
+    ],
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "v1_role": [
+       "not_value",
+       {
+        "lookup": 0.03,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.97
+       }
+      ],
+      "v1_named": [
+       "t_products.c_brand",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.99,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.01
+       }
+      ],
+      "v1_written": 0.96,
+      "v1_own": 0.15
+     },
+     "candidates": {},
+     "call_2": {}
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "from": {
+       "type": "database_table",
+       "reference": "t_products"
+      },
+      "reads": []
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_products",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 1.0,
+       "t_variants": 0.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r1_uses_t_categories": 0.08,
+     "r1_uses_t_suppliers": 0.07,
+     "r1_uses_t_products": 0.98,
+     "r1_uses_t_variants": 0.08,
+     "r1_uses_t_inventory": 0.07,
+     "r1_uses_t_sales": 0.07
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "outputs": [
+       {
+        "column": null,
+        "aggregate": "count",
+        "expression": {
+         "type": "aggregate",
+         "function": "count"
+        }
+       },
+       {
+        "column": "t_products.c_brand",
+        "aggregate": "count",
+        "expression": {
+         "type": "aggregate",
+         "function": "count",
+         "argument": {
+          "type": "column",
+          "source": "t_products",
+          "reference": "c_brand"
+         },
+         "distinct": false
+        }
+       }
+      ],
+      "sql": [
+       "SELECT COUNT(*) AS \"o0\", COUNT(\"t_products\".\"brand\") AS \"o1\" FROM \"products\" AS \"t_products\""
+      ]
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "r1_whole": 0.15,
+      "r1_counts": 0.95,
+      "r1_shows_t_products.c_product_id": 0.32,
+      "r1_shows_t_products.c_name": 0.15,
+      "r1_shows_t_products.c_brand": 0.97,
+      "r1_shows_t_products.c_status": 0.09,
+      "r1_shows_t_products.c_description": 0.05,
+      "r1_shows_t_products.c_created_at": 0.05,
+      "r1_shows_t_suppliers.c_name": 0.05,
+      "r1_shows_t_suppliers.c_country": 0.05,
+      "r1_shows_t_suppliers.c_contact_email": 0.04,
+      "r1_shows_t_suppliers.c_lead_days": 0.04,
+      "r1_shows_t_categories.c_name": 0.05
+     },
+     "call_2": {
+      "r1_t_products.c_brand_aggregate": [
+       "count",
+       {
+        "value": 0.19,
+        "count": 0.78,
+        "count_distinct": 0.03,
+        "sum": 0.0,
+        "avg": 0.0,
+        "min": 0.0,
+        "max": 0.0
+       }
+      ]
+     }
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "all_rows": true,
+      "columns": [],
+      "sorted": false,
+      "limited": false,
+      "grouped": true
+     }
+    },
+    "warnings": [],
+    "parameters": {
+     "r1": []
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.88,
+      "r1_chooses_t_products.c_product_id": 0.08,
+      "r1_chooses_t_products.c_name": 0.08,
+      "r1_chooses_t_products.c_brand": 0.09,
+      "r1_chooses_t_products.c_status": 0.09,
+      "r1_chooses_t_products.c_description": 0.06,
+      "r1_chooses_t_products.c_created_at": 0.06,
+      "r1_sorted": 0.04,
+      "r1_limited": 0.06,
+      "r1_grouped": 0.93
+     },
+     "stage_2": {}
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "where": null,
+      "group_by": [
+       {
+        "type": "column",
+        "source": "t_products",
+        "reference": "c_brand"
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1|group": [
+      "t_products.c_brand",
+      {
+       "t_products.c_product_id": 0.0,
+       "t_products.c_name": 0.0,
+       "t_products.c_brand": 1.0,
+       "t_products.c_category_id": 0.0,
+       "t_products.c_supplier_id": 0.0,
+       "t_products.c_status": 0.0,
+       "t_products.c_description": 0.0,
+       "t_products.c_created_at": 0.0
+      }
+     ]
+    }
+   },
+   "formula": {
+    "requests": {},
+    "warnings": []
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "select",
+       "from": {
+        "type": "database_table",
+        "reference": "t_products",
+        "alias": "p"
+       },
+       "scope": {
+        "type": "all_rows"
+       },
+       "columns": [
+        {
+         "expression": {
+          "type": "aggregate",
+          "function": "count"
+         },
+         "alias": "count"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "p",
+          "reference": "c_brand"
+         },
+         "alias": "brand"
+        }
+       ],
+       "group_by": [
+        {
+         "type": "column",
+         "source": "p",
+         "reference": "c_brand"
+        }
+       ]
+      },
+      "sql": [
+       "SELECT COUNT(*) AS \"count\", \"p\".\"brand\" AS \"brand\" FROM \"products\" AS \"p\" GROUP BY \"p\".\"brand\""
+      ],
+      "returns": [
+       [
+        1,
+        null
+       ],
+       [
+        3,
+        "Casa"
+       ],
+       [
+        4,
+        "Orbit"
+       ],
+       [
+        1,
+        "PaperHub"
+       ],
+       [
+        2,
+        "Volt"
+       ],
+       [
+        1,
+        "volt"
+       ]
+      ],
+      "rows": 6
+     }
+    ],
+    "questions": [],
+    "errors": []
+   },
+   "seconds": 3.4,
+   "jev": {
+    "calls": 7,
+    "input_tokens": 14793,
+    "output_tokens": 1663,
+    "seconds": 1.8
+   }
+  }
+ }
+}

@@ -1,0 +1,503 @@
+{
+ "id": "A13",
+ "group": "end to end",
+ "prompt": "Clear the barcode of the variants heavier than 1 kg.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "UPDATE variants SET barcode = NULL WHERE weight_g > 1000"
+   ],
+   "ordered": []
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Clear the barcode of the variants heavier than 1 kg.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Clear the barcode of the variants heavier than 1 kg.",
+      "start": 0,
+      "end": 52,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     }
+    ],
+    "order": [
+     "r1"
+    ],
+    "links": "r1",
+    "references": [],
+    "warnings": [],
+    "raw_references": [],
+    "jev": {
+     "coref": {
+      "m0_role": [
+       "not_reference",
+       {
+        "reference": 0.01,
+        "not_reference": 0.99,
+        "unsure": 0.0
+       }
+      ],
+      "m0_target": [
+       "ambiguous",
+       {
+        "created": 0.03,
+        "ambiguous": 0.97
+       }
+      ]
+     },
+     "cuts": [],
+     "cut_answers": [],
+     "link_answers": [],
+     "inputs": {}
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "update",
+      "reports_back": false
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "update",
+      {
+       "select": 0.0,
+       "insert": 0.0,
+       "update": 1.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.07,
+     "r1_several": 0.09
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "v1",
+      "request": "r1",
+      "text": "variants heavier than 1 kg",
+      "start": 25,
+      "end": 51,
+      "parts": [
+       "1 kg",
+       "kg"
+      ],
+      "role": "not_value",
+      "flagged": true
+     }
+    ],
+    "warnings": [
+     {
+      "value": "v1",
+      "problem": "role uncertain",
+      "answer": "not_value",
+      "probability": 0.64
+     }
+    ],
+    "jev": {
+     "call_1": {
+      "v1_role": [
+       "not_value",
+       {
+        "lookup": 0.29,
+        "written": 0.0,
+        "number": 0.07,
+        "not_value": 0.64
+       }
+      ],
+      "v1_named": [
+       "t_variants.c_weight_g",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.54,
+        "t_variants.c_barcode": 0.01,
+        "t_variants": 0.43,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.02
+       }
+      ],
+      "v1_written": 0.32,
+      "v1_own": 0.1
+     },
+     "candidates": {},
+     "call_2": {}
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "target": {
+       "type": "database_table",
+       "reference": "t_variants"
+      },
+      "reads": []
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_variants",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 0.0,
+       "t_variants": 1.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r1_uses_t_categories": 0.05,
+     "r1_uses_t_suppliers": 0.06,
+     "r1_uses_t_products": 0.08,
+     "r1_uses_t_variants": 0.99,
+     "r1_uses_t_inventory": 0.07,
+     "r1_uses_t_sales": 0.06
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "assignments": [
+       {
+        "column": "t_variants.c_barcode",
+        "value": {
+         "type": "literal",
+         "value": null
+        },
+        "from": "formula"
+       }
+      ],
+      "sql": [
+       "UPDATE \"variants\" AS \"t_variants\" SET \"barcode\" = NULL"
+      ]
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "r1_changes_t_variants.c_variant_id": 0.04,
+      "r1_changes_t_variants.c_product_id": 0.03,
+      "r1_changes_t_variants.c_sku": 0.04,
+      "r1_changes_t_variants.c_color": 0.03,
+      "r1_changes_t_variants.c_size": 0.03,
+      "r1_changes_t_variants.c_price_mad": 0.03,
+      "r1_changes_t_variants.c_cost_mad": 0.03,
+      "r1_changes_t_variants.c_weight_g": 0.04,
+      "r1_changes_t_variants.c_barcode": 0.94
+     },
+     "call_2": {
+      "r1_t_variants.c_barcode_how": [
+       "empty",
+       {
+        "set_value": 0.0,
+        "column": 0.0,
+        "prefix": 0.0,
+        "suffix": 0.0,
+        "replace": 0.0,
+        "empty": 1.0
+       }
+      ],
+      "r1_t_variants.c_barcode_number": [
+       "none",
+       {
+        "n1": 0.07,
+        "none": 0.93
+       }
+      ],
+      "r1_t_variants.c_barcode_column": [
+       "none",
+       {
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.01,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.01,
+        "none": 0.98
+       }
+      ],
+      "r1_t_variants.c_barcode_text": [
+       "none",
+       {
+        "none": 1.0
+       }
+      ],
+      "r1_t_variants.c_barcode_old": [
+       "none",
+       {
+        "none": 1.0
+       }
+      ]
+     }
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "all_rows": false,
+      "columns": [
+       "t_variants.c_weight_g"
+      ],
+      "predicates": [
+       {
+        "column": "t_variants.c_weight_g",
+        "operator": ">",
+        "negated": false,
+        "condition": {
+         "type": "comparison",
+         "operator": ">",
+         "left": {
+          "type": "column",
+          "source": "t_variants",
+          "reference": "c_weight_g"
+         },
+         "right": {
+          "type": "literal",
+          "value": 1000.0
+         }
+        },
+        "rows": 1
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "parameters": {
+     "r1": [
+      {
+       "text": "1 kg",
+       "start": 47,
+       "end": 51,
+       "value": 1.0,
+       "unit": {
+        "kind": "physical_unit",
+        "unit": "kg"
+       }
+      }
+     ]
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.04,
+      "r1_chooses_t_variants.c_variant_id": 0.11,
+      "r1_chooses_t_variants.c_sku": 0.08,
+      "r1_chooses_t_variants.c_color": 0.07,
+      "r1_chooses_t_variants.c_size": 0.08,
+      "r1_chooses_t_variants.c_price_mad": 0.05,
+      "r1_chooses_t_variants.c_cost_mad": 0.07,
+      "r1_chooses_t_variants.c_weight_g": 0.96,
+      "r1_chooses_t_variants.c_barcode": 0.13
+     },
+     "stage_2": {
+      "r1|t_variants.c_weight_g|op": [
+       ">",
+       {
+        "=": 0.0,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 1.0,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.0
+       }
+      ],
+      "r1|t_variants.c_weight_g|value": [
+       "n0",
+       {
+        "n0": 0.98,
+        "c:t_variants.c_variant_id": 0.0,
+        "c:t_variants.c_product_id": 0.0,
+        "none": 0.02
+       }
+      ],
+      "r1|t_variants.c_weight_g|upper": [
+       "none",
+       {
+        "n0": 0.24,
+        "c:t_variants.c_variant_id": 0.0,
+        "c:t_variants.c_product_id": 0.0,
+        "none": 0.76
+       }
+      ],
+      "r1|t_variants.c_weight_g|not": 0.08
+     }
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "where": {
+       "type": "comparison",
+       "operator": ">",
+       "left": {
+        "type": "column",
+        "source": "t_variants",
+        "reference": "c_weight_g"
+       },
+       "right": {
+        "type": "literal",
+        "value": 1000.0
+       }
+      }
+     }
+    },
+    "warnings": [],
+    "jev": {}
+   },
+   "formula": {
+    "requests": {
+     "r1.t_variants.c_barcode": {
+      "records": [
+       {
+        "role": "calculation",
+        "function": "set",
+        "left": null,
+        "right": {
+         "value": null
+        },
+        "text": "Clear the barcode of the variants heavier than 1 kg.",
+        "start": 0,
+        "end": 52,
+        "rule_id": "jev.empty",
+        "occurrences": [],
+        "status": "accepted"
+       }
+      ],
+      "pass1_ambiguities": [],
+      "map": {},
+      "status": "ok",
+      "questions": [],
+      "flagged": [],
+      "kind": "text"
+     }
+    },
+    "warnings": []
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "update",
+       "target": {
+        "type": "database_table",
+        "reference": "t_variants",
+        "alias": "v"
+       },
+       "scope": {
+        "type": "filtered",
+        "where": {
+         "type": "comparison",
+         "operator": ">",
+         "left": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_weight_g"
+         },
+         "right": {
+          "type": "literal",
+          "value": 1000.0
+         }
+        }
+       },
+       "assignments": [
+        {
+         "column": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_barcode"
+         },
+         "value": {
+          "type": "literal",
+          "value": null
+         }
+        }
+       ]
+      },
+      "sql": [
+       "UPDATE \"variants\" AS \"v\" SET \"barcode\" = NULL WHERE \"v\".\"weight_g\" > 1000.0"
+      ],
+      "rows": 1
+     }
+    ],
+    "questions": [
+     {
+      "step": "values",
+      "value": "v1",
+      "problem": "role uncertain",
+      "answer": "not_value",
+      "probability": 0.64
+     }
+    ],
+    "errors": []
+   },
+   "seconds": 3.8,
+   "jev": {
+    "calls": 9,
+    "input_tokens": 19029,
+    "output_tokens": 2315,
+    "seconds": 2.2
+   }
+  }
+ }
+}

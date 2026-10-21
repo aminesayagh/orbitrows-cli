@@ -1,0 +1,631 @@
+{
+ "id": "A15",
+ "group": "end to end",
+ "prompt": "Show the stock lines where reserved is higher than quantity.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "SELECT * FROM inventory WHERE reserved > quantity"
+   ],
+   "ordered": [
+    false
+   ]
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Show the stock lines where reserved is higher than quantity.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Show the stock lines where reserved is higher than quantity.",
+      "start": 0,
+      "end": 60,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     }
+    ],
+    "order": [
+     "r1"
+    ],
+    "links": "r1",
+    "references": [],
+    "warnings": [],
+    "raw_references": [],
+    "jev": {
+     "coref": {},
+     "cuts": [],
+     "cut_answers": [],
+     "link_answers": [],
+     "inputs": {}
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "select",
+      "reports_back": true
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "select",
+      {
+       "select": 1.0,
+       "insert": 0.0,
+       "update": 0.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.99,
+     "r1_several": 0.08
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "v1",
+      "request": "r1",
+      "text": "reserved",
+      "start": 27,
+      "end": 35,
+      "role": "not_value"
+     },
+     {
+      "id": "v2",
+      "request": "r1",
+      "text": "quantity",
+      "start": 51,
+      "end": 59,
+      "role": "not_value"
+     }
+    ],
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "v1_role": [
+       "not_value",
+       {
+        "lookup": 0.03,
+        "written": 0.0,
+        "number": 0.03,
+        "not_value": 0.94
+       }
+      ],
+      "v1_named": [
+       "t_inventory.c_reserved",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 1.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.0
+       }
+      ],
+      "v2_role": [
+       "not_value",
+       {
+        "lookup": 0.1,
+        "written": 0.0,
+        "number": 0.03,
+        "not_value": 0.87
+       }
+      ],
+      "v2_named": [
+       "t_inventory.c_quantity",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 1.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.0
+       }
+      ],
+      "v1_written": 0.86,
+      "v1_own": 0.12,
+      "v2_written": 0.87,
+      "v2_own": 0.15
+     },
+     "candidates": {},
+     "call_2": {}
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "from": {
+       "type": "database_table",
+       "reference": "t_inventory"
+      },
+      "reads": []
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_inventory",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 0.0,
+       "t_variants": 0.0,
+       "t_inventory": 1.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r1_uses_t_categories": 0.07,
+     "r1_uses_t_suppliers": 0.06,
+     "r1_uses_t_products": 0.1,
+     "r1_uses_t_variants": 0.13,
+     "r1_uses_t_inventory": 0.98,
+     "r1_uses_t_sales": 0.07
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "outputs": "all"
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "r1_whole": 0.88,
+      "r1_counts": 0.07,
+      "r1_shows_t_inventory.c_inventory_id": 0.29,
+      "r1_shows_t_inventory.c_warehouse": 0.45,
+      "r1_shows_t_inventory.c_quantity": 0.74,
+      "r1_shows_t_inventory.c_reserved": 0.78,
+      "r1_shows_t_inventory.c_reorder_point": 0.08,
+      "r1_shows_t_variants.c_sku": 0.2,
+      "r1_shows_t_variants.c_color": 0.09,
+      "r1_shows_t_variants.c_size": 0.1,
+      "r1_shows_t_variants.c_price_mad": 0.05,
+      "r1_shows_t_variants.c_cost_mad": 0.05,
+      "r1_shows_t_variants.c_weight_g": 0.05,
+      "r1_shows_t_variants.c_barcode": 0.09,
+      "r1_shows_t_products.c_name": 0.12,
+      "r1_shows_t_products.c_brand": 0.09,
+      "r1_shows_t_products.c_status": 0.06,
+      "r1_shows_t_products.c_description": 0.05,
+      "r1_shows_t_products.c_created_at": 0.05,
+      "r1_shows_t_suppliers.c_name": 0.05,
+      "r1_shows_t_suppliers.c_country": 0.04,
+      "r1_shows_t_suppliers.c_contact_email": 0.03,
+      "r1_shows_t_suppliers.c_lead_days": 0.04,
+      "r1_shows_t_categories.c_name": 0.05
+     },
+     "call_2": {
+      "r1_t_inventory.c_quantity_aggregate": [
+       "value",
+       {
+        "value": 1.0,
+        "count": 0.0,
+        "count_distinct": 0.0,
+        "sum": 0.0,
+        "avg": 0.0,
+        "min": 0.0,
+        "max": 0.0
+       }
+      ],
+      "r1_t_inventory.c_reserved_aggregate": [
+       "value",
+       {
+        "value": 1.0,
+        "count": 0.0,
+        "count_distinct": 0.0,
+        "sum": 0.0,
+        "avg": 0.0,
+        "min": 0.0,
+        "max": 0.0
+       }
+      ]
+     }
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "all_rows": false,
+      "columns": [
+       "t_inventory.c_quantity",
+       "t_inventory.c_reserved"
+      ],
+      "sorted": false,
+      "limited": false,
+      "grouped": false,
+      "flagged": true,
+      "predicates": [
+       {
+        "column": "t_inventory.c_quantity",
+        "operator": "<",
+        "negated": false,
+        "condition": {
+         "type": "comparison",
+         "operator": "<",
+         "left": {
+          "type": "column",
+          "source": "t_inventory",
+          "reference": "c_quantity"
+         },
+         "right": {
+          "type": "column",
+          "source": "t_inventory",
+          "reference": "c_reserved"
+         }
+        },
+        "rows": 0
+       },
+       {
+        "column": "t_inventory.c_reserved",
+        "operator": ">",
+        "negated": false,
+        "condition": {
+         "type": "comparison",
+         "operator": ">",
+         "left": {
+          "type": "column",
+          "source": "t_inventory",
+          "reference": "c_reserved"
+         },
+         "right": {
+          "type": "column",
+          "source": "t_inventory",
+          "reference": "c_quantity"
+         }
+        },
+        "rows": 0
+       }
+      ]
+     }
+    },
+    "warnings": [
+     {
+      "request": "r1",
+      "problem": "op of t_inventory.c_quantity uncertain",
+      "answer": "<",
+      "probability": 0.64
+     },
+     {
+      "request": "r1",
+      "problem": "no record matches the condition on t_inventory.c_quantity"
+     },
+     {
+      "request": "r1",
+      "problem": "no record matches the condition on t_inventory.c_reserved"
+     }
+    ],
+    "parameters": {
+     "r1": [
+      {
+       "text": "quantity",
+       "start": 51,
+       "end": 59,
+       "value": null,
+       "unit": null,
+       "words": true
+      }
+     ]
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.04,
+      "r1_chooses_t_inventory.c_inventory_id": 0.08,
+      "r1_chooses_t_inventory.c_warehouse": 0.08,
+      "r1_chooses_t_inventory.c_quantity": 0.84,
+      "r1_chooses_t_inventory.c_reserved": 0.91,
+      "r1_chooses_t_inventory.c_reorder_point": 0.07,
+      "r1_sorted": 0.03,
+      "r1_limited": 0.05,
+      "r1_grouped": 0.04
+     },
+     "stage_2": {
+      "r1|t_inventory.c_quantity|op": [
+       "<",
+       {
+        "=": 0.01,
+        "<": 0.64,
+        "<=": 0.08,
+        ">": 0.24,
+        ">=": 0.01,
+        "between": 0.0,
+        "in": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.02
+       }
+      ],
+      "r1|t_inventory.c_quantity|value": [
+       "c:t_inventory.c_reserved",
+       {
+        "c:t_inventory.c_inventory_id": 0.0,
+        "c:t_inventory.c_variant_id": 0.0,
+        "c:t_inventory.c_reserved": 0.85,
+        "c:t_inventory.c_reorder_point": 0.0,
+        "none": 0.15
+       }
+      ],
+      "r1|t_inventory.c_quantity|upper": [
+       "none",
+       {
+        "c:t_inventory.c_inventory_id": 0.0,
+        "c:t_inventory.c_variant_id": 0.0,
+        "c:t_inventory.c_reserved": 0.05,
+        "c:t_inventory.c_reorder_point": 0.0,
+        "none": 0.95
+       }
+      ],
+      "r1|t_inventory.c_reserved|op": [
+       ">",
+       {
+        "=": 0.0,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 1.0,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.0
+       }
+      ],
+      "r1|t_inventory.c_reserved|value": [
+       "c:t_inventory.c_quantity",
+       {
+        "c:t_inventory.c_inventory_id": 0.0,
+        "c:t_inventory.c_variant_id": 0.0,
+        "c:t_inventory.c_quantity": 0.93,
+        "c:t_inventory.c_reorder_point": 0.0,
+        "none": 0.07
+       }
+      ],
+      "r1|t_inventory.c_reserved|upper": [
+       "none",
+       {
+        "c:t_inventory.c_inventory_id": 0.0,
+        "c:t_inventory.c_variant_id": 0.0,
+        "c:t_inventory.c_quantity": 0.2,
+        "c:t_inventory.c_reorder_point": 0.0,
+        "none": 0.8
+       }
+      ],
+      "r1|t_inventory.c_quantity|not": 0.14,
+      "r1|t_inventory.c_reserved|not": 0.1
+     }
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "where": {
+       "type": "comparison",
+       "operator": "<",
+       "left": {
+        "type": "column",
+        "source": "t_inventory",
+        "reference": "c_quantity"
+       },
+       "right": {
+        "type": "column",
+        "source": "t_inventory",
+        "reference": "c_reserved"
+       }
+      }
+     }
+    },
+    "warnings": [],
+    "jev": {}
+   },
+   "formula": {
+    "requests": {},
+    "warnings": []
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "select",
+       "from": {
+        "type": "database_table",
+        "reference": "t_inventory",
+        "alias": "i"
+       },
+       "scope": {
+        "type": "filtered",
+        "where": {
+         "type": "comparison",
+         "operator": "<",
+         "left": {
+          "type": "column",
+          "source": "i",
+          "reference": "c_quantity"
+         },
+         "right": {
+          "type": "column",
+          "source": "i",
+          "reference": "c_reserved"
+         }
+        }
+       },
+       "columns": [
+        {
+         "expression": {
+          "type": "column",
+          "source": "i",
+          "reference": "c_inventory_id"
+         },
+         "alias": "inventory_id"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "i",
+          "reference": "c_variant_id"
+         },
+         "alias": "variant_id"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "i",
+          "reference": "c_warehouse"
+         },
+         "alias": "warehouse"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "i",
+          "reference": "c_quantity"
+         },
+         "alias": "quantity"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "i",
+          "reference": "c_reserved"
+         },
+         "alias": "reserved"
+        },
+        {
+         "expression": {
+          "type": "column",
+          "source": "i",
+          "reference": "c_reorder_point"
+         },
+         "alias": "reorder_point"
+        }
+       ]
+      },
+      "sql": [
+       "SELECT \"i\".\"inventory_id\" AS \"inventory_id\", \"i\".\"variant_id\" AS \"variant_id\", \"i\".\"warehouse\" AS \"warehouse\", \"i\".\"quantity\" AS \"quantity\", \"i\".\"reserved\" AS \"reserved\", \"i\".\"reorder_point\" AS \"reorder_point\" FROM \"inventory\" AS \"i\" WHERE \"i\".\"quantity\" < \"i\".\"reserved\""
+      ],
+      "returns": [],
+      "rows": 0
+     }
+    ],
+    "questions": [
+     {
+      "step": "conditions",
+      "request": "r1",
+      "problem": "op of t_inventory.c_quantity uncertain",
+      "answer": "<",
+      "probability": 0.64
+     },
+     {
+      "step": "conditions",
+      "request": "r1",
+      "problem": "no record matches the condition on t_inventory.c_quantity"
+     },
+     {
+      "step": "conditions",
+      "request": "r1",
+      "problem": "no record matches the condition on t_inventory.c_reserved"
+     }
+    ],
+    "errors": []
+   },
+   "seconds": 3.5,
+   "jev": {
+    "calls": 7,
+    "input_tokens": 21509,
+    "output_tokens": 3047,
+    "seconds": 2.1
+   }
+  }
+ }
+}

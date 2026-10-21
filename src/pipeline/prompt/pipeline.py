@@ -1,0 +1,61 @@
+"""One prompt → a checked SQL program on the store's tables: steps 1 to 7 of the PoC (v2/prompt_ast/pipeline.py), in
+its order, each step fed the previous steps' outputs. Paid: the model; local: CorPipe and GLiNER2.
+
+    store   the store's tables read back from SQLite (ddl.schema_from_sqlite), without the CLI's own tables (`_…`)
+    out     {prompt, requests, operation, values, sources, parts, conditions, grouping, formula, assembly}; assembly is
+            {"program", "questions", "errors"}: step 7 runs the program in a savepoint, rolled back (nothing is changed)
+"""
+from orbitrows.services.extractor import client as extractor
+from orbitrows.sql.ddl import schema_from_sqlite
+
+from . import assemble, conditions, coref, formula, grouping, operation, parts, request_graph, sources, values
+
+
+def store_of(db) -> list[dict]:
+    """The store's create_table nodes, as the PoC's Orbitrow schema(); `_` tables are the CLI's (classification,
+    history), not the merchant's."""
+    return [n.model_dump() for n in schema_from_sqlite(db) if not n.definition.sql_name.startswith("_")]
+
+
+async def run(prompt: str, model, db, step=lambda text: None) -> dict:
+    """The PoC's run(), with `model` opened by the caller and progress through `step` (no printing)."""
+    store, spans = store_of(db), extractor.connect()           # spans: GLiNER2, the PoC's `model`
+    step("references (CorPipe)")
+    mentions = coref.mentions([prompt], name="pipeline")[0]
+    step("step 1 · requests, links, references")
+    s1 = await request_graph.run(model, prompt, mentions, spans, request_graph.store_text(store))
+    step("step 2 · operation")
+    s2 = await operation.run(model, prompt, s1["requests"], store)
+    several = [rid for rid, x in s2["requests"].items() if x.get("several_actions")]
+    if several:                                               # two actions in one request: step 1 cuts it again
+        again = await request_graph.recut(model, prompt, s1, several[0], spans)
+        if again:
+            s1 = again
+            step("step 2 · operation, after cutting a request with two actions")
+            s2 = await operation.run(model, prompt, s1["requests"], store)
+    reqs = [r | {k: v for k, v in s2["requests"][r["id"]].items() if k in ("statement", "input")}
+            for r in s1["requests"]]
+    step("step 3 · values")
+    s3 = await values.run(model, db, prompt, reqs, store, spans)
+    for to, frm in s1.get("inherits", {}).items():          # "once you have lowered them": the other part's values
+        s3["values"] += [v | {"id": f"{v['id']}_{to}", "request": to, "inherited_from": frm} for v in s3["values"]
+                         if v["request"] == frm and v.get("role") == "lookup" and v.get("column")]
+    step("step 4 · sources")
+    s4 = await sources.run(model, prompt, reqs, store, s1["references"], s3["values"])
+    step("step 5 · parts")
+    s5 = await parts.run(model, db, prompt, reqs, store, s4["requests"], s3["values"], numeric_by_formula=True)
+    step("step 6 · conditions")
+    s6 = await conditions.run(model, prompt, reqs, store, s4["requests"], s3["values"], s5["requests"], db, spans)
+    step("step 6 · grouping, sort, limit")
+    g = await grouping.run(model, prompt, reqs, store, s4["requests"], s6, s6.get("parameters", {}))
+    step("step 5 · numeric changes")
+    f5 = await formula.run(model, prompt, reqs, store, s4["requests"], s3["values"], s5["requests"], s6, g, db)
+    step("step 7 · assembly")
+    a = assemble.assemble(db, store, reqs, s2["requests"], s4["requests"], s5["requests"], s6["requests"],
+                          g["requests"], [("requests", s1["warnings"]), ("operation", s2["warnings"]),
+                                          ("values", s3["warnings"]), ("sources", s4["warnings"]),
+                                          ("parts", s5["warnings"]), ("conditions", s6["warnings"]),
+                                          ("grouping", g["warnings"]), ("formula", f5["warnings"])],
+                          order=s1.get("order"))
+    return {"prompt": prompt, "requests": s1, "operation": s2, "values": s3, "sources": s4, "parts": s5,
+            "conditions": s6, "grouping": g, "formula": f5, "assembly": a}

@@ -9,9 +9,17 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "babel>=2.18.0",
+    "en-core-web-sm",
+    "fr-core-news-sm",
     "gliner2[local]>=2.0.0",
+    "numpy>=2.5.3",
     "pint>=0.26.1",
     "pydantic>=2.13.5",
+    "rapidfuzz>=3.14.6",
+    "sentence-transformers>=5.7.0",
+    "spacy==3.8.16",
+    "sqlglot==30.21.0",
+    "text2num==3.1.0",
     "torch>=2.14.0",
     "typesafe-sdk>=0.7.1",
 ]
@@ -44,3 +52,5 @@ explicit = true
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu" }]
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
+fr-core-news-sm = { url = "https://github.com/explosion/spacy-models/releases/download/fr_core_news_sm-3.8.0/fr_core_news_sm-3.8.0-py3-none-any.whl" }

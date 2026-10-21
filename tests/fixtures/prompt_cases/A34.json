@@ -1,0 +1,672 @@
+{
+ "id": "A34",
+ "group": "numeric changes, operations steps: another column as the value",
+ "prompt": "Set the reserved stock of the Casablanca lines to half of the quantity.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "UPDATE inventory SET reserved = ROUND(quantity * 0.5) WHERE warehouse = 'Casablanca'"
+   ],
+   "ordered": []
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Set the reserved stock of the Casablanca lines to half of the quantity.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Set the reserved stock of the Casablanca lines to half of the quantity.",
+      "start": 0,
+      "end": 71,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     }
+    ],
+    "order": [
+     "r1"
+    ],
+    "links": "r1",
+    "references": [],
+    "warnings": [],
+    "raw_references": [],
+    "jev": {
+     "coref": {},
+     "cuts": [],
+     "cut_answers": [],
+     "link_answers": [],
+     "inputs": {}
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "update",
+      "reports_back": false
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "update",
+      {
+       "select": 0.0,
+       "insert": 0.0,
+       "update": 1.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.07,
+     "r1_several": 0.12
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "v1",
+      "request": "r1",
+      "text": "reserved stock",
+      "start": 8,
+      "end": 22,
+      "role": "not_value"
+     },
+     {
+      "id": "l1",
+      "request": "r1",
+      "text": "Casablanca",
+      "start": 30,
+      "end": 40,
+      "linked": [
+       {
+        "column": "t_inventory.c_warehouse",
+        "match": "exact",
+        "stored": [
+         "Casablanca"
+        ],
+        "searched": "Casablanca"
+       }
+      ],
+      "role": "lookup",
+      "column": "t_inventory.c_warehouse",
+      "match": "exact",
+      "stored": [
+       "Casablanca"
+      ],
+      "searched": "Casablanca"
+     },
+     {
+      "id": "v3",
+      "request": "r1",
+      "text": "half of the quantity",
+      "start": 50,
+      "end": 70,
+      "parts": [
+       "quantity"
+      ],
+      "role": "written",
+      "flagged": true
+     }
+    ],
+    "warnings": [
+     {
+      "value": "v3",
+      "problem": "role uncertain",
+      "answer": "written",
+      "probability": 0.57
+     }
+    ],
+    "jev": {
+     "call_1": {
+      "v1_role": [
+       "not_value",
+       {
+        "lookup": 0.06,
+        "written": 0.24,
+        "number": 0.0,
+        "not_value": 0.7
+       }
+      ],
+      "v1_named": [
+       "t_inventory.c_reserved",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.95,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.05
+       }
+      ],
+      "l1_role": [
+       "lookup",
+       {
+        "lookup": 0.99,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.01
+       }
+      ],
+      "l1_named": [
+       "t_inventory.c_warehouse",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.99,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.01
+       }
+      ],
+      "v3_role": [
+       "written",
+       {
+        "lookup": 0.0,
+        "written": 0.57,
+        "number": 0.4,
+        "not_value": 0.03
+       }
+      ],
+      "v3_named": [
+       "t_inventory.c_quantity",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.6,
+        "t_inventory.c_reserved": 0.18,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.22
+       }
+      ],
+      "v1_written": 0.69,
+      "v1_own": 0.15,
+      "l1_written": 0.33,
+      "l1_own": 0.56,
+      "v3_written": 0.4,
+      "v3_own": 0.07
+     },
+     "candidates": {
+      "l1": [
+       {
+        "column": "t_inventory.c_warehouse",
+        "match": "exact",
+        "stored": [
+         "Casablanca"
+        ],
+        "searched": "Casablanca"
+       }
+      ]
+     },
+     "call_2": {}
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "target": {
+       "type": "database_table",
+       "reference": "t_inventory"
+      },
+      "reads": []
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_inventory",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 0.0,
+       "t_variants": 0.0,
+       "t_inventory": 1.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r1_uses_t_categories": 0.06,
+     "r1_uses_t_suppliers": 0.06,
+     "r1_uses_t_products": 0.09,
+     "r1_uses_t_variants": 0.11,
+     "r1_uses_t_inventory": 0.98,
+     "r1_uses_t_sales": 0.06
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "assignments": [
+       {
+        "column": "t_inventory.c_reserved",
+        "value": {
+         "type": "function",
+         "name": "round",
+         "arguments": [
+          {
+           "type": "arithmetic",
+           "operator": "*",
+           "left": {
+            "type": "column",
+            "source": "t_inventory",
+            "reference": "c_quantity"
+           },
+           "right": {
+            "type": "literal",
+            "value": 0.5
+           }
+          }
+         ]
+        },
+        "from": "formula"
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "r1_changes_t_inventory.c_inventory_id": 0.06,
+      "r1_changes_t_inventory.c_variant_id": 0.06,
+      "r1_changes_t_inventory.c_warehouse": 0.04,
+      "r1_changes_t_inventory.c_quantity": 0.05,
+      "r1_changes_t_inventory.c_reserved": 0.97,
+      "r1_changes_t_inventory.c_reorder_point": 0.04
+     },
+     "call_2": {}
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "all_rows": false,
+      "columns": [
+       "t_inventory.c_warehouse"
+      ],
+      "predicates": [
+       {
+        "column": "t_inventory.c_warehouse",
+        "operator": "=",
+        "negated": false,
+        "condition": {
+         "type": "comparison",
+         "operator": "=",
+         "left": {
+          "type": "column",
+          "source": "t_inventory",
+          "reference": "c_warehouse"
+         },
+         "right": {
+          "type": "literal",
+          "value": "Casablanca"
+         }
+        },
+        "rows": 16
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "parameters": {
+     "r1": [
+      {
+       "text": "half",
+       "start": 50,
+       "end": 54,
+       "value": null,
+       "unit": null,
+       "words": true
+      }
+     ]
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.08,
+      "r1_chooses_t_inventory.c_inventory_id": 0.12,
+      "r1_chooses_t_inventory.c_warehouse": 0.63,
+      "r1_chooses_t_inventory.c_quantity": 0.15,
+      "r1_chooses_t_inventory.c_reserved": 0.12,
+      "r1_chooses_t_inventory.c_reorder_point": 0.09
+     },
+     "stage_2": {
+      "r1|t_inventory.c_warehouse|op": [
+       "=",
+       {
+        "=": 0.83,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 0.0,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.0,
+        "contains": 0.16,
+        "starts_with": 0.01,
+        "ends_with": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.0
+       }
+      ],
+      "r1|t_inventory.c_warehouse|not": 0.06
+     }
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "where": {
+       "type": "comparison",
+       "operator": "=",
+       "left": {
+        "type": "column",
+        "source": "t_inventory",
+        "reference": "c_warehouse"
+       },
+       "right": {
+        "type": "literal",
+        "value": "Casablanca"
+       }
+      }
+     }
+    },
+    "warnings": [],
+    "jev": {}
+   },
+   "formula": {
+    "requests": {
+     "r1.t_inventory.c_reserved": {
+      "records": [
+       {
+        "role": "calculation",
+        "function": "*",
+        "left": {
+         "column": "t_inventory.c_quantity"
+        },
+        "right": {
+         "value": 0.5,
+         "source": "half"
+        },
+        "text": "Set the reserved stock of the Casablanca lines to half of the quantity",
+        "start": 0,
+        "end": 70,
+        "rule_id": "jev.multiply",
+        "occurrences": [
+         "n1"
+        ],
+        "status": "accepted"
+       },
+       {
+        "role": "assignment",
+        "function": "assign",
+        "left": {
+         "column": "t_inventory.c_reserved"
+        },
+        "right": {
+         "unresolved": true
+        },
+        "text": "Set the reserved stock",
+        "start": 0,
+        "end": 22,
+        "rule_id": "parse.target",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "where",
+        "function": null,
+        "left": {
+         "pred": "p1"
+        },
+        "right": null,
+        "text": "Casablanca",
+        "start": 30,
+        "end": 40,
+        "rule_id": "jev.where",
+        "occurrences": [],
+        "status": "accepted"
+       }
+      ],
+      "pass1_ambiguities": [
+       {
+        "problem": "answer kept but uncertain",
+        "question": "n1_column",
+        "answer": "t:t_inventory.c_quantity",
+        "probability": 0.58,
+        "status": "flagged"
+       },
+       {
+        "problem": "answer kept but uncertain",
+        "question": "c1_use",
+        "answer": "base",
+        "probability": 0.66,
+        "status": "flagged"
+       }
+      ],
+      "map": {},
+      "status": "ok",
+      "questions": [],
+      "flagged": [],
+      "kind": "number"
+     }
+    },
+    "warnings": [
+     {
+      "request": "r1",
+      "problem": "formula of t_inventory.c_reserved: uncertain answers (n1_column=t:t_inventory.c_quantity 0.58, c1_use=base 0.66)"
+     }
+    ]
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "update",
+       "target": {
+        "type": "database_table",
+        "reference": "t_inventory",
+        "alias": "i"
+       },
+       "scope": {
+        "type": "filtered",
+        "where": {
+         "type": "comparison",
+         "operator": "=",
+         "left": {
+          "type": "column",
+          "source": "i",
+          "reference": "c_warehouse"
+         },
+         "right": {
+          "type": "literal",
+          "value": "Casablanca"
+         }
+        }
+       },
+       "assignments": [
+        {
+         "column": {
+          "type": "column",
+          "source": "i",
+          "reference": "c_reserved"
+         },
+         "value": {
+          "type": "function",
+          "name": "round",
+          "arguments": [
+           {
+            "type": "arithmetic",
+            "operator": "*",
+            "left": {
+             "type": "column",
+             "source": "i",
+             "reference": "c_quantity"
+            },
+            "right": {
+             "type": "literal",
+             "value": 0.5
+            }
+           }
+          ]
+         }
+        }
+       ]
+      },
+      "sql": [
+       "UPDATE \"inventory\" AS \"i\" SET \"reserved\" = ROUND((\"i\".\"quantity\" * 0.5)) WHERE \"i\".\"warehouse\" = 'Casablanca'"
+      ],
+      "rows": 16
+     }
+    ],
+    "questions": [
+     {
+      "step": "values",
+      "value": "v3",
+      "problem": "role uncertain",
+      "answer": "written",
+      "probability": 0.57
+     },
+     {
+      "step": "formula",
+      "request": "r1",
+      "problem": "formula of t_inventory.c_reserved: uncertain answers (n1_column=t:t_inventory.c_quantity 0.58, c1_use=base 0.66)"
+     }
+    ],
+    "errors": []
+   },
+   "seconds": 3.6,
+   "jev": {
+    "calls": 7,
+    "input_tokens": 20560,
+    "output_tokens": 3437,
+    "seconds": 1.9
+   }
+  }
+ }
+}

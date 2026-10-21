@@ -1,0 +1,970 @@
+{
+ "dataset": "orbitrow-v1",
+ "today": "2026-10-10",
+ "currency": "MAD",
+ "tables": {
+  "categories": {
+   "columns": [
+    {
+     "name": "category_id",
+     "type": "INTEGER",
+     "required": true,
+     "primary_key": true
+    },
+    {
+     "name": "name",
+     "type": "TEXT",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "parent_id",
+     "type": "INTEGER",
+     "required": false,
+     "primary_key": false
+    }
+   ],
+   "foreign_keys": {
+    "parent_id": "categories"
+   },
+   "rows": [
+    [
+     1,
+     "Clothing",
+     null
+    ],
+    [
+     2,
+     "Accessories",
+     1
+    ],
+    [
+     3,
+     "Electronics",
+     null
+    ],
+    [
+     4,
+     "Home",
+     null
+    ],
+    [
+     5,
+     "Stationery",
+     null
+    ]
+   ]
+  },
+  "suppliers": {
+   "columns": [
+    {
+     "name": "supplier_id",
+     "type": "INTEGER",
+     "required": true,
+     "primary_key": true
+    },
+    {
+     "name": "name",
+     "type": "TEXT",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "country",
+     "type": "TEXT",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "contact_email",
+     "type": "TEXT",
+     "required": false,
+     "primary_key": false
+    },
+    {
+     "name": "lead_days",
+     "type": "INTEGER",
+     "required": true,
+     "primary_key": false
+    }
+   ],
+   "foreign_keys": {},
+   "rows": [
+    [
+     1,
+     "Atlas Textile",
+     "Morocco",
+     "orders@atlas.example",
+     3
+    ],
+    [
+     2,
+     "TechSource",
+     "China",
+     "sales@techsource.example",
+     14
+    ],
+    [
+     3,
+     "Casa Living",
+     "Morocco",
+     null,
+     5
+    ],
+    [
+     4,
+     "PaperHub",
+     "France",
+     "hello@paperhub.example",
+     8
+    ]
+   ]
+  },
+  "products": {
+   "columns": [
+    {
+     "name": "product_id",
+     "type": "INTEGER",
+     "required": true,
+     "primary_key": true
+    },
+    {
+     "name": "name",
+     "type": "TEXT",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "brand",
+     "type": "TEXT",
+     "required": false,
+     "primary_key": false
+    },
+    {
+     "name": "category_id",
+     "type": "INTEGER",
+     "required": false,
+     "primary_key": false
+    },
+    {
+     "name": "supplier_id",
+     "type": "INTEGER",
+     "required": false,
+     "primary_key": false
+    },
+    {
+     "name": "status",
+     "type": "TEXT",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "description",
+     "type": "TEXT",
+     "required": false,
+     "primary_key": false
+    },
+    {
+     "name": "created_at",
+     "type": "TEXT",
+     "required": true,
+     "primary_key": false
+    }
+   ],
+   "foreign_keys": {
+    "category_id": "categories",
+    "supplier_id": "suppliers"
+   },
+   "rows": [
+    [
+     1,
+     "Orbit Tee",
+     "Orbit",
+     1,
+     1,
+     "active",
+     "Soft cotton tee",
+     "2026-08-01"
+    ],
+    [
+     2,
+     "Orbit Hoodie",
+     "Orbit",
+     1,
+     1,
+     "active",
+     "Warm fleece hoodie",
+     "2026-08-02"
+    ],
+    [
+     3,
+     "USB-C Cable",
+     "Volt",
+     3,
+     2,
+     "active",
+     null,
+     "2026-08-03"
+    ],
+    [
+     4,
+     "Wireless Mouse",
+     "volt",
+     3,
+     2,
+     "active",
+     "",
+     "2026-08-04"
+    ],
+    [
+     5,
+     "Travel Mug",
+     "Casa",
+     4,
+     3,
+     "active",
+     "  insulated mug  ",
+     "2026-08-05"
+    ],
+    [
+     6,
+     "Desk Lamp",
+     "Casa",
+     4,
+     3,
+     "draft",
+     "   ",
+     "2026-09-01"
+    ],
+    [
+     7,
+     "Cotton Cap",
+     "Orbit",
+     2,
+     1,
+     "archived",
+     "Cotton cap",
+     "2026-07-01"
+    ],
+    [
+     8,
+     "Notebook",
+     "PaperHub",
+     5,
+     4,
+     "active",
+     null,
+     "2026-09-02"
+    ],
+    [
+     9,
+     "Orbit Tee Kids",
+     "Orbit",
+     1,
+     1,
+     "active",
+     "Kids cotton tee",
+     "2026-09-03"
+    ],
+    [
+     10,
+     "Gift Card",
+     null,
+     null,
+     null,
+     "active",
+     "Digital gift card",
+     "2026-09-04"
+    ],
+    [
+     11,
+     "Mug 100%",
+     "Casa",
+     4,
+     3,
+     "active",
+     "Printed ceramic mug",
+     "2026-09-05"
+    ],
+    [
+     12,
+     "Adapter_USB",
+     "Volt",
+     3,
+     2,
+     "draft",
+     "Compact adapter",
+     "2026-10-01"
+    ]
+   ]
+  },
+  "variants": {
+   "columns": [
+    {
+     "name": "variant_id",
+     "type": "INTEGER",
+     "required": true,
+     "primary_key": true
+    },
+    {
+     "name": "product_id",
+     "type": "INTEGER",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "sku",
+     "type": "TEXT",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "color",
+     "type": "TEXT",
+     "required": false,
+     "primary_key": false
+    },
+    {
+     "name": "size",
+     "type": "TEXT",
+     "required": false,
+     "primary_key": false
+    },
+    {
+     "name": "price_mad",
+     "type": "NUMERIC",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "cost_mad",
+     "type": "NUMERIC",
+     "required": false,
+     "primary_key": false
+    },
+    {
+     "name": "weight_g",
+     "type": "INTEGER",
+     "required": false,
+     "primary_key": false
+    },
+    {
+     "name": "barcode",
+     "type": "TEXT",
+     "required": false,
+     "primary_key": false
+    }
+   ],
+   "foreign_keys": {
+    "product_id": "products"
+   },
+   "rows": [
+    [
+     101,
+     1,
+     "TEE-BLK-S",
+     "black",
+     "S",
+     120,
+     60,
+     180,
+     "000101"
+    ],
+    [
+     102,
+     1,
+     "TEE-BLK-M",
+     "black",
+     "M",
+     120,
+     60,
+     190,
+     "000102"
+    ],
+    [
+     103,
+     1,
+     "TEE-WHT-M",
+     "white",
+     "M",
+     125,
+     62,
+     190,
+     "000103"
+    ],
+    [
+     104,
+     2,
+     "HOOD-NVY-L",
+     "navy",
+     "L",
+     300,
+     180,
+     650,
+     "000104"
+    ],
+    [
+     105,
+     2,
+     "HOOD-BLK-M",
+     "black",
+     "M",
+     300,
+     180,
+     620,
+     "000105"
+    ],
+    [
+     106,
+     3,
+     "CBL-1M",
+     null,
+     "1m",
+     80,
+     30,
+     50,
+     "000106"
+    ],
+    [
+     107,
+     3,
+     "CBL-2M",
+     null,
+     "2m",
+     120,
+     45,
+     80,
+     "000107"
+    ],
+    [
+     108,
+     4,
+     "MOUSE-BLK",
+     "black",
+     null,
+     180,
+     90,
+     95,
+     "000108"
+    ],
+    [
+     109,
+     5,
+     "MUG-BLU",
+     "blue",
+     "500ml",
+     150,
+     70,
+     300,
+     "000109"
+    ],
+    [
+     110,
+     5,
+     "MUG-RED",
+     "red",
+     "500ml",
+     150,
+     70,
+     300,
+     "000110"
+    ],
+    [
+     111,
+     6,
+     "LAMP-WHT",
+     "white",
+     null,
+     400,
+     250,
+     1200,
+     null
+    ],
+    [
+     112,
+     7,
+     "CAP-BLK",
+     "black",
+     "one-size",
+     90,
+     40,
+     100,
+     "000112"
+    ],
+    [
+     113,
+     8,
+     "NOTE-A5",
+     null,
+     "A5",
+     30,
+     10,
+     200,
+     "000113"
+    ],
+    [
+     114,
+     9,
+     "KTEE-BLU-6",
+     "blue",
+     "6y",
+     100,
+     45,
+     130,
+     "000114"
+    ],
+    [
+     115,
+     10,
+     "GIFT-250",
+     null,
+     "",
+     250,
+     null,
+     0,
+     null
+    ],
+    [
+     116,
+     11,
+     "MUG-100%",
+     "white",
+     "350ml",
+     140,
+     60,
+     280,
+     "000116"
+    ],
+    [
+     117,
+     12,
+     "ADP_USB",
+     null,
+     null,
+     95,
+     40,
+     35,
+     "000117"
+    ]
+   ]
+  },
+  "inventory": {
+   "columns": [
+    {
+     "name": "inventory_id",
+     "type": "INTEGER",
+     "required": true,
+     "primary_key": true
+    },
+    {
+     "name": "variant_id",
+     "type": "INTEGER",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "warehouse",
+     "type": "TEXT",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "quantity",
+     "type": "INTEGER",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "reserved",
+     "type": "INTEGER",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "reorder_point",
+     "type": "INTEGER",
+     "required": true,
+     "primary_key": false
+    }
+   ],
+   "foreign_keys": {
+    "variant_id": "variants"
+   },
+   "rows": [
+    [
+     1,
+     101,
+     "Casablanca",
+     20,
+     3,
+     5
+    ],
+    [
+     2,
+     101,
+     "Rabat",
+     4,
+     1,
+     5
+    ],
+    [
+     3,
+     102,
+     "Casablanca",
+     0,
+     0,
+     5
+    ],
+    [
+     4,
+     102,
+     "Rabat",
+     8,
+     2,
+     5
+    ],
+    [
+     5,
+     103,
+     "Casablanca",
+     5,
+     5,
+     5
+    ],
+    [
+     6,
+     104,
+     "Casablanca",
+     6,
+     1,
+     3
+    ],
+    [
+     7,
+     104,
+     "Rabat",
+     2,
+     0,
+     3
+    ],
+    [
+     8,
+     105,
+     "Casablanca",
+     0,
+     0,
+     3
+    ],
+    [
+     9,
+     106,
+     "Casablanca",
+     50,
+     5,
+     10
+    ],
+    [
+     10,
+     106,
+     "Rabat",
+     10,
+     0,
+     10
+    ],
+    [
+     11,
+     107,
+     "Casablanca",
+     3,
+     0,
+     10
+    ],
+    [
+     12,
+     108,
+     "Casablanca",
+     12,
+     2,
+     5
+    ],
+    [
+     13,
+     109,
+     "Casablanca",
+     7,
+     1,
+     4
+    ],
+    [
+     14,
+     109,
+     "Rabat",
+     1,
+     0,
+     4
+    ],
+    [
+     15,
+     110,
+     "Casablanca",
+     0,
+     0,
+     4
+    ],
+    [
+     16,
+     111,
+     "Casablanca",
+     4,
+     0,
+     2
+    ],
+    [
+     17,
+     112,
+     "Casablanca",
+     9,
+     0,
+     3
+    ],
+    [
+     18,
+     113,
+     "Casablanca",
+     100,
+     10,
+     20
+    ],
+    [
+     19,
+     113,
+     "Rabat",
+     20,
+     0,
+     20
+    ],
+    [
+     20,
+     114,
+     "Casablanca",
+     6,
+     1,
+     5
+    ],
+    [
+     21,
+     116,
+     "Casablanca",
+     2,
+     0,
+     4
+    ],
+    [
+     22,
+     117,
+     "Casablanca",
+     0,
+     0,
+     5
+    ]
+   ]
+  },
+  "sales": {
+   "columns": [
+    {
+     "name": "sale_id",
+     "type": "INTEGER",
+     "required": true,
+     "primary_key": true
+    },
+    {
+     "name": "order_ref",
+     "type": "TEXT",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "variant_id",
+     "type": "INTEGER",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "sold_on",
+     "type": "TEXT",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "quantity",
+     "type": "INTEGER",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "unit_price_mad",
+     "type": "NUMERIC",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "discount_mad",
+     "type": "NUMERIC",
+     "required": true,
+     "primary_key": false
+    },
+    {
+     "name": "status",
+     "type": "TEXT",
+     "required": true,
+     "primary_key": false
+    }
+   ],
+   "foreign_keys": {
+    "variant_id": "variants"
+   },
+   "rows": [
+    [
+     1,
+     "O-001",
+     101,
+     "2026-09-01",
+     2,
+     120,
+     0,
+     "completed"
+    ],
+    [
+     2,
+     "O-001",
+     106,
+     "2026-09-01",
+     1,
+     80,
+     0,
+     "completed"
+    ],
+    [
+     3,
+     "O-002",
+     109,
+     "2026-09-15",
+     1,
+     150,
+     10,
+     "completed"
+    ],
+    [
+     4,
+     "O-003",
+     104,
+     "2026-09-30",
+     1,
+     300,
+     0,
+     "completed"
+    ],
+    [
+     5,
+     "O-004",
+     102,
+     "2026-10-01",
+     3,
+     120,
+     30,
+     "completed"
+    ],
+    [
+     6,
+     "O-004",
+     113,
+     "2026-10-01",
+     2,
+     30,
+     0,
+     "completed"
+    ],
+    [
+     7,
+     "O-005",
+     108,
+     "2026-10-02",
+     1,
+     180,
+     0,
+     "refunded"
+    ],
+    [
+     8,
+     "O-006",
+     110,
+     "2026-10-03",
+     2,
+     150,
+     0,
+     "cancelled"
+    ],
+    [
+     9,
+     "O-007",
+     107,
+     "2026-10-04",
+     2,
+     120,
+     20,
+     "completed"
+    ],
+    [
+     10,
+     "O-008",
+     114,
+     "2026-10-05",
+     1,
+     100,
+     0,
+     "pending"
+    ],
+    [
+     11,
+     "O-009",
+     116,
+     "2026-10-06",
+     2,
+     140,
+     0,
+     "completed"
+    ],
+    [
+     12,
+     "O-010",
+     101,
+     "2026-10-07",
+     1,
+     115,
+     5,
+     "completed"
+    ],
+    [
+     13,
+     "O-010",
+     109,
+     "2026-10-07",
+     1,
+     145,
+     0,
+     "completed"
+    ],
+    [
+     14,
+     "O-011",
+     115,
+     "2026-10-08",
+     1,
+     250,
+     0,
+     "completed"
+    ]
+   ]
+  }
+ }
+}

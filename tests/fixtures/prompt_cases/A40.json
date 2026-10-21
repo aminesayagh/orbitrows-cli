@@ -1,0 +1,781 @@
+{
+ "id": "A40",
+ "group": "fix: a branch with 'instead' / 'for all others' is not cut into two requests (2026-10-15)",
+ "prompt": "Lower the prices of the variants by 10; the white variants get 15 off instead.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "UPDATE variants SET price_mad = CASE WHEN color = 'white' THEN price_mad - 15 ELSE price_mad - 10 END"
+   ],
+   "ordered": []
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Lower the prices of the variants by 10; the white variants get 15 off instead.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Lower the prices of the variants by 10; the white variants get 15 off instead.",
+      "start": 0,
+      "end": 78,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     }
+    ],
+    "order": [
+     "r1"
+    ],
+    "links": "r1",
+    "references": [],
+    "warnings": [],
+    "raw_references": [],
+    "jev": {
+     "coref": {
+      "m0_role": [
+       "not_reference",
+       {
+        "reference": 0.03,
+        "not_reference": 0.97,
+        "unsure": 0.0
+       }
+      ],
+      "m0_target": [
+       "m1",
+       {
+        "m1": 0.94,
+        "m2": 0.02,
+        "created": 0.0,
+        "ambiguous": 0.04
+       }
+      ],
+      "m1_role": [
+       "not_reference",
+       {
+        "reference": 0.11,
+        "not_reference": 0.88,
+        "unsure": 0.01
+       }
+      ],
+      "m1_target": [
+       "ambiguous",
+       {
+        "m2": 0.23,
+        "created": 0.01,
+        "ambiguous": 0.76
+       }
+      ],
+      "m2_role": [
+       "not_reference",
+       {
+        "reference": 0.13,
+        "not_reference": 0.86,
+        "unsure": 0.01
+       }
+      ],
+      "m2_target": [
+       "m1",
+       {
+        "m0": 0.02,
+        "m1": 0.94,
+        "created": 0.0,
+        "ambiguous": 0.04
+       }
+      ]
+     },
+     "cuts": [
+      [
+       38,
+       39
+      ]
+     ],
+     "cut_answers": [
+      {
+       "choice": "continuation",
+       "probabilities": {
+        "new_request": 0.05,
+        "continuation": 0.95,
+        "context_transition": 0.0
+       }
+      }
+     ],
+     "link_answers": [],
+     "inputs": {}
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "update",
+      "reports_back": false
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "update",
+      {
+       "select": 0.0,
+       "insert": 0.0,
+       "update": 1.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.07,
+     "r1_several": 0.14
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "v1",
+      "request": "r1",
+      "text": "variants",
+      "start": 24,
+      "end": 32,
+      "role": "not_value"
+     },
+     {
+      "id": "l1",
+      "request": "r1",
+      "text": "white",
+      "start": 44,
+      "end": 49,
+      "linked": [
+       {
+        "column": "t_variants.c_color",
+        "match": "exact",
+        "stored": [
+         "white"
+        ],
+        "searched": "white"
+       }
+      ],
+      "role": "lookup",
+      "column": "t_variants.c_color",
+      "match": "exact",
+      "stored": [
+       "white"
+      ],
+      "searched": "white"
+     },
+     {
+      "id": "v3",
+      "request": "r1",
+      "text": "variants",
+      "start": 50,
+      "end": 58,
+      "role": "not_value"
+     }
+    ],
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "v1_role": [
+       "not_value",
+       {
+        "lookup": 0.19,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.81
+       }
+      ],
+      "v1_named": [
+       "t_variants",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.01,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.93,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.06
+       }
+      ],
+      "l1_role": [
+       "lookup",
+       {
+        "lookup": 1.0,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.0
+       }
+      ],
+      "l1_named": [
+       "t_variants.c_color",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.99,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.01
+       }
+      ],
+      "v3_role": [
+       "not_value",
+       {
+        "lookup": 0.24,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.76
+       }
+      ],
+      "v3_named": [
+       "t_variants",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.01,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.87,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.12
+       }
+      ],
+      "v1_written": 0.23,
+      "v1_own": 0.15,
+      "l1_written": 0.22,
+      "l1_own": 0.12,
+      "v3_written": 0.22,
+      "v3_own": 0.15
+     },
+     "candidates": {
+      "l1": [
+       {
+        "column": "t_variants.c_color",
+        "match": "exact",
+        "stored": [
+         "white"
+        ],
+        "searched": "white"
+       }
+      ]
+     },
+     "call_2": {}
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "target": {
+       "type": "database_table",
+       "reference": "t_variants"
+      },
+      "reads": []
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_variants",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 0.0,
+       "t_variants": 1.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r1_uses_t_categories": 0.06,
+     "r1_uses_t_suppliers": 0.06,
+     "r1_uses_t_products": 0.07,
+     "r1_uses_t_variants": 0.99,
+     "r1_uses_t_inventory": 0.06,
+     "r1_uses_t_sales": 0.07
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "assignments": [
+       {
+        "column": "t_variants.c_price_mad",
+        "value": {
+         "type": "case",
+         "branches": [
+          {
+           "when": {
+            "type": "comparison",
+            "operator": "=",
+            "left": {
+             "type": "column",
+             "source": "t_variants",
+             "reference": "c_color"
+            },
+            "right": {
+             "type": "literal",
+             "value": "white"
+            }
+           },
+           "then": {
+            "type": "arithmetic",
+            "operator": "-",
+            "left": {
+             "type": "column",
+             "source": "t_variants",
+             "reference": "c_price_mad"
+            },
+            "right": {
+             "type": "literal",
+             "value": 15
+            }
+           }
+          }
+         ],
+         "else": {
+          "type": "arithmetic",
+          "operator": "-",
+          "left": {
+           "type": "column",
+           "source": "t_variants",
+           "reference": "c_price_mad"
+          },
+          "right": {
+           "type": "literal",
+           "value": 10
+          }
+         }
+        },
+        "from": "formula"
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "r1_changes_t_variants.c_variant_id": 0.04,
+      "r1_changes_t_variants.c_product_id": 0.04,
+      "r1_changes_t_variants.c_sku": 0.04,
+      "r1_changes_t_variants.c_color": 0.06,
+      "r1_changes_t_variants.c_size": 0.03,
+      "r1_changes_t_variants.c_price_mad": 0.97,
+      "r1_changes_t_variants.c_cost_mad": 0.04,
+      "r1_changes_t_variants.c_weight_g": 0.03,
+      "r1_changes_t_variants.c_barcode": 0.03
+     },
+     "call_2": {}
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "all_rows": false,
+      "columns": [
+       "t_variants.c_color"
+      ],
+      "predicates": [
+       {
+        "column": "t_variants.c_color",
+        "operator": "=",
+        "negated": false,
+        "condition": {
+         "type": "comparison",
+         "operator": "=",
+         "left": {
+          "type": "column",
+          "source": "t_variants",
+          "reference": "c_color"
+         },
+         "right": {
+          "type": "literal",
+          "value": "white"
+         }
+        },
+        "rows": 3
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "parameters": {
+     "r1": [
+      {
+       "text": "10",
+       "start": 36,
+       "end": 38,
+       "value": 10.0,
+       "unit": null
+      },
+      {
+       "text": "15",
+       "start": 63,
+       "end": 65,
+       "value": 15.0,
+       "unit": null
+      }
+     ]
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.12,
+      "r1_chooses_t_variants.c_variant_id": 0.1,
+      "r1_chooses_t_variants.c_sku": 0.09,
+      "r1_chooses_t_variants.c_color": 0.93,
+      "r1_chooses_t_variants.c_size": 0.09,
+      "r1_chooses_t_variants.c_price_mad": 0.14,
+      "r1_chooses_t_variants.c_cost_mad": 0.06,
+      "r1_chooses_t_variants.c_weight_g": 0.06,
+      "r1_chooses_t_variants.c_barcode": 0.07
+     },
+     "stage_2": {
+      "r1|t_variants.c_color|op": [
+       "=",
+       {
+        "=": 0.96,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 0.0,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.03,
+        "contains": 0.0,
+        "starts_with": 0.0,
+        "ends_with": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.01
+       }
+      ],
+      "r1|t_variants.c_color|not": 0.14
+     }
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "where": null
+     }
+    },
+    "warnings": [],
+    "jev": {}
+   },
+   "formula": {
+    "requests": {
+     "r1.t_variants.c_price_mad": {
+      "records": [
+       {
+        "role": "calculation",
+        "function": "-",
+        "left": {
+         "column": "t_variants.c_price_mad"
+        },
+        "right": {
+         "value": 10,
+         "source": "10"
+        },
+        "text": "10",
+        "start": 36,
+        "end": 38,
+        "rule_id": "jev.decrease",
+        "occurrences": [
+         "n1"
+        ],
+        "status": "accepted"
+       },
+       {
+        "role": "branch_condition",
+        "function": null,
+        "left": {
+         "pred": "p1"
+        },
+        "right": null,
+        "text": "white",
+        "start": 44,
+        "end": 49,
+        "rule_id": "jev.branch_condition",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "branch",
+        "function": "case",
+        "left": {
+         "pred": "p1"
+        },
+        "right": null,
+        "text": "white",
+        "start": 44,
+        "end": 49,
+        "rule_id": "branch.case",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "calculation",
+        "function": "-",
+        "left": {
+         "unresolved": true
+        },
+        "right": {
+         "value": 15,
+         "source": "15"
+        },
+        "text": "get 15",
+        "start": 59,
+        "end": 65,
+        "rule_id": "jev.decrease",
+        "occurrences": [
+         "n2"
+        ],
+        "status": "accepted"
+       }
+      ],
+      "pass1_ambiguities": [
+       {
+        "problem": "answer kept but uncertain",
+        "question": "n1_column",
+        "answer": "t:t_variants.c_price_mad",
+        "probability": 0.64,
+        "status": "flagged"
+       }
+      ],
+      "map": {
+       "r1.left": "current",
+       "r3.then": "r4",
+       "r3.else": "r1",
+       "r4.left": "current"
+      },
+      "status": "ok",
+      "questions": [],
+      "flagged": [],
+      "kind": "number"
+     }
+    },
+    "warnings": [
+     {
+      "request": "r1",
+      "problem": "formula of t_variants.c_price_mad: uncertain answers (n1_column=t:t_variants.c_price_mad 0.64)"
+     }
+    ]
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "update",
+       "target": {
+        "type": "database_table",
+        "reference": "t_variants",
+        "alias": "v"
+       },
+       "scope": {
+        "type": "all_rows"
+       },
+       "assignments": [
+        {
+         "column": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_price_mad"
+         },
+         "value": {
+          "type": "case",
+          "branches": [
+           {
+            "when": {
+             "type": "comparison",
+             "operator": "=",
+             "left": {
+              "type": "column",
+              "source": "v",
+              "reference": "c_color"
+             },
+             "right": {
+              "type": "literal",
+              "value": "white"
+             }
+            },
+            "then": {
+             "type": "arithmetic",
+             "operator": "-",
+             "left": {
+              "type": "column",
+              "source": "v",
+              "reference": "c_price_mad"
+             },
+             "right": {
+              "type": "literal",
+              "value": 15
+             }
+            }
+           }
+          ],
+          "else": {
+           "type": "arithmetic",
+           "operator": "-",
+           "left": {
+            "type": "column",
+            "source": "v",
+            "reference": "c_price_mad"
+           },
+           "right": {
+            "type": "literal",
+            "value": 10
+           }
+          }
+         }
+        }
+       ]
+      },
+      "sql": [
+       "UPDATE \"variants\" AS \"v\" SET \"price_mad\" = CASE WHEN \"v\".\"color\" = 'white' THEN (\"v\".\"price_mad\" - 15) ELSE (\"v\".\"price_mad\" - 10) END"
+      ],
+      "rows": 17
+     }
+    ],
+    "questions": [
+     {
+      "step": "formula",
+      "request": "r1",
+      "problem": "formula of t_variants.c_price_mad: uncertain answers (n1_column=t:t_variants.c_price_mad 0.64)"
+     },
+     {
+      "step": "assembly",
+      "request": "r1",
+      "problem": "changes every record of variants",
+      "rows": 17
+     }
+    ],
+    "errors": []
+   },
+   "seconds": 4.1,
+   "jev": {
+    "calls": 10,
+    "input_tokens": 31013,
+    "output_tokens": 4168,
+    "seconds": 2.6
+   }
+  }
+ }
+}

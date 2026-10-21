@@ -20,3 +20,7 @@ wheels/
 build/
 dist/
 *.egg-info/
+
+# CorPipe: its own environment, and the files coref.py writes for it
+.venv-corpipe/
+src/pipeline/prompt/coref_work/

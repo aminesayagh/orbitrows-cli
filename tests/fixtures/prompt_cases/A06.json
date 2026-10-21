@@ -1,0 +1,1387 @@
+{
+ "id": "A06",
+ "group": "end to end",
+ "prompt": "Lower the price of the Volt variants heavier than 60 g by 60%, but never below their cost, then show the names and prices of those, cheapest first.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "UPDATE variants SET price_mad = MAX(price_mad * 0.4, COALESCE(cost_mad, price_mad * 0.4)) WHERE weight_g > 60 AND product_id IN (SELECT product_id FROM products WHERE brand IN ('Volt', 'volt'))",
+    "SELECT p.name, v.price_mad FROM variants v JOIN products p USING (product_id) WHERE v.variant_id IN (107, 108) ORDER BY v.price_mad"
+   ],
+   "ordered": [
+    true
+   ]
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Lower the price of the Volt variants heavier than 60 g by 60%, but never below their cost, then show the names and prices of those, cheapest first.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Lower the price of the Volt variants heavier than 60 g by 60%, but never below their cost",
+      "start": 0,
+      "end": 89,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     },
+     {
+      "id": "r2",
+      "text": "show the names and prices of those, cheapest first.",
+      "start": 96,
+      "end": 147,
+      "marker": null,
+      "joined_by": "then",
+      "waits_for": "r1",
+      "input": "rows"
+     }
+    ],
+    "order": [
+     "r1",
+     "r2"
+    ],
+    "links": "r1 THEN r2",
+    "references": [
+     {
+      "start": 79,
+      "end": 84,
+      "text": "their",
+      "score": 0.86,
+      "kind": "existing",
+      "target": "the Volt variants heavier than 60 g",
+      "request": "r1",
+      "target_request": "r1"
+     },
+     {
+      "start": 125,
+      "end": 130,
+      "text": "those",
+      "score": 1.0,
+      "kind": "existing",
+      "target": "the Volt variants heavier than 60 g",
+      "request": "r2",
+      "target_request": "r1"
+     }
+    ],
+    "warnings": [],
+    "raw_references": [
+     {
+      "start": 79,
+      "end": 84,
+      "text": "their",
+      "score": 0.86,
+      "kind": "existing",
+      "target": "the Volt variants heavier than 60 g",
+      "target_start": 19,
+      "target_end": 54
+     },
+     {
+      "start": 125,
+      "end": 130,
+      "text": "those",
+      "score": 1.0,
+      "kind": "existing",
+      "target": "the Volt variants heavier than 60 g",
+      "target_start": 19,
+      "target_end": 54
+     }
+    ],
+    "jev": {
+     "coref": {
+      "m0_role": [
+       "not_reference",
+       {
+        "reference": 0.03,
+        "not_reference": 0.97,
+        "unsure": 0.0
+       }
+      ],
+      "m0_target": [
+       "m2",
+       {
+        "m1": 0.1,
+        "m2": 0.67,
+        "created": 0.01,
+        "ambiguous": 0.22
+       }
+      ],
+      "m1_role": [
+       "reference",
+       {
+        "reference": 0.94,
+        "not_reference": 0.06,
+        "unsure": 0.0
+       }
+      ],
+      "m1_target": [
+       "m0",
+       {
+        "m0": 0.86,
+        "m2": 0.13,
+        "created": 0.0,
+        "ambiguous": 0.01
+       }
+      ],
+      "m2_role": [
+       "reference",
+       {
+        "reference": 0.97,
+        "not_reference": 0.03,
+        "unsure": 0.0
+       }
+      ],
+      "m2_target": [
+       "m0",
+       {
+        "m0": 1.0,
+        "m1": 0.0,
+        "created": 0.0,
+        "ambiguous": 0.0
+       }
+      ]
+     },
+     "cuts": [
+      [
+       91,
+       95
+      ]
+     ],
+     "cut_answers": [
+      {
+       "choice": "new_request",
+       "probabilities": {
+        "new_request": 0.98,
+        "continuation": 0.02,
+        "context_transition": 0.0
+       }
+      }
+     ],
+     "link_answers": [
+      {
+       "choice": "none",
+       "probabilities": {
+        "r2": 0.0,
+        "none": 1.0
+       }
+      },
+      {
+       "choice": "r1",
+       "probabilities": {
+        "r1": 1.0,
+        "none": 0.0
+       }
+      }
+     ],
+     "inputs": {
+      "r1": [
+       "rows",
+       {
+        "rows": 0.59,
+        "structure": 0.01,
+        "table_state": 0.4
+       }
+      ],
+      "r2": [
+       "rows",
+       {
+        "rows": 0.98,
+        "structure": 0.0,
+        "table_state": 0.02
+       }
+      ]
+     }
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "update",
+      "reports_back": false
+     },
+     "r2": {
+      "statement": "select",
+      "reports_back": true,
+      "input": "affected_rows"
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "update",
+      {
+       "select": 0.0,
+       "insert": 0.0,
+       "update": 1.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r2_statement": [
+      "select",
+      {
+       "select": 1.0,
+       "insert": 0.0,
+       "update": 0.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.07,
+     "r1_several": 0.14,
+     "r2_back": 0.98,
+     "r2_several": 0.18
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "l1",
+      "request": "r1",
+      "text": "Volt",
+      "start": 23,
+      "end": 27,
+      "linked": [
+       {
+        "column": "t_products.c_brand",
+        "match": "exact",
+        "stored": [
+         "Volt",
+         "volt"
+        ],
+        "searched": "Volt"
+       }
+      ],
+      "role": "lookup",
+      "column": "t_products.c_brand",
+      "match": "exact",
+      "stored": [
+       "Volt",
+       "volt"
+      ],
+      "searched": "Volt"
+     },
+     {
+      "id": "v2",
+      "request": "r1",
+      "text": "60 g",
+      "start": 50,
+      "end": 54,
+      "parts": [
+       "g"
+      ],
+      "role": "number"
+     },
+     {
+      "id": "v3",
+      "request": "r1",
+      "text": "cost",
+      "start": 85,
+      "end": 89,
+      "role": "not_value"
+     }
+    ],
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "l1_role": [
+       "lookup",
+       {
+        "lookup": 1.0,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.0
+       }
+      ],
+      "l1_named": [
+       "t_products.c_brand",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.9400000000000001,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.06
+       }
+      ],
+      "v2_role": [
+       "number",
+       {
+        "lookup": 0.11,
+        "written": 0.0,
+        "number": 0.88,
+        "not_value": 0.01
+       }
+      ],
+      "v2_named": [
+       "t_variants.c_weight_g",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.9,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.1
+       }
+      ],
+      "v3_role": [
+       "not_value",
+       {
+        "lookup": 0.04,
+        "written": 0.02,
+        "number": 0.05,
+        "not_value": 0.89
+       }
+      ],
+      "v3_named": [
+       "t_variants.c_cost_mad",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.88,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.12
+       }
+      ],
+      "l1_written": 0.13,
+      "l1_own": 0.49,
+      "v2_written": 0.41,
+      "v2_own": 0.09,
+      "v3_written": 0.59,
+      "v3_own": 0.14
+     },
+     "candidates": {
+      "l1": [
+       {
+        "column": "t_products.c_brand",
+        "match": "exact",
+        "stored": [
+         "Volt",
+         "volt"
+        ],
+        "searched": "Volt"
+       }
+      ]
+     },
+     "call_2": {}
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "target": {
+       "type": "database_table",
+       "reference": "t_variants"
+      },
+      "reads": [
+       "t_products"
+      ]
+     },
+     "r2": {
+      "from": {
+       "type": "request_result",
+       "request_id": "r1"
+      },
+      "reads": [
+       "t_products"
+      ]
+     }
+    },
+    "warnings": [
+     {
+      "request": "r2",
+      "problem": "uses table uncertain",
+      "table": "t_products",
+      "probability": 0.58
+     }
+    ],
+    "jev": {
+     "r1_main": [
+      "t_variants",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 0.0,
+       "t_variants": 1.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r2_main": [
+      "t_variants",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 0.02,
+       "t_variants": 0.98,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r1_uses_t_categories": 0.11,
+     "r1_uses_t_suppliers": 0.09,
+     "r1_uses_t_products": 0.94,
+     "r1_uses_t_variants": 0.98,
+     "r1_uses_t_inventory": 0.1,
+     "r1_uses_t_sales": 0.08,
+     "r2_same": 0.95,
+     "r2_uses_t_categories": 0.11,
+     "r2_uses_t_suppliers": 0.1,
+     "r2_uses_t_products": 0.58,
+     "r2_uses_t_variants": 0.96,
+     "r2_uses_t_inventory": 0.09,
+     "r2_uses_t_sales": 0.1
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "assignments": [
+       {
+        "column": "t_variants.c_price_mad",
+        "value": {
+         "type": "function",
+         "name": "greatest",
+         "arguments": [
+          {
+           "type": "arithmetic",
+           "operator": "*",
+           "left": {
+            "type": "column",
+            "source": "t_variants",
+            "reference": "c_price_mad"
+           },
+           "right": {
+            "type": "literal",
+            "value": 0.4
+           }
+          },
+          {
+           "type": "function",
+           "name": "coalesce",
+           "arguments": [
+            {
+             "type": "column",
+             "source": "t_variants",
+             "reference": "c_cost_mad"
+            },
+            {
+             "type": "arithmetic",
+             "operator": "*",
+             "left": {
+              "type": "column",
+              "source": "t_variants",
+              "reference": "c_price_mad"
+             },
+             "right": {
+              "type": "literal",
+              "value": 0.4
+             }
+            }
+           ]
+          }
+         ]
+        },
+        "from": "formula"
+       }
+      ]
+     },
+     "r2": {
+      "outputs": [
+       {
+        "column": "t_variants.c_price_mad",
+        "aggregate": "value",
+        "expression": {
+         "type": "column",
+         "source": "t_variants",
+         "reference": "c_price_mad"
+        }
+       },
+       {
+        "column": "t_products.c_name",
+        "aggregate": "value",
+        "expression": {
+         "type": "column",
+         "source": "t_products",
+         "reference": "c_name"
+        }
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "r1_changes_t_variants.c_variant_id": 0.05,
+      "r1_changes_t_variants.c_product_id": 0.05,
+      "r1_changes_t_variants.c_sku": 0.04,
+      "r1_changes_t_variants.c_color": 0.03,
+      "r1_changes_t_variants.c_size": 0.03,
+      "r1_changes_t_variants.c_price_mad": 0.98,
+      "r1_changes_t_variants.c_cost_mad": 0.06,
+      "r1_changes_t_variants.c_weight_g": 0.04,
+      "r1_changes_t_variants.c_barcode": 0.03,
+      "r2_whole": 0.08,
+      "r2_counts": 0.05,
+      "r2_shows_t_variants.c_variant_id": 0.13,
+      "r2_shows_t_variants.c_sku": 0.11,
+      "r2_shows_t_variants.c_color": 0.1,
+      "r2_shows_t_variants.c_size": 0.12,
+      "r2_shows_t_variants.c_price_mad": 0.96,
+      "r2_shows_t_variants.c_cost_mad": 0.14,
+      "r2_shows_t_variants.c_weight_g": 0.14,
+      "r2_shows_t_variants.c_barcode": 0.07,
+      "r2_shows_t_products.c_name": 0.91,
+      "r2_shows_t_products.c_brand": 0.31,
+      "r2_shows_t_products.c_status": 0.12,
+      "r2_shows_t_products.c_description": 0.17,
+      "r2_shows_t_products.c_created_at": 0.12,
+      "r2_shows_t_suppliers.c_name": 0.1,
+      "r2_shows_t_suppliers.c_country": 0.15,
+      "r2_shows_t_suppliers.c_contact_email": 0.07,
+      "r2_shows_t_suppliers.c_lead_days": 0.09,
+      "r2_shows_t_categories.c_name": 0.14
+     },
+     "call_2": {
+      "r2_t_variants.c_price_mad_aggregate": [
+       "value",
+       {
+        "value": 1.0,
+        "count": 0.0,
+        "count_distinct": 0.0,
+        "sum": 0.0,
+        "avg": 0.0,
+        "min": 0.0,
+        "max": 0.0
+       }
+      ],
+      "r2_t_products.c_name_aggregate": [
+       "value",
+       {
+        "value": 1.0,
+        "count": 0.0,
+        "count_distinct": 0.0,
+        "sum": 0.0,
+        "avg": 0.0,
+        "min": 0.0,
+        "max": 0.0
+       }
+      ]
+     }
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "all_rows": false,
+      "columns": [
+       "t_variants.c_weight_g",
+       "t_products.c_brand"
+      ],
+      "predicates": [
+       {
+        "column": "t_variants.c_weight_g",
+        "operator": ">",
+        "negated": false,
+        "condition": {
+         "type": "comparison",
+         "operator": ">",
+         "left": {
+          "type": "column",
+          "source": "t_variants",
+          "reference": "c_weight_g"
+         },
+         "right": {
+          "type": "literal",
+          "value": 60.0
+         }
+        },
+        "rows": 14
+       },
+       {
+        "column": "t_products.c_brand",
+        "operator": "=",
+        "negated": false,
+        "condition": {
+         "type": "membership",
+         "expression": {
+          "type": "column",
+          "source": "t_products",
+          "reference": "c_brand"
+         },
+         "operator": "in",
+         "values": [
+          {
+           "type": "literal",
+           "value": "Volt"
+          },
+          {
+           "type": "literal",
+           "value": "volt"
+          }
+         ]
+        },
+        "rows": 3
+       }
+      ],
+      "dropped": [
+       {
+        "column": "t_products.c_name",
+        "why": "contradicts SQL: step 3 found the request's values elsewhere"
+       }
+      ]
+     },
+     "r2": {
+      "all_rows": false,
+      "columns": [],
+      "rows_from": "r1",
+      "sorted": true,
+      "limited": false,
+      "grouped": false
+     }
+    },
+    "warnings": [],
+    "parameters": {
+     "r1": [
+      {
+       "text": "60 g",
+       "start": 50,
+       "end": 54,
+       "value": 60.0,
+       "unit": {
+        "kind": "physical_unit",
+        "unit": "g"
+       }
+      },
+      {
+       "text": "60%",
+       "start": 58,
+       "end": 61,
+       "value": 60.0,
+       "unit": {
+        "kind": "percentage",
+        "unit": "%"
+       }
+      }
+     ],
+     "r2": []
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.04,
+      "r1_chooses_t_variants.c_variant_id": 0.12,
+      "r1_chooses_t_variants.c_sku": 0.08,
+      "r1_chooses_t_variants.c_color": 0.09,
+      "r1_chooses_t_variants.c_size": 0.09,
+      "r1_chooses_t_variants.c_price_mad": 0.11,
+      "r1_chooses_t_variants.c_cost_mad": 0.26,
+      "r1_chooses_t_variants.c_weight_g": 0.97,
+      "r1_chooses_t_variants.c_barcode": 0.07,
+      "r1_chooses_t_products.c_name": 0.62,
+      "r1_chooses_t_products.c_brand": 0.95,
+      "r1_chooses_t_products.c_status": 0.16,
+      "r1_chooses_t_products.c_description": 0.09,
+      "r1_chooses_t_products.c_created_at": 0.07,
+      "r2_all": 0.11,
+      "r2_chooses_t_variants.c_variant_id": 0.12,
+      "r2_chooses_t_variants.c_sku": 0.08,
+      "r2_chooses_t_variants.c_color": 0.09,
+      "r2_chooses_t_variants.c_size": 0.08,
+      "r2_chooses_t_variants.c_price_mad": 0.09,
+      "r2_chooses_t_variants.c_cost_mad": 0.09,
+      "r2_chooses_t_variants.c_weight_g": 0.15,
+      "r2_chooses_t_variants.c_barcode": 0.08,
+      "r2_chooses_t_products.c_name": 0.09,
+      "r2_chooses_t_products.c_brand": 0.11,
+      "r2_chooses_t_products.c_status": 0.1,
+      "r2_chooses_t_products.c_description": 0.07,
+      "r2_chooses_t_products.c_created_at": 0.07,
+      "r2_sorted": 0.98,
+      "r2_limited": 0.06,
+      "r2_grouped": 0.03
+     },
+     "stage_2": {
+      "r1|t_variants.c_weight_g|op": [
+       ">",
+       {
+        "=": 0.0,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 1.0,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.0
+       }
+      ],
+      "r1|t_variants.c_weight_g|value": [
+       "n0",
+       {
+        "n0": 0.96,
+        "c:t_variants.c_variant_id": 0.0,
+        "c:t_variants.c_product_id": 0.0,
+        "none": 0.04
+       }
+      ],
+      "r1|t_variants.c_weight_g|upper": [
+       "none",
+       {
+        "n0": 0.06,
+        "c:t_variants.c_variant_id": 0.0,
+        "c:t_variants.c_product_id": 0.0,
+        "none": 0.94
+       }
+      ],
+      "r1|t_products.c_name|op": [
+       "=",
+       {
+        "=": 0.81,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 0.07,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.0,
+        "contains": 0.08,
+        "starts_with": 0.02,
+        "ends_with": 0.0,
+        "is_empty": 0.01,
+        "is_not_empty": 0.0
+       }
+      ],
+      "r1|t_products.c_name|value": [
+       "x0",
+       {
+        "x0": 0.57,
+        "x1": 0.01,
+        "x2": 0.0,
+        "c:t_products.c_brand": 0.3,
+        "c:t_products.c_status": 0.0,
+        "c:t_products.c_description": 0.0,
+        "c:t_products.c_created_at": 0.0,
+        "none": 0.12
+       }
+      ],
+      "r1|t_products.c_name|upper": [
+       "none",
+       {
+        "x0": 0.13,
+        "x1": 0.0,
+        "x2": 0.0,
+        "c:t_products.c_brand": 0.02,
+        "c:t_products.c_status": 0.0,
+        "c:t_products.c_description": 0.0,
+        "c:t_products.c_created_at": 0.0,
+        "none": 0.85
+       }
+      ],
+      "r1|t_products.c_brand|op": [
+       "=",
+       {
+        "=": 0.99,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 0.01,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.0,
+        "contains": 0.0,
+        "starts_with": 0.0,
+        "ends_with": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.0
+       }
+      ],
+      "r1|t_variants.c_weight_g|not": 0.1,
+      "r1|t_products.c_name|not": 0.09,
+      "r1|t_products.c_brand|not": 0.06
+     }
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "where": {
+       "type": "all",
+       "children": [
+        {
+         "type": "comparison",
+         "operator": ">",
+         "left": {
+          "type": "column",
+          "source": "t_variants",
+          "reference": "c_weight_g"
+         },
+         "right": {
+          "type": "literal",
+          "value": 60.0
+         }
+        },
+        {
+         "type": "membership",
+         "expression": {
+          "type": "column",
+          "source": "t_products",
+          "reference": "c_brand"
+         },
+         "operator": "in",
+         "values": [
+          {
+           "type": "literal",
+           "value": "Volt"
+          },
+          {
+           "type": "literal",
+           "value": "volt"
+          }
+         ]
+        }
+       ]
+      }
+     },
+     "r2": {
+      "rows_from": "r1",
+      "where": null,
+      "order_by": [
+       {
+        "expression": {
+         "type": "column",
+         "source": "t_variants",
+         "reference": "c_price_mad"
+        },
+        "direction": "asc"
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1|tree": [
+      "all",
+      {
+       "all": 1.0,
+       "any": 0.0
+      }
+     ],
+     "r2|sort": [
+      "t_variants.c_price_mad",
+      {
+       "t_variants.c_variant_id": 0.0,
+       "t_variants.c_product_id": 0.0,
+       "t_variants.c_sku": 0.0,
+       "t_variants.c_color": 0.0,
+       "t_variants.c_size": 0.0,
+       "t_variants.c_price_mad": 1.0,
+       "t_variants.c_cost_mad": 0.0,
+       "t_variants.c_weight_g": 0.0,
+       "t_variants.c_barcode": 0.0,
+       "t_products.c_product_id": 0.0,
+       "t_products.c_name": 0.0,
+       "t_products.c_brand": 0.0,
+       "t_products.c_category_id": 0.0,
+       "t_products.c_supplier_id": 0.0,
+       "t_products.c_status": 0.0,
+       "t_products.c_description": 0.0,
+       "t_products.c_created_at": 0.0
+      }
+     ],
+     "r2|direction": [
+      "asc",
+      {
+       "asc": 1.0,
+       "desc": 0.0
+      }
+     ]
+    }
+   },
+   "formula": {
+    "requests": {
+     "r1.t_variants.c_price_mad": {
+      "records": [
+       {
+        "role": "calculation",
+        "function": "*",
+        "left": {
+         "column": "t_variants.c_price_mad"
+        },
+        "right": {
+         "value": 0.4,
+         "source": "60%"
+        },
+        "text": "Lower the price of the Volt variants heavier than 60 g by 60%",
+        "start": 0,
+        "end": 61,
+        "rule_id": "jev.decrease",
+        "occurrences": [
+         "n1"
+        ],
+        "status": "accepted"
+       },
+       {
+        "role": "where",
+        "function": null,
+        "left": {
+         "pred": "p2"
+        },
+        "right": null,
+        "text": "Volt",
+        "start": 23,
+        "end": 27,
+        "rule_id": "jev.where",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "where",
+        "function": null,
+        "left": {
+         "pred": "p1"
+        },
+        "right": null,
+        "text": "60 g",
+        "start": 50,
+        "end": 54,
+        "rule_id": "jev.where",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "guard",
+        "function": "clamp_min",
+        "left": {
+         "unresolved": true
+        },
+        "right": {
+         "column": "t_variants.c_cost_mad"
+        },
+        "text": "cost",
+        "start": 85,
+        "end": 89,
+        "rule_id": "jev.column_lower_limit",
+        "occurrences": [],
+        "status": "accepted"
+       }
+      ],
+      "pass1_ambiguities": [],
+      "map": {
+       "r1.left": "current",
+       "r4.left": "r1"
+      },
+      "status": "ok",
+      "questions": [],
+      "flagged": [],
+      "kind": "number"
+     }
+    },
+    "warnings": []
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "update",
+       "target": {
+        "type": "database_table",
+        "reference": "t_variants",
+        "alias": "v"
+       },
+       "scope": {
+        "type": "filtered",
+        "where": {
+         "type": "all",
+         "children": [
+          {
+           "type": "comparison",
+           "operator": ">",
+           "left": {
+            "type": "column",
+            "source": "v",
+            "reference": "c_weight_g"
+           },
+           "right": {
+            "type": "literal",
+            "value": 60.0
+           }
+          },
+          {
+           "type": "membership",
+           "operator": "in",
+           "expression": {
+            "type": "column",
+            "source": "v",
+            "reference": "c_product_id"
+           },
+           "query": {
+            "id": "q1",
+            "type": "select",
+            "from": {
+             "type": "database_table",
+             "reference": "t_products",
+             "alias": "p"
+            },
+            "columns": [
+             {
+              "expression": {
+               "type": "column",
+               "source": "p",
+               "reference": "c_product_id"
+              },
+              "alias": "c0"
+             }
+            ],
+            "scope": {
+             "type": "filtered",
+             "where": {
+              "type": "membership",
+              "expression": {
+               "type": "column",
+               "source": "p",
+               "reference": "c_brand"
+              },
+              "operator": "in",
+              "values": [
+               {
+                "type": "literal",
+                "value": "Volt"
+               },
+               {
+                "type": "literal",
+                "value": "volt"
+               }
+              ]
+             }
+            }
+           }
+          }
+         ]
+        }
+       },
+       "assignments": [
+        {
+         "column": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_price_mad"
+         },
+         "value": {
+          "type": "function",
+          "name": "greatest",
+          "arguments": [
+           {
+            "type": "arithmetic",
+            "operator": "*",
+            "left": {
+             "type": "column",
+             "source": "v",
+             "reference": "c_price_mad"
+            },
+            "right": {
+             "type": "literal",
+             "value": 0.4
+            }
+           },
+           {
+            "type": "function",
+            "name": "coalesce",
+            "arguments": [
+             {
+              "type": "column",
+              "source": "v",
+              "reference": "c_cost_mad"
+             },
+             {
+              "type": "arithmetic",
+              "operator": "*",
+              "left": {
+               "type": "column",
+               "source": "v",
+               "reference": "c_price_mad"
+              },
+              "right": {
+               "type": "literal",
+               "value": 0.4
+              }
+             }
+            ]
+           }
+          ]
+         }
+        }
+       ]
+      },
+      "returning": "variant_id",
+      "sql": [
+       "UPDATE \"variants\" AS \"v\" SET \"price_mad\" = MAX((\"v\".\"price_mad\" * 0.4), COALESCE(\"v\".\"cost_mad\", (\"v\".\"price_mad\" * 0.4))) WHERE (\"v\".\"weight_g\" > 60.0) AND (\"v\".\"product_id\" IN (SELECT \"p\".\"product_id\" AS \"c0\" FROM \"products\" AS \"p\" WHERE \"p\".\"brand\" IN ('Volt', 'volt')))"
+      ],
+      "rows": 2
+     },
+     {
+      "request": "r2",
+      "ast": {
+       "id": "r2",
+       "type": "select",
+       "from": {
+        "type": "database_table",
+        "reference": "t_variants",
+        "alias": "v"
+       },
+       "scope": {
+        "type": "filtered",
+        "where": {
+         "type": "membership",
+         "operator": "in",
+         "expression": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_variant_id"
+         },
+         "values": [
+          {
+           "type": "literal",
+           "value": 107
+          },
+          {
+           "type": "literal",
+           "value": 108
+          }
+         ]
+        }
+       },
+       "columns": [
+        {
+         "expression": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_price_mad"
+         },
+         "alias": "price_mad"
+        },
+        {
+         "expression": {
+          "type": "subquery",
+          "query": {
+           "id": "q1",
+           "type": "select",
+           "from": {
+            "type": "database_table",
+            "reference": "t_products",
+            "alias": "p"
+           },
+           "columns": [
+            {
+             "expression": {
+              "type": "column",
+              "source": "p",
+              "reference": "c_name"
+             },
+             "alias": "c0"
+            }
+           ],
+           "scope": {
+            "type": "filtered",
+            "where": {
+             "type": "comparison",
+             "operator": "=",
+             "left": {
+              "type": "column",
+              "source": "p",
+              "reference": "c_product_id"
+             },
+             "right": {
+              "type": "column",
+              "source": "v",
+              "reference": "c_product_id"
+             }
+            }
+           },
+           "limit": 1
+          }
+         },
+         "alias": "name"
+        }
+       ],
+       "order_by": [
+        {
+         "expression": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_price_mad"
+         },
+         "direction": "asc"
+        }
+       ]
+      },
+      "rows_from": "r1",
+      "sql": [
+       "SELECT \"v\".\"price_mad\" AS \"price_mad\", (SELECT \"p\".\"name\" AS \"c0\" FROM \"products\" AS \"p\" WHERE \"p\".\"product_id\" = \"v\".\"product_id\" LIMIT 1) AS \"name\" FROM \"variants\" AS \"v\" WHERE \"v\".\"variant_id\" IN (107, 108) ORDER BY \"v\".\"price_mad\" ASC NULLS LAST"
+      ],
+      "returns": [
+       [
+        48,
+        "USB-C Cable"
+       ],
+       [
+        90,
+        "Wireless Mouse"
+       ]
+      ],
+      "rows": 2
+     }
+    ],
+    "questions": [
+     {
+      "step": "sources",
+      "request": "r2",
+      "problem": "uses table uncertain",
+      "table": "t_products",
+      "probability": 0.58
+     }
+    ],
+    "errors": []
+   },
+   "seconds": 5.9,
+   "jev": {
+    "calls": 13,
+    "input_tokens": 51495,
+    "output_tokens": 6240,
+    "seconds": 3.6
+   }
+  }
+ }
+}

@@ -1,0 +1,1146 @@
+{
+ "id": "A32",
+ "group": "numeric changes, operations steps: rounding then a computed limit",
+ "prompt": "Raise the price of the Orbit variants by 15%, round it to the nearest 5, and never go above twice their cost.",
+ "expected": {
+  "assembly": {
+   "sql": [
+    "UPDATE variants SET price_mad = MIN(ROUND(price_mad * 1.15 / 5.0) * 5, COALESCE(cost_mad * 2, ROUND(price_mad * 1.15 / 5.0) * 5)) WHERE product_id IN (SELECT product_id FROM products WHERE brand = 'Orbit')"
+   ],
+   "ordered": []
+  }
+ },
+ "result": {
+  "pipeline": {
+   "prompt": "Raise the price of the Orbit variants by 15%, round it to the nearest 5, and never go above twice their cost.",
+   "requests": {
+    "requests": [
+     {
+      "id": "r1",
+      "text": "Raise the price of the Orbit variants by 15%, round it to the nearest 5, and never go above twice their cost.",
+      "start": 0,
+      "end": 109,
+      "marker": null,
+      "joined_by": null,
+      "waits_for": null,
+      "input": "snapshot"
+     }
+    ],
+    "order": [
+     "r1"
+    ],
+    "links": "r1",
+    "references": [
+     {
+      "start": 98,
+      "end": 103,
+      "text": "their",
+      "score": 0.98,
+      "kind": "existing",
+      "target": "the Orbit variants",
+      "request": "r1",
+      "target_request": "r1"
+     },
+     {
+      "start": 98,
+      "end": 108,
+      "text": "their cost",
+      "score": 0.97,
+      "kind": "existing",
+      "target": "the Orbit variants",
+      "request": "r1",
+      "target_request": "r1"
+     }
+    ],
+    "warnings": [
+     {
+      "problem": "unresolved reference",
+      "text": "it",
+      "request": "r1",
+      "probability": 0.73
+     }
+    ],
+    "raw_references": [
+     {
+      "start": 52,
+      "end": 54,
+      "text": "it",
+      "score": 0.73,
+      "kind": "ambiguous",
+      "target": ""
+     },
+     {
+      "start": 98,
+      "end": 103,
+      "text": "their",
+      "score": 0.98,
+      "kind": "existing",
+      "target": "the Orbit variants",
+      "target_start": 19,
+      "target_end": 37
+     },
+     {
+      "start": 98,
+      "end": 108,
+      "text": "their cost",
+      "score": 0.97,
+      "kind": "existing",
+      "target": "the Orbit variants",
+      "target_start": 19,
+      "target_end": 37
+     }
+    ],
+    "jev": {
+     "coref": {
+      "m0_role": [
+       "not_reference",
+       {
+        "reference": 0.04,
+        "not_reference": 0.96,
+        "unsure": 0.0
+       }
+      ],
+      "m0_target": [
+       "m1",
+       {
+        "m1": 0.82,
+        "m2": 0.0,
+        "m3": 0.03,
+        "m4": 0.04,
+        "created": 0.0,
+        "ambiguous": 0.11
+       }
+      ],
+      "m1_role": [
+       "not_reference",
+       {
+        "reference": 0.02,
+        "not_reference": 0.98,
+        "unsure": 0.0
+       }
+      ],
+      "m1_target": [
+       "ambiguous",
+       {
+        "m2": 0.01,
+        "m3": 0.07,
+        "m4": 0.05,
+        "created": 0.01,
+        "ambiguous": 0.86
+       }
+      ],
+      "m2_role": [
+       "not_reference",
+       {
+        "reference": 0.24,
+        "not_reference": 0.73,
+        "unsure": 0.03
+       }
+      ],
+      "m2_target": [
+       "m0",
+       {
+        "m0": 0.4,
+        "m1": 0.24,
+        "m3": 0.01,
+        "m4": 0.02,
+        "created": 0.01,
+        "ambiguous": 0.32
+       }
+      ],
+      "m3_role": [
+       "reference",
+       {
+        "reference": 0.88,
+        "not_reference": 0.11,
+        "unsure": 0.01
+       }
+      ],
+      "m3_target": [
+       "m1",
+       {
+        "m0": 0.01,
+        "m1": 0.98,
+        "m2": 0.0,
+        "created": 0.0,
+        "ambiguous": 0.01
+       }
+      ],
+      "m4_role": [
+       "reference",
+       {
+        "reference": 0.86,
+        "not_reference": 0.13,
+        "unsure": 0.01
+       }
+      ],
+      "m4_target": [
+       "m1",
+       {
+        "m0": 0.02,
+        "m1": 0.97,
+        "m2": 0.0,
+        "m3": 0.0,
+        "created": 0.0,
+        "ambiguous": 0.01
+       }
+      ]
+     },
+     "cuts": [
+      [
+       44,
+       45
+      ],
+      [
+       73,
+       76
+      ]
+     ],
+     "cut_answers": [
+      {
+       "choice": "continuation",
+       "probabilities": {
+        "new_request": 0.22,
+        "continuation": 0.78,
+        "context_transition": 0.0
+       }
+      },
+      {
+       "choice": "continuation",
+       "probabilities": {
+        "new_request": 0.03,
+        "continuation": 0.97,
+        "context_transition": 0.0
+       }
+      }
+     ],
+     "link_answers": [],
+     "inputs": {}
+    }
+   },
+   "operation": {
+    "requests": {
+     "r1": {
+      "statement": "update",
+      "reports_back": false
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_statement": [
+      "update",
+      {
+       "select": 0.0,
+       "insert": 0.0,
+       "update": 1.0,
+       "delete": 0.0,
+       "alter_table": 0.0,
+       "create_table": 0.0,
+       "drop_table": 0.0,
+       "other_object": 0.0,
+       "application": 0.0
+      }
+     ],
+     "r1_back": 0.09,
+     "r1_several": 0.2
+    }
+   },
+   "values": {
+    "values": [
+     {
+      "id": "v1",
+      "request": "r1",
+      "text": "price",
+      "start": 10,
+      "end": 15,
+      "role": "not_value",
+      "flagged": true
+     },
+     {
+      "id": "l1",
+      "request": "r1",
+      "text": "Orbit",
+      "start": 23,
+      "end": 28,
+      "linked": [
+       {
+        "column": "t_products.c_brand",
+        "match": "exact",
+        "stored": [
+         "Orbit"
+        ],
+        "searched": "Orbit"
+       },
+       {
+        "column": "t_products.c_name",
+        "match": "contains",
+        "stored": [
+         "Orbit Hoodie",
+         "Orbit Tee",
+         "Orbit Tee Kids"
+        ],
+        "searched": "Orbit"
+       }
+      ],
+      "role": "lookup",
+      "column": "t_products.c_brand",
+      "match": "exact",
+      "stored": [
+       "Orbit"
+      ],
+      "searched": "Orbit"
+     },
+     {
+      "id": "v3",
+      "request": "r1",
+      "text": "cost",
+      "start": 104,
+      "end": 108,
+      "role": "not_value"
+     }
+    ],
+    "warnings": [
+     {
+      "value": "v1",
+      "problem": "role uncertain",
+      "answer": "not_value",
+      "probability": 0.58
+     }
+    ],
+    "jev": {
+     "call_1": {
+      "v1_role": [
+       "not_value",
+       {
+        "lookup": 0.03,
+        "written": 0.35,
+        "number": 0.04,
+        "not_value": 0.58
+       }
+      ],
+      "v1_named": [
+       "t_variants.c_price_mad",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.92,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.08
+       }
+      ],
+      "l1_role": [
+       "lookup",
+       {
+        "lookup": 1.0,
+        "written": 0.0,
+        "number": 0.0,
+        "not_value": 0.0
+       }
+      ],
+      "l1_named": [
+       "t_products.c_brand",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.04,
+        "t_products.c_brand": 0.89,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.0,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.06999999999999999
+       }
+      ],
+      "v3_role": [
+       "not_value",
+       {
+        "lookup": 0.06,
+        "written": 0.01,
+        "number": 0.23,
+        "not_value": 0.7
+       }
+      ],
+      "v3_named": [
+       "t_variants.c_cost_mad",
+       {
+        "t_categories.c_category_id": 0.0,
+        "t_categories.c_name": 0.0,
+        "t_categories.c_parent_id": 0.0,
+        "t_categories": 0.0,
+        "t_suppliers.c_supplier_id": 0.0,
+        "t_suppliers.c_name": 0.0,
+        "t_suppliers.c_country": 0.0,
+        "t_suppliers.c_contact_email": 0.0,
+        "t_suppliers.c_lead_days": 0.0,
+        "t_suppliers": 0.0,
+        "t_products.c_product_id": 0.0,
+        "t_products.c_name": 0.0,
+        "t_products.c_brand": 0.0,
+        "t_products.c_category_id": 0.0,
+        "t_products.c_supplier_id": 0.0,
+        "t_products.c_status": 0.0,
+        "t_products.c_description": 0.0,
+        "t_products.c_created_at": 0.0,
+        "t_products": 0.0,
+        "t_variants.c_variant_id": 0.0,
+        "t_variants.c_product_id": 0.0,
+        "t_variants.c_sku": 0.0,
+        "t_variants.c_color": 0.0,
+        "t_variants.c_size": 0.0,
+        "t_variants.c_price_mad": 0.0,
+        "t_variants.c_cost_mad": 0.75,
+        "t_variants.c_weight_g": 0.0,
+        "t_variants.c_barcode": 0.0,
+        "t_variants": 0.0,
+        "t_inventory.c_inventory_id": 0.0,
+        "t_inventory.c_variant_id": 0.0,
+        "t_inventory.c_warehouse": 0.0,
+        "t_inventory.c_quantity": 0.0,
+        "t_inventory.c_reserved": 0.0,
+        "t_inventory.c_reorder_point": 0.0,
+        "t_inventory": 0.0,
+        "t_sales.c_sale_id": 0.0,
+        "t_sales.c_order_ref": 0.0,
+        "t_sales.c_variant_id": 0.0,
+        "t_sales.c_sold_on": 0.0,
+        "t_sales.c_quantity": 0.0,
+        "t_sales.c_unit_price_mad": 0.0,
+        "t_sales.c_discount_mad": 0.0,
+        "t_sales.c_status": 0.0,
+        "t_sales": 0.0,
+        "not_said": 0.25
+       }
+      ],
+      "v1_written": 0.32,
+      "v1_own": 0.14,
+      "l1_written": 0.2,
+      "l1_own": 0.35,
+      "v3_written": 0.52,
+      "v3_own": 0.12
+     },
+     "candidates": {
+      "l1": [
+       {
+        "column": "t_products.c_brand",
+        "match": "exact",
+        "stored": [
+         "Orbit"
+        ],
+        "searched": "Orbit"
+       },
+       {
+        "column": "t_products.c_name",
+        "match": "contains",
+        "stored": [
+         "Orbit Hoodie",
+         "Orbit Tee",
+         "Orbit Tee Kids"
+        ],
+        "searched": "Orbit"
+       }
+      ]
+     },
+     "call_2": {
+      "l1_pick": [
+       "t_products.c_brand",
+       {
+        "t_products.c_brand": 0.73,
+        "t_products.c_name": 0.12,
+        "none": 0.01,
+        "text": 0.14
+       }
+      ]
+     }
+    }
+   },
+   "sources": {
+    "requests": {
+     "r1": {
+      "target": {
+       "type": "database_table",
+       "reference": "t_variants"
+      },
+      "reads": [
+       "t_products"
+      ]
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "r1_main": [
+      "t_variants",
+      {
+       "t_categories": 0.0,
+       "t_suppliers": 0.0,
+       "t_products": 0.0,
+       "t_variants": 1.0,
+       "t_inventory": 0.0,
+       "t_sales": 0.0,
+       "unclear": 0.0
+      }
+     ],
+     "r1_uses_t_categories": 0.09,
+     "r1_uses_t_suppliers": 0.08,
+     "r1_uses_t_products": 0.94,
+     "r1_uses_t_variants": 0.97,
+     "r1_uses_t_inventory": 0.08,
+     "r1_uses_t_sales": 0.05
+    }
+   },
+   "parts": {
+    "requests": {
+     "r1": {
+      "assignments": [
+       {
+        "column": "t_variants.c_price_mad",
+        "value": {
+         "type": "function",
+         "name": "least",
+         "arguments": [
+          {
+           "type": "arithmetic",
+           "operator": "*",
+           "left": {
+            "type": "function",
+            "name": "round",
+            "arguments": [
+             {
+              "type": "arithmetic",
+              "operator": "/",
+              "left": {
+               "type": "arithmetic",
+               "operator": "*",
+               "left": {
+                "type": "column",
+                "source": "t_variants",
+                "reference": "c_price_mad"
+               },
+               "right": {
+                "type": "literal",
+                "value": 1.15
+               }
+              },
+              "right": {
+               "type": "literal",
+               "value": 5.0
+              }
+             },
+             {
+              "type": "literal",
+              "value": 0
+             }
+            ]
+           },
+           "right": {
+            "type": "literal",
+            "value": 5
+           }
+          },
+          {
+           "type": "function",
+           "name": "coalesce",
+           "arguments": [
+            {
+             "type": "arithmetic",
+             "operator": "*",
+             "left": {
+              "type": "column",
+              "source": "t_variants",
+              "reference": "c_cost_mad"
+             },
+             "right": {
+              "type": "literal",
+              "value": 2
+             }
+            },
+            {
+             "type": "arithmetic",
+             "operator": "*",
+             "left": {
+              "type": "function",
+              "name": "round",
+              "arguments": [
+               {
+                "type": "arithmetic",
+                "operator": "/",
+                "left": {
+                 "type": "arithmetic",
+                 "operator": "*",
+                 "left": {
+                  "type": "column",
+                  "source": "t_variants",
+                  "reference": "c_price_mad"
+                 },
+                 "right": {
+                  "type": "literal",
+                  "value": 1.15
+                 }
+                },
+                "right": {
+                 "type": "literal",
+                 "value": 5.0
+                }
+               },
+               {
+                "type": "literal",
+                "value": 0
+               }
+              ]
+             },
+             "right": {
+              "type": "literal",
+              "value": 5
+             }
+            }
+           ]
+          }
+         ]
+        },
+        "from": "formula"
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "jev": {
+     "call_1": {
+      "r1_changes_t_variants.c_variant_id": 0.05,
+      "r1_changes_t_variants.c_product_id": 0.05,
+      "r1_changes_t_variants.c_sku": 0.04,
+      "r1_changes_t_variants.c_color": 0.03,
+      "r1_changes_t_variants.c_size": 0.03,
+      "r1_changes_t_variants.c_price_mad": 0.97,
+      "r1_changes_t_variants.c_cost_mad": 0.05,
+      "r1_changes_t_variants.c_weight_g": 0.03,
+      "r1_changes_t_variants.c_barcode": 0.03
+     },
+     "call_2": {}
+    }
+   },
+   "conditions": {
+    "requests": {
+     "r1": {
+      "all_rows": false,
+      "columns": [
+       "t_products.c_brand"
+      ],
+      "predicates": [
+       {
+        "column": "t_products.c_brand",
+        "operator": "=",
+        "negated": false,
+        "condition": {
+         "type": "comparison",
+         "operator": "=",
+         "left": {
+          "type": "column",
+          "source": "t_products",
+          "reference": "c_brand"
+         },
+         "right": {
+          "type": "literal",
+          "value": "Orbit"
+         }
+        },
+        "rows": 4
+       }
+      ]
+     }
+    },
+    "warnings": [],
+    "parameters": {
+     "r1": [
+      {
+       "text": "15%",
+       "start": 41,
+       "end": 44,
+       "value": 15.0,
+       "unit": {
+        "kind": "percentage",
+        "unit": "%"
+       }
+      },
+      {
+       "text": "5",
+       "start": 70,
+       "end": 71,
+       "value": 5.0,
+       "unit": null
+      },
+      {
+       "text": "twice",
+       "start": 92,
+       "end": 97,
+       "value": null,
+       "unit": null,
+       "words": true
+      }
+     ]
+    },
+    "jev": {
+     "stage_1": {
+      "r1_all": 0.06,
+      "r1_chooses_t_variants.c_variant_id": 0.11,
+      "r1_chooses_t_variants.c_sku": 0.09,
+      "r1_chooses_t_variants.c_color": 0.07,
+      "r1_chooses_t_variants.c_size": 0.08,
+      "r1_chooses_t_variants.c_price_mad": 0.11,
+      "r1_chooses_t_variants.c_cost_mad": 0.15,
+      "r1_chooses_t_variants.c_weight_g": 0.06,
+      "r1_chooses_t_variants.c_barcode": 0.07,
+      "r1_chooses_t_products.c_name": 0.29,
+      "r1_chooses_t_products.c_brand": 0.96,
+      "r1_chooses_t_products.c_status": 0.13,
+      "r1_chooses_t_products.c_description": 0.08,
+      "r1_chooses_t_products.c_created_at": 0.08
+     },
+     "stage_2": {
+      "r1|t_products.c_brand|op": [
+       "=",
+       {
+        "=": 1.0,
+        "<": 0.0,
+        "<=": 0.0,
+        ">": 0.0,
+        ">=": 0.0,
+        "between": 0.0,
+        "in": 0.0,
+        "contains": 0.0,
+        "starts_with": 0.0,
+        "ends_with": 0.0,
+        "is_empty": 0.0,
+        "is_not_empty": 0.0
+       }
+      ],
+      "r1|t_products.c_brand|not": 0.07
+     }
+    }
+   },
+   "grouping": {
+    "requests": {
+     "r1": {
+      "where": {
+       "type": "comparison",
+       "operator": "=",
+       "left": {
+        "type": "column",
+        "source": "t_products",
+        "reference": "c_brand"
+       },
+       "right": {
+        "type": "literal",
+        "value": "Orbit"
+       }
+      }
+     }
+    },
+    "warnings": [],
+    "jev": {}
+   },
+   "formula": {
+    "requests": {
+     "r1.t_variants.c_price_mad": {
+      "records": [
+       {
+        "role": "calculation",
+        "function": "*",
+        "left": {
+         "column": "t_variants.c_price_mad"
+        },
+        "right": {
+         "value": 1.15,
+         "source": "15%"
+        },
+        "text": "Raise the price of the Orbit variants by 15%",
+        "start": 0,
+        "end": 44,
+        "rule_id": "jev.increase",
+        "occurrences": [
+         "n1"
+        ],
+        "status": "accepted"
+       },
+       {
+        "role": "assignment",
+        "function": "assign",
+        "left": {
+         "column": "t_variants.c_price_mad"
+        },
+        "right": {
+         "unresolved": true
+        },
+        "text": "Raise the price",
+        "start": 0,
+        "end": 15,
+        "rule_id": "parse.target",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "where",
+        "function": null,
+        "left": {
+         "pred": "p1"
+        },
+        "right": null,
+        "text": "Orbit",
+        "start": 23,
+        "end": 28,
+        "rule_id": "jev.where",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "rounding",
+        "function": "round_to",
+        "left": {
+         "unresolved": true
+        },
+        "right": {
+         "value": 5,
+         "source": "5"
+        },
+        "text": "round it to the nearest 5",
+        "start": 46,
+        "end": 71,
+        "rule_id": "jev.round_multiple",
+        "occurrences": [
+         "n2"
+        ],
+        "status": "accepted"
+       },
+       {
+        "role": "guard",
+        "function": "clamp_max",
+        "left": {
+         "unresolved": true
+        },
+        "right": {
+         "unresolved": true
+        },
+        "text": "go above ",
+        "start": 83,
+        "end": 92,
+        "rule_id": "jev.upper_limit_computed.guard",
+        "occurrences": [],
+        "status": "accepted"
+       },
+       {
+        "role": "bound",
+        "function": "*",
+        "left": {
+         "column": "t_variants.c_cost_mad"
+        },
+        "right": {
+         "value": 2,
+         "source": "twice"
+        },
+        "text": "twice their cost",
+        "start": 92,
+        "end": 108,
+        "rule_id": "jev.upper_limit_computed",
+        "occurrences": [
+         "n3"
+        ],
+        "status": "accepted"
+       }
+      ],
+      "pass1_ambiguities": [],
+      "map": {
+       "r1.left": "current",
+       "r4.left": "r1",
+       "r5.left": "r4",
+       "r5.right": "r6"
+      },
+      "status": "ok",
+      "questions": [],
+      "flagged": [],
+      "kind": "number"
+     }
+    },
+    "warnings": []
+   },
+   "assembly": {
+    "program": [
+     {
+      "request": "r1",
+      "ast": {
+       "id": "r1",
+       "type": "update",
+       "target": {
+        "type": "database_table",
+        "reference": "t_variants",
+        "alias": "v"
+       },
+       "scope": {
+        "type": "filtered",
+        "where": {
+         "type": "membership",
+         "operator": "in",
+         "expression": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_product_id"
+         },
+         "query": {
+          "id": "q1",
+          "type": "select",
+          "from": {
+           "type": "database_table",
+           "reference": "t_products",
+           "alias": "p"
+          },
+          "columns": [
+           {
+            "expression": {
+             "type": "column",
+             "source": "p",
+             "reference": "c_product_id"
+            },
+            "alias": "c0"
+           }
+          ],
+          "scope": {
+           "type": "filtered",
+           "where": {
+            "type": "comparison",
+            "operator": "=",
+            "left": {
+             "type": "column",
+             "source": "p",
+             "reference": "c_brand"
+            },
+            "right": {
+             "type": "literal",
+             "value": "Orbit"
+            }
+           }
+          }
+         }
+        }
+       },
+       "assignments": [
+        {
+         "column": {
+          "type": "column",
+          "source": "v",
+          "reference": "c_price_mad"
+         },
+         "value": {
+          "type": "function",
+          "name": "least",
+          "arguments": [
+           {
+            "type": "arithmetic",
+            "operator": "*",
+            "left": {
+             "type": "function",
+             "name": "round",
+             "arguments": [
+              {
+               "type": "arithmetic",
+               "operator": "/",
+               "left": {
+                "type": "arithmetic",
+                "operator": "*",
+                "left": {
+                 "type": "column",
+                 "source": "v",
+                 "reference": "c_price_mad"
+                },
+                "right": {
+                 "type": "literal",
+                 "value": 1.15
+                }
+               },
+               "right": {
+                "type": "literal",
+                "value": 5.0
+               }
+              },
+              {
+               "type": "literal",
+               "value": 0
+              }
+             ]
+            },
+            "right": {
+             "type": "literal",
+             "value": 5
+            }
+           },
+           {
+            "type": "function",
+            "name": "coalesce",
+            "arguments": [
+             {
+              "type": "arithmetic",
+              "operator": "*",
+              "left": {
+               "type": "column",
+               "source": "v",
+               "reference": "c_cost_mad"
+              },
+              "right": {
+               "type": "literal",
+               "value": 2
+              }
+             },
+             {
+              "type": "arithmetic",
+              "operator": "*",
+              "left": {
+               "type": "function",
+               "name": "round",
+               "arguments": [
+                {
+                 "type": "arithmetic",
+                 "operator": "/",
+                 "left": {
+                  "type": "arithmetic",
+                  "operator": "*",
+                  "left": {
+                   "type": "column",
+                   "source": "v",
+                   "reference": "c_price_mad"
+                  },
+                  "right": {
+                   "type": "literal",
+                   "value": 1.15
+                  }
+                 },
+                 "right": {
+                  "type": "literal",
+                  "value": 5.0
+                 }
+                },
+                {
+                 "type": "literal",
+                 "value": 0
+                }
+               ]
+              },
+              "right": {
+               "type": "literal",
+               "value": 5
+              }
+             }
+            ]
+           }
+          ]
+         }
+        }
+       ]
+      },
+      "sql": [
+       "UPDATE \"variants\" AS \"v\" SET \"price_mad\" = MIN((ROUND((CAST((\"v\".\"price_mad\" * 1.15) AS REAL) / 5.0), 0) * 5), COALESCE((\"v\".\"cost_mad\" * 2), (ROUND((CAST((\"v\".\"price_mad\" * 1.15) AS REAL) / 5.0), 0) * 5))) WHERE \"v\".\"product_id\" IN (SELECT \"p\".\"product_id\" AS \"c0\" FROM \"products\" AS \"p\" WHERE \"p\".\"brand\" = 'Orbit')"
+      ],
+      "rows": 7
+     }
+    ],
+    "questions": [
+     {
+      "step": "requests",
+      "problem": "unresolved reference",
+      "text": "it",
+      "request": "r1",
+      "probability": 0.73
+     },
+     {
+      "step": "values",
+      "value": "v1",
+      "problem": "role uncertain",
+      "answer": "not_value",
+      "probability": 0.58
+     }
+    ],
+    "errors": []
+   },
+   "seconds": 4.8,
+   "jev": {
+    "calls": 11,
+    "input_tokens": 38920,
+    "output_tokens": 4857,
+    "seconds": 2.8
+   }
+  }
+ }
+}
