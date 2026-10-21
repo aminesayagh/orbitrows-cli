@@ -56,7 +56,7 @@ MODELS = {"jev": Jev}
 
 def call_id(state, questions) -> str:
     """The call's identity: the same state and questions give the same id, in any run."""
-    text = json.dumps([state, questions], sort_keys=True, ensure_ascii=False, default=str)
+    text = json.dumps([state, questions], sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(text.encode()).hexdigest()[:16]
 
 
