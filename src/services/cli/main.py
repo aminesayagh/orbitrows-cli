@@ -320,7 +320,7 @@ def export(folder: Path, force: bool, ref: str | None) -> None:
         with contextlib.closing(sqlite3.connect(f"file:{path / 'session.db'}?mode=ro", uri=True)) as db:
             try:
                 files = exporting.export(db, path, folder, force)
-            except FileExistsError as e:
+            except (FileExistsError, exporting.Unwritable) as e:
                 raise Refusal(str(e)) from None
     print(json.dumps({"store": target[0], "name": target[1], "files": files}, ensure_ascii=False))
 

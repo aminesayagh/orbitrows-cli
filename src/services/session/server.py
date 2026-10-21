@@ -343,7 +343,7 @@ class Session:
                     try:
                         reply = {"ok": True, "files": export(self.db, self.dir, Path(request["folder"]),
                                                              bool(request.get("force")))}
-                    except FileExistsError as e:
+                    except (FileExistsError, ValueError) as e:     # a file there, or a value its encoding can't hold
                         reply = {"ok": False, "error": str(e)}
                 case "exit":
                     dropped = self.pending and self.pending["prompt"]

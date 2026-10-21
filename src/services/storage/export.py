@@ -11,6 +11,10 @@ from orbitrows.pipeline.store.schema import _text, rebuild
 from orbitrows.services.csv.reader import read_table
 
 
+class Unwritable(ValueError):
+    """A value the file's encoding can't hold (a message wrote it): that file isn't written."""
+
+
 def export(db, store: Path, out: Path, force: bool = False) -> list[dict]:
     """Every file of the store at `store` (its folder) from db (session.db, or the session's open transaction) into
     the folder out. Raises FileExistsError, before writing anything, when a file is already there and not force.
@@ -28,10 +32,16 @@ def export(db, store: Path, out: Path, force: bool = False) -> list[dict]:
         upload = store / "files" / file
         read = read_table(upload, bool(has_header))
         ending = "\r\n" if b"\r\n" in upload.read_bytes() else "\n"
-        with open(out / file, "w", encoding=read["encoding"], newline="") as f:
-            w = csv.writer(f, delimiter=read["delimiter"], lineterminator=ending)
-            if has_header:
-                w.writerow(c["header"] for c in spec)
-            w.writerows([_text(v) for v in row] for row in rows)
+        try:
+            with open(out / file, "w", encoding=read["encoding"], newline="") as f:
+                w = csv.writer(f, delimiter=read["delimiter"], lineterminator=ending)
+                if has_header:
+                    w.writerow(c["header"] for c in spec)
+                w.writerows([_text(v) for v in row] for row in rows)
+        except UnicodeEncodeError as e:
+            (out / file).unlink(missing_ok=True)              # never a half-written file
+            before = f" (written before it: {', '.join(x['file'] for x in written)})" if written else ""
+            raise Unwritable(f"{file} is {read['encoding']}, which can't hold {e.object[e.start:e.end]!r}: it wasn't "
+                             f"written{before}.") from None
         written.append({"file": file, "path": str(out / file), "rows": len(rows)})
     return written
