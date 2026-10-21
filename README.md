@@ -38,7 +38,7 @@ Each store is a row in the registry, `~/.local/share/pilotstore/stores.db` (`$XD
 - `session.db`: the store's tables with their rows, plus the classification tables (`_store_tables`, `_store_columns`, `_column_context`, `_export`). It's written in one transaction, and only if every file can be rebuilt from it;
 - `original.db`: a copy of `session.db` taken right after the import.
 
-Reviewer note: `foreign_keys` and `synchronous` are per-connection settings, so every connection that writes `session.db` must set them.
+`foreign_keys` and `synchronous` are per-connection settings in SQLite: every connection that writes `session.db` must set them again.
 
 ## Layout
 

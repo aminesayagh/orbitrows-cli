@@ -1,5 +1,7 @@
 import json
+import os
 import shutil
+import signal
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -148,16 +150,20 @@ def test_the_key_is_needed_for_jev(env, capsys, monkeypatch):
     assert code == 1 and err.startswith("TYPESAFE_API_KEY is not set") and stores() == []
 
 
-def test_the_key_is_needed_when_the_model_is_named_jev(env, capsys, monkeypatch):
-    monkeypatch.setenv("MODEL", "jev")
+@pytest.mark.parametrize("model", ["jev", ""])
+def test_the_key_is_needed_when_the_model_is_named_jev(env, capsys, monkeypatch, model):
+    monkeypatch.setenv("MODEL", model)  # an empty MODEL means the default, Jev
     code, out, err = run(capsys, "store", "customers.csv")
     assert code == 1 and err.startswith("TYPESAFE_API_KEY is not set") and stores() == []
 
 
 @pytest.mark.parametrize("step", ["rows", "build"])
 def test_ctrl_c_in_the_code_after_the_model_stops_the_import(env, capsys, monkeypatch, step):
+    real = getattr(cli.run, step)
+
     def interrupt(*args):
-        raise KeyboardInterrupt
+        os.kill(os.getpid(), signal.SIGINT)  # a real Ctrl+C: under asyncio.run it would only cancel at the next await
+        return real(*args)
 
     monkeypatch.setattr(cli.run, step, interrupt)
     code, out, err = run(capsys, "store", "customers.csv")

@@ -49,7 +49,7 @@ MODELS = {"jev": Jev}
 
 def connect(name=None) -> Model:
     """The model named by `name`, else MODEL from the env, else Jev."""
-    name = name or os.environ.get("MODEL", "jev")
+    name = name or (os.environ.get("MODEL") or "jev")
     if ":" in name:
         module, cls = name.split(":")
         return getattr(importlib.import_module(module), cls)()

@@ -60,7 +60,8 @@ def lost(diffs: list[dict]) -> str:
     """The refusal when the store's tables would not give the uploaded files back."""
     def line(d):
         if "header" in d:
-            return f'{d["file"]}, row {d["row"] + 1}, {d["header"]}: "{d["uploaded"]}" would come back as "{d["rebuilt"]}"'
+            where = d["header"] if d["header"] is not None else "beyond the header"
+            return f'{d["file"]}, row {d["row"] + 1}, {where}: "{d["uploaded"]}" would come back as "{d["rebuilt"]}"'
         return f'{d.get("file") or d.get("table")}: {d["problem"]}'
     more = [f"… and {len(diffs) - SHOWN} more"] if len(diffs) > SHOWN else []
     return "\n  ".join(["The store would lose data, so it wasn't saved:"] + [line(d) for d in diffs[:SHOWN]] + more)
@@ -86,7 +87,7 @@ def store(paths: list[Path], name: str | None) -> None:
     for table, files in tables.items():
         if len(files) > 1:                                    # order-lines.csv and order_lines.csv are one table
             raise Refusal(f"{', '.join(str(f) for f in files)} would all be the table {table}. Rename one of them.")
-    if os.environ.get("MODEL", "jev") == "jev":               # any other MODEL is a stub class path
+    if (os.environ.get("MODEL") or "jev") == "jev":           # any other MODEL is a stub class path
         need("TYPESAFE_API_KEY")
     store_id = registry.create(name)
     try:
@@ -106,12 +107,12 @@ def store(paths: list[Path], name: str | None) -> None:
             written = storage.write(store_id, built["store"], rows)
         except storage.Lost as e:
             raise Refusal(lost(e.diffs)) from None
-        registry.set_status(store_id, registry.READY)
+        for t in written:
+            print(f"{t['table']}: {t['rows']} rows · {t['columns']} columns, from {t['file']}")
+        registry.set_status(store_id, registry.READY)         # last: an interrupted import is never left ready
     except BaseException:  # Jev failing, Ctrl+C, a crash, data lost: the store is marked failed, never left importing
         registry.set_status(store_id, registry.FAILED)
         raise
-    for t in written:
-        print(f"{t['table']}: {t['rows']} rows · {t['columns']} columns, from {t['file']}")
     print(f"Store {label((store_id, name))}")
 
 
