@@ -1,0 +1,815 @@
+{
+ "tables": {
+  "export.csv": {
+   "read": {
+    "encoding": "utf-8",
+    "delimiter": ",",
+    "has_header": true,
+    "header": [
+     "order_id",
+     "line_no",
+     "product_sku",
+     "quantity",
+     "unit_price",
+     "order_date",
+     "customer_name",
+     "customer_city"
+    ],
+    "rows": 14,
+    "probability": 0.99
+   },
+   "context": {
+    "table": "export",
+    "context_columns": {},
+    "source_context": {},
+    "warnings": []
+   },
+   "schema": {
+    "create_table": {
+     "id": "r_create_export",
+     "type": "create_table",
+     "definition": {
+      "table_id": "t_export",
+      "sql_name": "export",
+      "columns": [
+       {
+        "column_id": "c_order_id",
+        "sql_name": "order_id",
+        "header": "order_id",
+        "sql_type": "INTEGER",
+        "nullable": false
+       },
+       {
+        "column_id": "c_line_no",
+        "sql_name": "line_no",
+        "header": "line_no",
+        "sql_type": "INTEGER",
+        "nullable": false
+       },
+       {
+        "column_id": "c_product_sku",
+        "sql_name": "product_sku",
+        "header": "product_sku",
+        "sql_type": "TEXT",
+        "nullable": false
+       },
+       {
+        "column_id": "c_quantity",
+        "sql_name": "quantity",
+        "header": "quantity",
+        "sql_type": "INTEGER",
+        "nullable": false
+       },
+       {
+        "column_id": "c_unit_price",
+        "sql_name": "unit_price",
+        "header": "unit_price",
+        "sql_type": "REAL",
+        "nullable": false
+       },
+       {
+        "column_id": "c_order_date",
+        "sql_name": "order_date",
+        "header": "order_date",
+        "sql_type": "TEXT",
+        "nullable": false
+       },
+       {
+        "column_id": "c_customer_name",
+        "sql_name": "customer_name",
+        "header": "customer_name",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_customer_city",
+        "sql_name": "customer_city",
+        "header": "customer_city",
+        "sql_type": "TEXT",
+        "nullable": true
+       }
+      ],
+      "primary_key": [],
+      "foreign_keys": []
+     }
+    },
+    "warnings": []
+   },
+   "roles": {
+    "columns": {
+     "order_id": {
+      "role": "dedicated_key",
+      "kind": "record_reference",
+      "level": "individual_record",
+      "flagged": true
+     },
+     "line_no": {
+      "role": "none",
+      "kind": "value_or_text",
+      "flagged": true
+     },
+     "product_sku": {
+      "role": "dedicated_key",
+      "kind": "record_reference",
+      "level": "individual_record"
+     },
+     "quantity": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "unit_price": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "order_date": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "customer_name": {
+      "role": "descriptive_base",
+      "kind": "name"
+     },
+     "customer_city": {
+      "role": "qualifier",
+      "kind": "attribute"
+     }
+    },
+    "warnings": [
+     {
+      "column": "line_no",
+      "problem": "kind uncertain",
+      "answer": "value_or_text",
+      "probability": 0.41
+     },
+     {
+      "column": "order_id",
+      "problem": "level uncertain",
+      "answer": "individual_record",
+      "probability": 0.62
+     }
+    ]
+   },
+   "profile": {
+    "rows": 14,
+    "columns": {
+     "order_id": {
+      "empty": 0,
+      "distinct": 8,
+      "max_repeat": 3,
+      "values": [
+       "101",
+       "102",
+       "103",
+       "104",
+       "105",
+       "106",
+       "107",
+       "108"
+      ],
+      "determines": [
+       "order_date",
+       "customer_name",
+       "customer_city"
+      ]
+     },
+     "line_no": {
+      "empty": 0,
+      "distinct": 3,
+      "max_repeat": 8,
+      "values": [
+       "1",
+       "2",
+       "3"
+      ]
+     },
+     "product_sku": {
+      "empty": 0,
+      "distinct": 6,
+      "max_repeat": 3,
+      "values": [
+       "A-1001",
+       "A-1002",
+       "A-1003",
+       "A-1004",
+       "A-1005",
+       "A-1006"
+      ],
+      "determines": [
+       "unit_price"
+      ]
+     },
+     "quantity": {
+      "empty": 0,
+      "distinct": 3,
+      "max_repeat": 9,
+      "values": [
+       "1",
+       "2",
+       "3"
+      ]
+     },
+     "unit_price": {
+      "empty": 0,
+      "distinct": 6,
+      "max_repeat": 3,
+      "values": [
+       "129.00",
+       "19.90",
+       "249.00",
+       "329.00",
+       "39.99",
+       "79.00"
+      ],
+      "determines": [
+       "product_sku"
+      ]
+     },
+     "order_date": {
+      "empty": 0,
+      "distinct": 8,
+      "max_repeat": 3,
+      "values": [
+       "2026-09-01",
+       "2026-09-02",
+       "2026-09-05",
+       "2026-09-06",
+       "2026-09-08",
+       "2026-09-10",
+       "2026-09-11",
+       "2026-09-12"
+      ],
+      "determines": [
+       "order_id",
+       "customer_name",
+       "customer_city"
+      ]
+     },
+     "customer_name": {
+      "empty": 0,
+      "distinct": 5,
+      "max_repeat": 5,
+      "values": [
+       "Alice Martin",
+       "Bruno Keller",
+       "Chloé Dubois",
+       "David Rossi",
+       "Emma Novak"
+      ],
+      "determines": [
+       "customer_city"
+      ]
+     },
+     "customer_city": {
+      "empty": 0,
+      "distinct": 5,
+      "max_repeat": 5,
+      "values": [
+       "Berlin",
+       "Lyon",
+       "Milan",
+       "Paris",
+       "Prague"
+      ],
+      "determines": [
+       "customer_name"
+      ]
+     }
+    }
+   },
+   "keys": {
+    "warnings": [
+     {
+      "column": null,
+      "problem": "no single-column primary key (composite: later)"
+     }
+    ]
+   },
+   "joins": {
+    "groups": [
+     {
+      "key": "order_id",
+      "columns": [
+       "customer_name",
+       "customer_city"
+      ]
+     }
+    ],
+    "warnings": [],
+    "remaining": [
+     "order_id",
+     "line_no",
+     "product_sku",
+     "quantity",
+     "unit_price",
+     "order_date"
+    ]
+   }
+  }
+ },
+ "store_schema": {
+  "tables": [
+   {
+    "id": "r_create_export",
+    "type": "create_table",
+    "definition": {
+     "table_id": "t_export",
+     "sql_name": "export",
+     "columns": [
+      {
+       "column_id": "c_id",
+       "sql_name": "id",
+       "header": null,
+       "sql_type": "INTEGER",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_order_id",
+       "sql_name": "order_id",
+       "header": "order_id",
+       "sql_type": "INTEGER",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_line_no",
+       "sql_name": "line_no",
+       "header": "line_no",
+       "sql_type": "INTEGER",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_product_sku",
+       "sql_name": "product_sku",
+       "header": "product_sku",
+       "sql_type": "TEXT",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_quantity",
+       "sql_name": "quantity",
+       "header": "quantity",
+       "sql_type": "INTEGER",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_unit_price",
+       "sql_name": "unit_price",
+       "header": "unit_price",
+       "sql_type": "REAL",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_order_date",
+       "sql_name": "order_date",
+       "header": "order_date",
+       "sql_type": "TEXT",
+       "nullable": false,
+       "default": null
+      }
+     ],
+     "primary_key": [
+      "c_id"
+     ],
+     "foreign_keys": [
+      {
+       "columns": [
+        "c_order_id"
+       ],
+       "references": {
+        "table": "t_order",
+        "columns": [
+         "c_order_id"
+        ]
+       },
+       "on_delete": "restrict",
+       "on_update": "cascade"
+      }
+     ]
+    },
+    "query": null
+   },
+   {
+    "id": "r_create_order",
+    "type": "create_table",
+    "definition": {
+     "table_id": "t_order",
+     "sql_name": "order",
+     "columns": [
+      {
+       "column_id": "c_order_id",
+       "sql_name": "order_id",
+       "header": "order_id",
+       "sql_type": "INTEGER",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_customer_name",
+       "sql_name": "customer_name",
+       "header": "customer_name",
+       "sql_type": "TEXT",
+       "nullable": true,
+       "default": null
+      },
+      {
+       "column_id": "c_customer_city",
+       "sql_name": "customer_city",
+       "header": "customer_city",
+       "sql_type": "TEXT",
+       "nullable": true,
+       "default": null
+      }
+     ],
+     "primary_key": [
+      "c_order_id"
+     ],
+     "foreign_keys": []
+    },
+    "query": null
+   }
+  ],
+  "metadata_table": {
+   "id": "r_create__columns",
+   "type": "create_table",
+   "definition": {
+    "table_id": "t__columns",
+    "sql_name": "_columns",
+    "columns": [
+     {
+      "column_id": "c_table_id",
+      "sql_name": "table_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": false,
+      "default": null
+     },
+     {
+      "column_id": "c_column_id",
+      "sql_name": "column_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": false,
+      "default": null
+     },
+     {
+      "column_id": "c_source_file",
+      "sql_name": "source_file",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_source_header",
+      "sql_name": "source_header",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_position",
+      "sql_name": "position",
+      "header": null,
+      "sql_type": "INTEGER",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_role",
+      "sql_name": "role",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_kind",
+      "sql_name": "kind",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_level",
+      "sql_name": "level",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_unit",
+      "sql_name": "unit",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_unit_kind",
+      "sql_name": "unit_kind",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_unit_from",
+      "sql_name": "unit_from",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_context_table_id",
+      "sql_name": "context_table_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_context_column_id",
+      "sql_name": "context_column_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_edited_by",
+      "sql_name": "edited_by",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": false,
+      "default": null
+     },
+     {
+      "column_id": "c_extra_json",
+      "sql_name": "extra_json",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     }
+    ],
+    "primary_key": [
+     "c_table_id",
+     "c_column_id"
+    ],
+    "foreign_keys": []
+   },
+   "query": null
+  },
+  "metadata": [
+   {
+    "table_id": "t_export",
+    "column_id": "c_id",
+    "source_file": null,
+    "source_header": null,
+    "position": null,
+    "role": null,
+    "kind": null,
+    "level": null,
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_export",
+    "column_id": "c_order_id",
+    "source_file": "export.csv",
+    "source_header": "order_id",
+    "position": 0,
+    "role": "dedicated_key",
+    "kind": "record_reference",
+    "level": "individual_record",
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": "{\"flagged\": true}"
+   },
+   {
+    "table_id": "t_export",
+    "column_id": "c_line_no",
+    "source_file": "export.csv",
+    "source_header": "line_no",
+    "position": 1,
+    "role": "none",
+    "kind": "value_or_text",
+    "level": null,
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": "{\"flagged\": true}"
+   },
+   {
+    "table_id": "t_export",
+    "column_id": "c_product_sku",
+    "source_file": "export.csv",
+    "source_header": "product_sku",
+    "position": 2,
+    "role": "dedicated_key",
+    "kind": "record_reference",
+    "level": "individual_record",
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_export",
+    "column_id": "c_quantity",
+    "source_file": "export.csv",
+    "source_header": "quantity",
+    "position": 3,
+    "role": "none",
+    "kind": "value_or_text",
+    "level": null,
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_export",
+    "column_id": "c_unit_price",
+    "source_file": "export.csv",
+    "source_header": "unit_price",
+    "position": 4,
+    "role": "none",
+    "kind": "value_or_text",
+    "level": null,
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_export",
+    "column_id": "c_order_date",
+    "source_file": "export.csv",
+    "source_header": "order_date",
+    "position": 5,
+    "role": "none",
+    "kind": "value_or_text",
+    "level": null,
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_order",
+    "column_id": "c_order_id",
+    "source_file": "export.csv",
+    "source_header": "order_id",
+    "position": 0,
+    "role": "dedicated_key",
+    "kind": "record_reference",
+    "level": "individual_record",
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": "{\"flagged\": true}"
+   },
+   {
+    "table_id": "t_order",
+    "column_id": "c_customer_name",
+    "source_file": "export.csv",
+    "source_header": "customer_name",
+    "position": 6,
+    "role": "descriptive_base",
+    "kind": "name",
+    "level": null,
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_order",
+    "column_id": "c_customer_city",
+    "source_file": "export.csv",
+    "source_header": "customer_city",
+    "position": 7,
+    "role": "qualifier",
+    "kind": "attribute",
+    "level": null,
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   }
+  ],
+  "export": [
+   {
+    "file": "export.csv",
+    "has_header": true,
+    "root": "t_export",
+    "columns": [
+     {
+      "header": "order_id",
+      "table_id": "t_export",
+      "column_id": "c_order_id",
+      "via": []
+     },
+     {
+      "header": "line_no",
+      "table_id": "t_export",
+      "column_id": "c_line_no",
+      "via": []
+     },
+     {
+      "header": "product_sku",
+      "table_id": "t_export",
+      "column_id": "c_product_sku",
+      "via": []
+     },
+     {
+      "header": "quantity",
+      "table_id": "t_export",
+      "column_id": "c_quantity",
+      "via": []
+     },
+     {
+      "header": "unit_price",
+      "table_id": "t_export",
+      "column_id": "c_unit_price",
+      "via": []
+     },
+     {
+      "header": "order_date",
+      "table_id": "t_export",
+      "column_id": "c_order_date",
+      "via": []
+     },
+     {
+      "header": "customer_name",
+      "table_id": "t_order",
+      "column_id": "c_customer_name",
+      "via": [
+       "c_order_id"
+      ]
+     },
+     {
+      "header": "customer_city",
+      "table_id": "t_order",
+      "column_id": "c_customer_city",
+      "via": [
+       "c_order_id"
+      ]
+     }
+    ]
+   }
+  ],
+  "problems": [],
+  "round_trip": {
+   "value_differences": 0,
+   "number_format_cells": 11,
+   "number_format_columns": [
+    "export.csv: unit_price"
+   ],
+   "shown": []
+  }
+ }
+}

@@ -1,0 +1,7 @@
+sku,name,Price (incl. VAT),Currency code,Capacity (GB),Weight (kg),Unit,Stock,Color,Lang
+T-01,USB Stick 64,12.90,EUR,64,0.01,piece,120,Black,en
+T-02,SSD Portable 1TB,89.00,EUR,1000,0.06,piece,35,Blue,en
+T-03,Clé USB 128,17.50,CHF,128,0.012,box of 10,12,Red,fr
+T-04,Festplatte 2TB,99.00,EUR,2000,500 g,piece,8,Black,de
+T-05,Carte SD 32,9.90,EUR,32,0.002,box of 10,40,White,fr
+T-06,Memory Card 256,29.00,USD,256,0.003,piece,22,Black,en

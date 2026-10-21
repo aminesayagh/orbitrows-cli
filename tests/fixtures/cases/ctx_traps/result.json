@@ -1,0 +1,834 @@
+{
+ "tables": {
+  "products.csv": {
+   "read": {
+    "encoding": "utf-8",
+    "delimiter": ",",
+    "has_header": true,
+    "header": [
+     "sku",
+     "name",
+     "Price (incl. VAT)",
+     "Currency code",
+     "Capacity (GB)",
+     "Weight (kg)",
+     "Unit",
+     "Stock",
+     "Color",
+     "Lang"
+    ],
+    "rows": 6,
+    "probability": 0.99
+   },
+   "context": {
+    "table": "products",
+    "context_columns": {
+     "Currency code": {
+      "context": "dedicated_context",
+      "kind": "currency",
+      "describes": [
+       "Price (incl. VAT)"
+      ]
+     },
+     "Unit": {
+      "context": "dedicated_context",
+      "kind": "counting_unit",
+      "describes": [
+       "Stock"
+      ]
+     },
+     "Lang": {
+      "context": "dedicated_context",
+      "kind": "language",
+      "describes": [
+       "name"
+      ]
+     }
+    },
+    "source_context": {
+     "Price (incl. VAT)": {
+      "kind": "currency",
+      "from": "column",
+      "column": "Currency code"
+     },
+     "Stock": {
+      "kind": "counting_unit",
+      "from": "column",
+      "column": "Unit"
+     },
+     "name": {
+      "kind": "language",
+      "from": "column",
+      "column": "Lang"
+     },
+     "Capacity (GB)": {
+      "kind": "physical_unit",
+      "from": "header",
+      "unit": "GB"
+     },
+     "Weight (kg)": {
+      "kind": "physical_unit",
+      "from": "header",
+      "unit": "kg"
+     }
+    },
+    "warnings": [
+     {
+      "column": "Price (incl. VAT)",
+      "problem": "context option uncertain",
+      "answer": "none",
+      "probability": 0.6
+     },
+     {
+      "column": "Unit",
+      "problem": "does it describe Stock?",
+      "probability": 0.64,
+      "linked": true
+     }
+    ]
+   },
+   "schema": {
+    "create_table": {
+     "id": "r_create_products",
+     "type": "create_table",
+     "definition": {
+      "table_id": "t_products",
+      "sql_name": "products",
+      "columns": [
+       {
+        "column_id": "c_sku",
+        "sql_name": "sku",
+        "header": "sku",
+        "sql_type": "TEXT",
+        "nullable": false
+       },
+       {
+        "column_id": "c_name",
+        "sql_name": "name",
+        "header": "name",
+        "sql_type": "TEXT",
+        "nullable": false
+       },
+       {
+        "column_id": "c_price_incl_vat",
+        "sql_name": "price_incl_vat",
+        "header": "Price (incl. VAT)",
+        "sql_type": "REAL",
+        "nullable": false
+       },
+       {
+        "column_id": "c_currency_code",
+        "sql_name": "currency_code",
+        "header": "Currency code",
+        "sql_type": "TEXT",
+        "nullable": false
+       },
+       {
+        "column_id": "c_capacity_gb",
+        "sql_name": "capacity_gb",
+        "header": "Capacity (GB)",
+        "sql_type": "INTEGER",
+        "nullable": true
+       },
+       {
+        "column_id": "c_weight_kg",
+        "sql_name": "weight_kg",
+        "header": "Weight (kg)",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_unit",
+        "sql_name": "unit",
+        "header": "Unit",
+        "sql_type": "TEXT",
+        "nullable": false
+       },
+       {
+        "column_id": "c_stock",
+        "sql_name": "stock",
+        "header": "Stock",
+        "sql_type": "INTEGER",
+        "nullable": true
+       },
+       {
+        "column_id": "c_color",
+        "sql_name": "color",
+        "header": "Color",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_lang",
+        "sql_name": "lang",
+        "header": "Lang",
+        "sql_type": "TEXT",
+        "nullable": true
+       }
+      ],
+      "primary_key": [
+       "c_sku"
+      ],
+      "foreign_keys": []
+     }
+    },
+    "warnings": []
+   },
+   "roles": {
+    "columns": {
+     "sku": {
+      "role": "dedicated_key",
+      "kind": "record_reference",
+      "level": "individual_record"
+     },
+     "name": {
+      "role": "descriptive_base",
+      "kind": "name"
+     },
+     "Price (incl. VAT)": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Capacity (GB)": {
+      "role": "qualifier",
+      "kind": "attribute"
+     },
+     "Weight (kg)": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Stock": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Color": {
+      "role": "qualifier",
+      "kind": "attribute"
+     }
+    },
+    "warnings": []
+   },
+   "keys": {
+    "warnings": []
+   },
+   "profile": {
+    "rows": 6,
+    "columns": {
+     "sku": {
+      "empty": 0,
+      "distinct": 6,
+      "max_repeat": 1,
+      "values": [
+       "T-01",
+       "T-02",
+       "T-03",
+       "T-04",
+       "T-05",
+       "T-06"
+      ]
+     },
+     "name": {
+      "empty": 0,
+      "distinct": 6,
+      "max_repeat": 1,
+      "values": [
+       "Carte SD 32",
+       "Clé USB 128",
+       "Festplatte 2TB",
+       "Memory Card 256",
+       "SSD Portable 1TB",
+       "USB Stick 64"
+      ]
+     },
+     "Price (incl. VAT)": {
+      "empty": 0,
+      "distinct": 6,
+      "max_repeat": 1,
+      "values": [
+       "12.90",
+       "17.50",
+       "29.00",
+       "89.00",
+       "9.90",
+       "99.00"
+      ]
+     },
+     "Currency code": {
+      "empty": 0,
+      "distinct": 3,
+      "max_repeat": 4,
+      "values": [
+       "CHF",
+       "EUR",
+       "USD"
+      ]
+     },
+     "Capacity (GB)": {
+      "empty": 0,
+      "distinct": 6,
+      "max_repeat": 1,
+      "values": [
+       "1000",
+       "128",
+       "2000",
+       "256",
+       "32",
+       "64"
+      ]
+     },
+     "Weight (kg)": {
+      "empty": 0,
+      "distinct": 6,
+      "max_repeat": 1,
+      "values": [
+       "0.002",
+       "0.003",
+       "0.01",
+       "0.012",
+       "0.06",
+       "500 g"
+      ]
+     },
+     "Unit": {
+      "empty": 0,
+      "distinct": 2,
+      "max_repeat": 4,
+      "values": [
+       "box of 10",
+       "piece"
+      ]
+     },
+     "Stock": {
+      "empty": 0,
+      "distinct": 6,
+      "max_repeat": 1,
+      "values": [
+       "12",
+       "120",
+       "22",
+       "35",
+       "40",
+       "8"
+      ]
+     },
+     "Color": {
+      "empty": 0,
+      "distinct": 4,
+      "max_repeat": 3,
+      "values": [
+       "Black",
+       "Blue",
+       "Red",
+       "White"
+      ],
+      "determines": [
+       "Unit"
+      ]
+     },
+     "Lang": {
+      "empty": 0,
+      "distinct": 3,
+      "max_repeat": 3,
+      "values": [
+       "de",
+       "en",
+       "fr"
+      ],
+      "determines": [
+       "Unit"
+      ]
+     }
+    }
+   },
+   "joins": {
+    "groups": [],
+    "warnings": []
+   }
+  }
+ },
+ "store_schema": {
+  "tables": [
+   {
+    "id": "r_create_products",
+    "type": "create_table",
+    "definition": {
+     "table_id": "t_products",
+     "sql_name": "products",
+     "columns": [
+      {
+       "column_id": "c_sku",
+       "sql_name": "sku",
+       "header": "sku",
+       "sql_type": "TEXT",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_name",
+       "sql_name": "name",
+       "header": "name",
+       "sql_type": "TEXT",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_price_incl_vat",
+       "sql_name": "price_incl_vat",
+       "header": "Price (incl. VAT)",
+       "sql_type": "REAL",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_currency_code",
+       "sql_name": "currency_code",
+       "header": "Currency code",
+       "sql_type": "TEXT",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_capacity_gb",
+       "sql_name": "capacity_gb",
+       "header": "Capacity (GB)",
+       "sql_type": "INTEGER",
+       "nullable": true,
+       "default": null
+      },
+      {
+       "column_id": "c_weight_kg",
+       "sql_name": "weight_kg",
+       "header": "Weight (kg)",
+       "sql_type": "TEXT",
+       "nullable": true,
+       "default": null
+      },
+      {
+       "column_id": "c_unit",
+       "sql_name": "unit",
+       "header": "Unit",
+       "sql_type": "TEXT",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_stock",
+       "sql_name": "stock",
+       "header": "Stock",
+       "sql_type": "INTEGER",
+       "nullable": true,
+       "default": null
+      },
+      {
+       "column_id": "c_color",
+       "sql_name": "color",
+       "header": "Color",
+       "sql_type": "TEXT",
+       "nullable": true,
+       "default": null
+      },
+      {
+       "column_id": "c_lang",
+       "sql_name": "lang",
+       "header": "Lang",
+       "sql_type": "TEXT",
+       "nullable": true,
+       "default": null
+      }
+     ],
+     "primary_key": [
+      "c_sku"
+     ],
+     "foreign_keys": []
+    },
+    "query": null
+   }
+  ],
+  "metadata_table": {
+   "id": "r_create__columns",
+   "type": "create_table",
+   "definition": {
+    "table_id": "t__columns",
+    "sql_name": "_columns",
+    "columns": [
+     {
+      "column_id": "c_table_id",
+      "sql_name": "table_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": false,
+      "default": null
+     },
+     {
+      "column_id": "c_column_id",
+      "sql_name": "column_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": false,
+      "default": null
+     },
+     {
+      "column_id": "c_source_file",
+      "sql_name": "source_file",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_source_header",
+      "sql_name": "source_header",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_position",
+      "sql_name": "position",
+      "header": null,
+      "sql_type": "INTEGER",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_role",
+      "sql_name": "role",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_kind",
+      "sql_name": "kind",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_level",
+      "sql_name": "level",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_unit",
+      "sql_name": "unit",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_unit_kind",
+      "sql_name": "unit_kind",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_unit_from",
+      "sql_name": "unit_from",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_context_table_id",
+      "sql_name": "context_table_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_context_column_id",
+      "sql_name": "context_column_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_edited_by",
+      "sql_name": "edited_by",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": false,
+      "default": null
+     },
+     {
+      "column_id": "c_extra_json",
+      "sql_name": "extra_json",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     }
+    ],
+    "primary_key": [
+     "c_table_id",
+     "c_column_id"
+    ],
+    "foreign_keys": []
+   },
+   "query": null
+  },
+  "metadata": [
+   {
+    "table_id": "t_products",
+    "column_id": "c_sku",
+    "source_file": "products.csv",
+    "source_header": "sku",
+    "position": 0,
+    "role": "dedicated_key",
+    "kind": "record_reference",
+    "level": "individual_record",
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_products",
+    "column_id": "c_name",
+    "source_file": "products.csv",
+    "source_header": "name",
+    "position": 1,
+    "role": "descriptive_base",
+    "kind": "name",
+    "level": null,
+    "unit": null,
+    "unit_kind": "language",
+    "unit_from": "column",
+    "context_table_id": "t_products",
+    "context_column_id": "c_lang",
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_products",
+    "column_id": "c_price_incl_vat",
+    "source_file": "products.csv",
+    "source_header": "Price (incl. VAT)",
+    "position": 2,
+    "role": "none",
+    "kind": "value_or_text",
+    "level": null,
+    "unit": null,
+    "unit_kind": "currency",
+    "unit_from": "column",
+    "context_table_id": "t_products",
+    "context_column_id": "c_currency_code",
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_products",
+    "column_id": "c_currency_code",
+    "source_file": "products.csv",
+    "source_header": "Currency code",
+    "position": 3,
+    "role": null,
+    "kind": null,
+    "level": null,
+    "unit": null,
+    "unit_kind": "currency",
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": "{\"context\": \"dedicated_context\", \"describes\": [[\"t_products\", \"c_price_incl_vat\"]]}"
+   },
+   {
+    "table_id": "t_products",
+    "column_id": "c_capacity_gb",
+    "source_file": "products.csv",
+    "source_header": "Capacity (GB)",
+    "position": 4,
+    "role": "qualifier",
+    "kind": "attribute",
+    "level": null,
+    "unit": "GB",
+    "unit_kind": "physical_unit",
+    "unit_from": "header",
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_products",
+    "column_id": "c_weight_kg",
+    "source_file": "products.csv",
+    "source_header": "Weight (kg)",
+    "position": 5,
+    "role": "none",
+    "kind": "value_or_text",
+    "level": null,
+    "unit": "kg",
+    "unit_kind": "physical_unit",
+    "unit_from": "header",
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_products",
+    "column_id": "c_unit",
+    "source_file": "products.csv",
+    "source_header": "Unit",
+    "position": 6,
+    "role": null,
+    "kind": null,
+    "level": null,
+    "unit": null,
+    "unit_kind": "counting_unit",
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": "{\"context\": \"dedicated_context\", \"describes\": [[\"t_products\", \"c_stock\"]]}"
+   },
+   {
+    "table_id": "t_products",
+    "column_id": "c_stock",
+    "source_file": "products.csv",
+    "source_header": "Stock",
+    "position": 7,
+    "role": "none",
+    "kind": "value_or_text",
+    "level": null,
+    "unit": null,
+    "unit_kind": "counting_unit",
+    "unit_from": "column",
+    "context_table_id": "t_products",
+    "context_column_id": "c_unit",
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_products",
+    "column_id": "c_color",
+    "source_file": "products.csv",
+    "source_header": "Color",
+    "position": 8,
+    "role": "qualifier",
+    "kind": "attribute",
+    "level": null,
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_products",
+    "column_id": "c_lang",
+    "source_file": "products.csv",
+    "source_header": "Lang",
+    "position": 9,
+    "role": null,
+    "kind": null,
+    "level": null,
+    "unit": null,
+    "unit_kind": "language",
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": "{\"context\": \"dedicated_context\", \"describes\": [[\"t_products\", \"c_name\"]]}"
+   }
+  ],
+  "export": [
+   {
+    "file": "products.csv",
+    "has_header": true,
+    "root": "t_products",
+    "columns": [
+     {
+      "header": "sku",
+      "table_id": "t_products",
+      "column_id": "c_sku",
+      "via": []
+     },
+     {
+      "header": "name",
+      "table_id": "t_products",
+      "column_id": "c_name",
+      "via": []
+     },
+     {
+      "header": "Price (incl. VAT)",
+      "table_id": "t_products",
+      "column_id": "c_price_incl_vat",
+      "via": []
+     },
+     {
+      "header": "Currency code",
+      "table_id": "t_products",
+      "column_id": "c_currency_code",
+      "via": []
+     },
+     {
+      "header": "Capacity (GB)",
+      "table_id": "t_products",
+      "column_id": "c_capacity_gb",
+      "via": []
+     },
+     {
+      "header": "Weight (kg)",
+      "table_id": "t_products",
+      "column_id": "c_weight_kg",
+      "via": []
+     },
+     {
+      "header": "Unit",
+      "table_id": "t_products",
+      "column_id": "c_unit",
+      "via": []
+     },
+     {
+      "header": "Stock",
+      "table_id": "t_products",
+      "column_id": "c_stock",
+      "via": []
+     },
+     {
+      "header": "Color",
+      "table_id": "t_products",
+      "column_id": "c_color",
+      "via": []
+     },
+     {
+      "header": "Lang",
+      "table_id": "t_products",
+      "column_id": "c_lang",
+      "via": []
+     }
+    ]
+   }
+  ],
+  "problems": [],
+  "round_trip": {
+   "value_differences": 0,
+   "number_format_cells": 6,
+   "number_format_columns": [
+    "products.csv: Price (incl. VAT)"
+   ],
+   "shown": []
+  }
+ }
+}

@@ -1,0 +1,92 @@
+{
+ "context/catalog.csv": [],
+ "ctx_supplier/incoming.csv": [],
+ "ctx_supplier/store.csv": [],
+ "ctx_mixed/incoming.csv": [],
+ "ctx_mixed/store.csv": [],
+ "ctx_store/store.csv": [],
+ "ctx_store/incoming.csv": [],
+ "ctx_traps/products.csv": [],
+ "french/fournisseurs.csv": [],
+ "french/tarifs.csv": [],
+ "shop/products.csv": [],
+ "shop/customers.csv": [],
+ "shop/orders.csv": [],
+ "shop/order_lines.csv": [],
+ "flat/orders_flat.csv": [
+  {
+   "key": "order_id",
+   "columns": [
+    "customer_id"
+   ]
+  },
+  {
+   "key": "customer_id",
+   "columns": [
+    "customer_name",
+    "customer_city"
+   ]
+  },
+  {
+   "key": "product_sku",
+   "columns": [
+    "product_name",
+    "brand"
+   ]
+  }
+ ],
+ "store/store.csv": [],
+ "noheader/inventaire.csv": [],
+ "basic/incoming.csv": [],
+ "fashion_variants/incoming.csv": [],
+ "grocery_german/incoming.csv": [],
+ "reverse_composite/incoming.csv": [],
+ "no_headers/incoming.csv": [],
+ "numeric_decoys/incoming.csv": [],
+ "identifier_traps/incoming.csv": [],
+ "hard_supplier/incoming.csv": [],
+ "furniture_parsing/incoming.csv": [],
+ "family_updates/incoming.csv": [],
+ "joins_chain/export.csv": [
+  {
+   "key": "order_id",
+   "columns": [
+    "customer_id"
+   ]
+  },
+  {
+   "key": "customer_id",
+   "columns": [
+    "customer_name",
+    "customer_city"
+   ]
+  }
+ ],
+ "joins_star/export.csv": [
+  {
+   "key": "product_sku",
+   "columns": [
+    "product_name",
+    "brand"
+   ]
+  }
+ ],
+ "joins_nokey/export.csv": [
+  {
+   "key": "order_id",
+   "columns": [
+    "customer_name",
+    "customer_city"
+   ]
+  }
+ ],
+ "joins_one_line/export.csv": [
+  {
+   "key": "customer_id",
+   "columns": [
+    "customer_name",
+    "customer_city"
+   ]
+  }
+ ]
+}

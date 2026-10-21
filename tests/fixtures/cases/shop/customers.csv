@@ -1,0 +1,6 @@
+customer_id,name,email,city
+1,Alice Martin,alice@example.com,Paris
+2,Bruno Keller,bruno@example.com,Berlin
+3,Chloé Dubois,chloe@example.com,Lyon
+4,David Rossi,david@example.com,Milan
+5,Emma Novak,emma@example.com,Prague

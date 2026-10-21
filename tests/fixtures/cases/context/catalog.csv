@@ -1,0 +1,9 @@
+sku,name,description,description_language,price,sale_price,currency,weight,weight_unit,Volume (L),Price per kg (EUR),net_content,shipping_fee,sold_by,stock,size
+K-301,Ceramic Mug,Stoneware mug with matte glaze,en,12.50,,EUR,350,g,0.35,35.71,350 ml,4.90 €,piece,40,M
+K-302,Glass Teapot,Théière en verre borosilicaté,fr,29.90,24.90,EUR,0.8,kg,1.2,37.38,1.2 L,6.90 €,piece,12,
+K-303,Bamboo Cutting Board,Reversible bamboo board,en,18.00,,USD,1.2,kg,,,,6.90 €,piece,25,L
+K-304,Steel Whisk,Schneebesen aus Edelstahl,de,8.40,7.90,EUR,120,g,,70.00,,3.90 €,piece,55,S
+K-305,Espresso Cups,Tasses à expresso en porcelaine,fr,24.00,,EUR,540,g,0.48,44.44,480 ml,4.90 €,pack of 6,18,
+K-306,Water Bottle,Insulated steel bottle,en,15.00,12.00,USD,0.25,kg,0.75,,750 ml,4.90 €,piece,30,M
+K-307,Tea Towels,Geschirrtücher aus Baumwolle,de,9.90,,EUR,200,g,,49.50,,3.90 €,pack of 2,60,
+K-308,Cast Iron Pan,Pre-seasoned cast iron pan,en,56.00,49.00,EUR,2.5,kg,,22.40,,9.90 €,piece,6,L

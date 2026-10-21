@@ -1,0 +1,290 @@
+{
+ "tables": {
+  "incoming.csv": {
+   "read": {
+    "encoding": "utf-8",
+    "delimiter": ",",
+    "has_header": true,
+    "header": [
+     "Réf fournisseur",
+     "Modèle",
+     "Taille",
+     "Coloris",
+     "Prix barré",
+     "Prix soldé",
+     "Qté dispo",
+     "Colisage"
+    ],
+    "rows": 10,
+    "probability": 0.98
+   },
+   "context": {
+    "table": "incoming",
+    "context_columns": {},
+    "source_context": {},
+    "warnings": []
+   },
+   "schema": {
+    "create_table": {
+     "id": "r_create_incoming",
+     "type": "create_table",
+     "definition": {
+      "table_id": "t_incoming",
+      "sql_name": "incoming",
+      "columns": [
+       {
+        "column_id": "c_ref_fournisseur",
+        "sql_name": "ref_fournisseur",
+        "header": "Réf fournisseur",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_modele",
+        "sql_name": "modele",
+        "header": "Modèle",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_taille",
+        "sql_name": "taille",
+        "header": "Taille",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_coloris",
+        "sql_name": "coloris",
+        "header": "Coloris",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_prix_barre",
+        "sql_name": "prix_barre",
+        "header": "Prix barré",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_prix_solde",
+        "sql_name": "prix_solde",
+        "header": "Prix soldé",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_qte_dispo",
+        "sql_name": "qte_dispo",
+        "header": "Qté dispo",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_colisage",
+        "sql_name": "colisage",
+        "header": "Colisage",
+        "sql_type": "TEXT",
+        "nullable": true
+       }
+      ],
+      "primary_key": [
+       "c_ref_fournisseur"
+      ],
+      "foreign_keys": []
+     }
+    },
+    "warnings": []
+   },
+   "roles": {
+    "columns": {
+     "Réf fournisseur": {
+      "role": "dedicated_key",
+      "kind": "record_reference",
+      "level": "individual_record"
+     },
+     "Modèle": {
+      "role": "descriptive_base",
+      "kind": "name"
+     },
+     "Taille": {
+      "role": "qualifier",
+      "kind": "attribute"
+     },
+     "Coloris": {
+      "role": "qualifier",
+      "kind": "attribute"
+     },
+     "Prix barré": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Prix soldé": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Qté dispo": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Colisage": {
+      "role": "none",
+      "kind": "value_or_text",
+      "flagged": true
+     }
+    },
+    "warnings": [
+     {
+      "column": "Colisage",
+      "problem": "kind uncertain",
+      "answer": "value_or_text",
+      "probability": 0.57
+     }
+    ]
+   },
+   "keys": {
+    "warnings": []
+   },
+   "profile": {
+    "rows": 10,
+    "columns": {
+     "Réf fournisseur": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "FRN-51032",
+       "FRN-51034",
+       "FRN-60210",
+       "FRN-60211",
+       "FRN-70042",
+       "FRN-70043",
+       "FRN-88121",
+       "FRN-88122",
+       "FRN-88123",
+       "FRN-88124"
+      ]
+     },
+     "Modèle": {
+      "empty": 0,
+      "distinct": 4,
+      "max_repeat": 4,
+      "values": [
+       "Baskets toile",
+       "Jean slim",
+       "Sweat zippé à capuche",
+       "T-shirt basique"
+      ],
+      "determines": [
+       "Prix barré",
+       "Prix soldé",
+       "Colisage"
+      ]
+     },
+     "Taille": {
+      "empty": 0,
+      "distinct": 7,
+      "max_repeat": 3,
+      "values": [
+       "32",
+       "34",
+       "42",
+       "43",
+       "L",
+       "M",
+       "S"
+      ]
+     },
+     "Coloris": {
+      "empty": 0,
+      "distinct": 5,
+      "max_repeat": 3,
+      "values": [
+       "Blanc",
+       "Bleu",
+       "Gris",
+       "Indigo",
+       "Noir"
+      ],
+      "determines": [
+       "Modèle",
+       "Prix barré",
+       "Prix soldé",
+       "Colisage"
+      ]
+     },
+     "Prix barré": {
+      "empty": 0,
+      "distinct": 4,
+      "max_repeat": 4,
+      "values": [
+       "15,00",
+       "45,00",
+       "49,00",
+       "59,90"
+      ],
+      "determines": [
+       "Modèle",
+       "Prix soldé",
+       "Colisage"
+      ]
+     },
+     "Prix soldé": {
+      "empty": 0,
+      "distinct": 4,
+      "max_repeat": 4,
+      "values": [
+       "12,00",
+       "36,00",
+       "39,20",
+       "47,90"
+      ],
+      "determines": [
+       "Modèle",
+       "Prix barré",
+       "Colisage"
+      ]
+     },
+     "Qté dispo": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "1",
+       "10",
+       "11",
+       "14",
+       "18",
+       "2",
+       "30",
+       "4",
+       "6",
+       "8"
+      ]
+     },
+     "Colisage": {
+      "empty": 0,
+      "distinct": 4,
+      "max_repeat": 4,
+      "values": [
+       "10",
+       "4",
+       "5",
+       "6"
+      ],
+      "determines": [
+       "Modèle",
+       "Prix barré",
+       "Prix soldé"
+      ]
+     }
+    }
+   },
+   "joins": {
+    "groups": [],
+    "warnings": []
+   }
+  }
+ }
+}

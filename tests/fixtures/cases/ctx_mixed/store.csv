@@ -1,0 +1,9 @@
+sku,title,description,price,sale_price,weight_kg,volume_l,price_per_kg
+B-201,Orange Juice,Fresh orange juice,3.29,,1.05,1.0,3.13
+B-202,Apple Juice,Pure apple juice,3.19,2.89,1.04,1.0,3.07
+B-203,Sparkling Water,Natural sparkling mineral water,0.89,,1.52,1.5,0.59
+B-204,Cold Brew Coffee,Cold brewed coffee,4.20,,0.26,0.25,16.15
+B-205,Green Tea Drink,Cold infused green tea,2.50,2.20,0.52,0.5,4.81
+B-206,Lemonade,Classic cloudy lemonade,2.10,,0.34,0.33,6.18
+B-207,Tomato Juice,Organic tomato juice,2.80,,1.02,1.0,2.75
+B-208,Coconut Water,Pure coconut water,3.90,3.50,0.53,0.5,7.36

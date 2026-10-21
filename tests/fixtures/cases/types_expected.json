@@ -1,0 +1,1667 @@
+{
+ "context/catalog.csv": {
+  "sku": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "name": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "description": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "description_language": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "price": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "sale_price": {
+   "sql_type": "REAL",
+   "nullable": true
+  },
+  "currency": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "weight": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "weight_unit": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Volume (L)": {
+   "sql_type": "REAL",
+   "nullable": true
+  },
+  "Price per kg (EUR)": {
+   "sql_type": "REAL",
+   "nullable": true
+  },
+  "net_content": {
+   "sql_type": "TEXT",
+   "nullable": true
+  },
+  "shipping_fee": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "sold_by": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "stock": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "size": {
+   "sql_type": "TEXT",
+   "nullable": true
+  }
+ },
+ "ctx_supplier/incoming.csv": {
+  "R\u00e9f.": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "D\u00e9signation": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Prix de vente": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Devise": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Poids": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Unit\u00e9 poids": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Stock": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "ctx_supplier/store.csv": {
+  "sku": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "name": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "price": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "weight_kg": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "stock": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "ctx_mixed/incoming.csv": {
+  "SKU": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Title": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Description": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Description language": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Price": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Sale price": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Currency": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Weight unit (kg)": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Weight": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Volume (litres)": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Price EUR/kg": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "ctx_mixed/store.csv": {
+  "sku": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "title": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "description": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "price": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "sale_price": {
+   "sql_type": "REAL",
+   "nullable": true
+  },
+  "weight_kg": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "volume_l": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "price_per_kg": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "ctx_store/store.csv": {
+  "sku": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "name": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "price": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "currency": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "weight": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "weight_unit": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "stock": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "ctx_store/incoming.csv": {
+  "SKU": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Product": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Unit price": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Weight": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Stock": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "ctx_traps/products.csv": {
+  "sku": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "name": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Price (incl. VAT)": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Currency code": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Capacity (GB)": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Weight (kg)": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Unit": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Stock": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Color": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Lang": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "french/fournisseurs.csv": {
+  "R\u00e9f fournisseur": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Raison sociale": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Ville": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "D\u00e9lai (jours)": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Remise": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "french/tarifs.csv": {
+  "R\u00e9f article": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "R\u00e9f fournisseur": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Prix HT": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Date tarif": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "shop/products.csv": {
+  "sku": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "name": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "brand": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "price": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "ean": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "shop/customers.csv": {
+  "customer_id": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "name": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "email": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "city": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "shop/orders.csv": {
+  "order_id": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "customer_id": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "order_date": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "status": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "shop/order_lines.csv": {
+  "order_id": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "line_no": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "product_sku": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "quantity": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "unit_price": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "flat/orders_flat.csv": {
+  "order_id": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "order_date": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "status": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "customer_id": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "customer_name": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "customer_email": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "customer_city": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "line_no": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "product_sku": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "product_name": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "brand": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "quantity": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "unit_price": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "store/store.csv": {
+  "sku": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "name": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "brand": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "price": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "stock": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "ean": {
+   "sql_type": "TEXT",
+   "nullable": true
+  }
+ },
+ "noheader/inventaire.csv": {
+  "col_1": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "col_2": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "col_3": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "basic/incoming.csv": {
+  "R\u00e9f\u00e9rence": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "D\u00e9signation": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Marque": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Code EAN": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Prix TTC": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Stock dispo": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "fashion_variants/incoming.csv": {
+  "R\u00e9f fournisseur": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Mod\u00e8le": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Taille": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Coloris": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Prix barr\u00e9": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Prix sold\u00e9": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Qt\u00e9 dispo": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Colisage": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "grocery_german/incoming.csv": {
+  "GTIN-13": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Artikelbezeichnung": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Gewicht (kg)": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "VK-Preis": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Grundpreis (\u20ac/kg)": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Bestand": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Lieferant": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "MHD": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Lagerort": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "reverse_composite/incoming.csv": {
+  "SKU": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Brand": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Model": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Capacity": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Part No.": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Unit Cost": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "MSRP": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Qty Available": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "no_headers/incoming.csv": {
+  "col1": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "col2": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "col3": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "col4": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "col5": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "col6": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "numeric_decoys/incoming.csv": {
+  "R\u00e9f\u00e9rence": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "D\u00e9signation": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Prix achat HT": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Prix TTC": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "TVA (%)": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "\u00c9co-part.": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Stock": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Stock mini": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Qt\u00e9 command\u00e9e": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "D\u00e9lai (j)": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Disponibilit\u00e9": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "identifier_traps/incoming.csv": {
+  "Code": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "R\u00e9f.": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "ASIN": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "UPC": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Nom": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Prix": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Qt\u00e9": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "hard_supplier/incoming.csv": {
+  "Art.": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Libell\u00e9 article": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Couleur": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "PU HT": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "PVC": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Qt\u00e9 mag.": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Qt\u00e9 entrep\u00f4t": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Poids (g)": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "GTIN": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Date maj": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "furniture_parsing/incoming.csv": {
+  "R\u00e9f.": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Article": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Dimensions (L x l x H)": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Colis (cm)": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Poids net": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Poids brut": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Coloris / Finition": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Prix public": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Dispo": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "EAN": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "family_updates/incoming.csv": {
+  "Model ref": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Product": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Size": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "Price": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "joins_chain/export.csv": {
+  "order_id": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "line_no": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "product_sku": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "quantity": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "unit_price": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "order_date": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "customer_id": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "customer_name": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "customer_city": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "joins_star/export.csv": {
+  "order_id": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "line_no": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "product_sku": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "quantity": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "unit_price": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "order_date": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "status": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "product_name": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "brand": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "joins_nokey/export.csv": {
+  "order_id": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "line_no": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "product_sku": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "quantity": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "unit_price": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "order_date": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "customer_name": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "customer_city": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ },
+ "joins_one_line/export.csv": {
+  "order_id": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "line_no": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "product_sku": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "quantity": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "unit_price": {
+   "sql_type": "REAL",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "order_date": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "customer_id": {
+   "sql_type": "INTEGER",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "customer_name": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  },
+  "customer_city": {
+   "sql_type": "TEXT",
+   "nullable": [
+    true,
+    false
+   ]
+  }
+ }
+}

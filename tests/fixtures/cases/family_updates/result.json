@@ -1,0 +1,159 @@
+{
+ "tables": {
+  "incoming.csv": {
+   "read": {
+    "encoding": "utf-8",
+    "delimiter": ",",
+    "has_header": true,
+    "header": [
+     "Model ref",
+     "Product",
+     "Size",
+     "Price"
+    ],
+    "rows": 4,
+    "probability": 0.98
+   },
+   "context": {
+    "table": "incoming",
+    "context_columns": {},
+    "source_context": {},
+    "warnings": []
+   },
+   "schema": {
+    "create_table": {
+     "id": "r_create_incoming",
+     "type": "create_table",
+     "definition": {
+      "table_id": "t_incoming",
+      "sql_name": "incoming",
+      "columns": [
+       {
+        "column_id": "c_model_ref",
+        "sql_name": "model_ref",
+        "header": "Model ref",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_product",
+        "sql_name": "product",
+        "header": "Product",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_size",
+        "sql_name": "size",
+        "header": "Size",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_price",
+        "sql_name": "price",
+        "header": "Price",
+        "sql_type": "TEXT",
+        "nullable": true
+       }
+      ],
+      "primary_key": [],
+      "foreign_keys": []
+     }
+    },
+    "warnings": []
+   },
+   "roles": {
+    "columns": {
+     "Model ref": {
+      "role": "dedicated_key",
+      "kind": "model_reference",
+      "level": "product_family"
+     },
+     "Product": {
+      "role": "descriptive_base",
+      "kind": "name"
+     },
+     "Size": {
+      "role": "qualifier",
+      "kind": "attribute"
+     },
+     "Price": {
+      "role": "none",
+      "kind": "value_or_text"
+     }
+    },
+    "warnings": []
+   },
+   "keys": {
+    "warnings": [
+     {
+      "column": null,
+      "problem": "no single-column primary key (composite: later)"
+     }
+    ]
+   },
+   "profile": {
+    "rows": 4,
+    "columns": {
+     "Model ref": {
+      "empty": 0,
+      "distinct": 3,
+      "max_repeat": 2,
+      "values": [
+       "JN-210",
+       "SW-330",
+       "TS-001"
+      ],
+      "determines": [
+       "Product"
+      ]
+     },
+     "Product": {
+      "empty": 0,
+      "distinct": 3,
+      "max_repeat": 2,
+      "values": [
+       "Basic T-Shirt",
+       "Slim Jeans",
+       "Zip Hoodie"
+      ],
+      "determines": [
+       "Model ref"
+      ]
+     },
+     "Size": {
+      "empty": 2,
+      "distinct": 2,
+      "max_repeat": 1,
+      "values": [
+       "32",
+       "34"
+      ]
+     },
+     "Price": {
+      "empty": 0,
+      "distinct": 4,
+      "max_repeat": 1,
+      "values": [
+       "17.00",
+       "49.00",
+       "61.90",
+       "62.90"
+      ]
+     }
+    }
+   },
+   "joins": {
+    "groups": [],
+    "warnings": [
+     {
+      "column": "Model ref",
+      "problem": "joined record uncertain: not split",
+      "probability": 0.44
+     }
+    ]
+   }
+  }
+ }
+}

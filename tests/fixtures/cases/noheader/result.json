@@ -1,0 +1,392 @@
+{
+ "tables": {
+  "inventaire.csv": {
+   "read": {
+    "encoding": "utf-8",
+    "delimiter": ";",
+    "has_header": false,
+    "header": [
+     "col_1",
+     "col_2",
+     "col_3"
+    ],
+    "rows": 5,
+    "probability": 0.05
+   },
+   "context": {
+    "table": "inventaire",
+    "context_columns": {},
+    "source_context": {},
+    "warnings": []
+   },
+   "schema": {
+    "create_table": {
+     "id": "r_create_inventaire",
+     "type": "create_table",
+     "definition": {
+      "table_id": "t_inventaire",
+      "sql_name": "inventaire",
+      "columns": [
+       {
+        "column_id": "c_col_1",
+        "sql_name": "col_1",
+        "header": "col_1",
+        "sql_type": "TEXT",
+        "nullable": false
+       },
+       {
+        "column_id": "c_col_2",
+        "sql_name": "col_2",
+        "header": "col_2",
+        "sql_type": "INTEGER",
+        "nullable": true
+       },
+       {
+        "column_id": "c_col_3",
+        "sql_name": "col_3",
+        "header": "col_3",
+        "sql_type": "TEXT",
+        "nullable": true
+       }
+      ],
+      "primary_key": [
+       "c_col_1"
+      ],
+      "foreign_keys": []
+     }
+    },
+    "warnings": []
+   },
+   "roles": {
+    "columns": {
+     "col_1": {
+      "role": "dedicated_key",
+      "kind": "record_reference",
+      "level": "individual_record"
+     },
+     "col_2": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "col_3": {
+      "role": "none",
+      "kind": "value_or_text"
+     }
+    },
+    "warnings": []
+   },
+   "keys": {
+    "warnings": []
+   },
+   "profile": {
+    "rows": 5,
+    "columns": {
+     "col_1": {
+      "empty": 0,
+      "distinct": 5,
+      "max_repeat": 1,
+      "values": [
+       "A-1001",
+       "A-1002",
+       "A-1003",
+       "A-1004",
+       "A-1005"
+      ]
+     },
+     "col_2": {
+      "empty": 0,
+      "distinct": 5,
+      "max_repeat": 1,
+      "values": [
+       "0",
+       "12",
+       "3",
+       "35",
+       "7"
+      ]
+     },
+     "col_3": {
+      "empty": 0,
+      "distinct": 3,
+      "max_repeat": 2,
+      "values": [
+       "2026-09-01",
+       "2026-09-03",
+       "2026-09-04"
+      ]
+     }
+    }
+   },
+   "joins": {
+    "groups": [],
+    "warnings": []
+   }
+  }
+ },
+ "store_schema": {
+  "tables": [
+   {
+    "id": "r_create_inventaire",
+    "type": "create_table",
+    "definition": {
+     "table_id": "t_inventaire",
+     "sql_name": "inventaire",
+     "columns": [
+      {
+       "column_id": "c_col_1",
+       "sql_name": "col_1",
+       "header": "col_1",
+       "sql_type": "TEXT",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_col_2",
+       "sql_name": "col_2",
+       "header": "col_2",
+       "sql_type": "INTEGER",
+       "nullable": true,
+       "default": null
+      },
+      {
+       "column_id": "c_col_3",
+       "sql_name": "col_3",
+       "header": "col_3",
+       "sql_type": "TEXT",
+       "nullable": true,
+       "default": null
+      }
+     ],
+     "primary_key": [
+      "c_col_1"
+     ],
+     "foreign_keys": []
+    },
+    "query": null
+   }
+  ],
+  "metadata_table": {
+   "id": "r_create__columns",
+   "type": "create_table",
+   "definition": {
+    "table_id": "t__columns",
+    "sql_name": "_columns",
+    "columns": [
+     {
+      "column_id": "c_table_id",
+      "sql_name": "table_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": false,
+      "default": null
+     },
+     {
+      "column_id": "c_column_id",
+      "sql_name": "column_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": false,
+      "default": null
+     },
+     {
+      "column_id": "c_source_file",
+      "sql_name": "source_file",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_source_header",
+      "sql_name": "source_header",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_position",
+      "sql_name": "position",
+      "header": null,
+      "sql_type": "INTEGER",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_role",
+      "sql_name": "role",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_kind",
+      "sql_name": "kind",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_level",
+      "sql_name": "level",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_unit",
+      "sql_name": "unit",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_unit_kind",
+      "sql_name": "unit_kind",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_unit_from",
+      "sql_name": "unit_from",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_context_table_id",
+      "sql_name": "context_table_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_context_column_id",
+      "sql_name": "context_column_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_edited_by",
+      "sql_name": "edited_by",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": false,
+      "default": null
+     },
+     {
+      "column_id": "c_extra_json",
+      "sql_name": "extra_json",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     }
+    ],
+    "primary_key": [
+     "c_table_id",
+     "c_column_id"
+    ],
+    "foreign_keys": []
+   },
+   "query": null
+  },
+  "metadata": [
+   {
+    "table_id": "t_inventaire",
+    "column_id": "c_col_1",
+    "source_file": "inventaire.csv",
+    "source_header": "col_1",
+    "position": 0,
+    "role": "dedicated_key",
+    "kind": "record_reference",
+    "level": "individual_record",
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_inventaire",
+    "column_id": "c_col_2",
+    "source_file": "inventaire.csv",
+    "source_header": "col_2",
+    "position": 1,
+    "role": "none",
+    "kind": "value_or_text",
+    "level": null,
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_inventaire",
+    "column_id": "c_col_3",
+    "source_file": "inventaire.csv",
+    "source_header": "col_3",
+    "position": 2,
+    "role": "none",
+    "kind": "value_or_text",
+    "level": null,
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   }
+  ],
+  "export": [
+   {
+    "file": "inventaire.csv",
+    "has_header": false,
+    "root": "t_inventaire",
+    "columns": [
+     {
+      "header": "col_1",
+      "table_id": "t_inventaire",
+      "column_id": "c_col_1",
+      "via": []
+     },
+     {
+      "header": "col_2",
+      "table_id": "t_inventaire",
+      "column_id": "c_col_2",
+      "via": []
+     },
+     {
+      "header": "col_3",
+      "table_id": "t_inventaire",
+      "column_id": "c_col_3",
+      "via": []
+     }
+    ]
+   }
+  ],
+  "problems": [],
+  "round_trip": {
+   "value_differences": 0,
+   "number_format_cells": 0,
+   "number_format_columns": [],
+   "shown": []
+  }
+ }
+}

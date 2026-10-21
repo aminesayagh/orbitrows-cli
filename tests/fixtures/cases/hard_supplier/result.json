@@ -1,0 +1,355 @@
+{
+ "tables": {
+  "incoming.csv": {
+   "read": {
+    "encoding": "utf-8",
+    "delimiter": ",",
+    "has_header": true,
+    "header": [
+     "Art.",
+     "Libellé article",
+     "Couleur",
+     "PU HT",
+     "PVC",
+     "Qté mag.",
+     "Qté entrepôt",
+     "Poids (g)",
+     "GTIN",
+     "Date maj"
+    ],
+    "rows": 10,
+    "probability": 0.98
+   },
+   "context": {
+    "table": "incoming",
+    "context_columns": {},
+    "source_context": {
+     "Poids (g)": {
+      "kind": "physical_unit",
+      "from": "header",
+      "unit": "g"
+     }
+    },
+    "warnings": [
+     {
+      "column": "PU HT",
+      "problem": "context option uncertain",
+      "answer": "none",
+      "probability": 0.67
+     },
+     {
+      "column": "Qté entrepôt",
+      "problem": "context option uncertain",
+      "answer": "none",
+      "probability": 0.77
+     }
+    ]
+   },
+   "schema": {
+    "create_table": {
+     "id": "r_create_incoming",
+     "type": "create_table",
+     "definition": {
+      "table_id": "t_incoming",
+      "sql_name": "incoming",
+      "columns": [
+       {
+        "column_id": "c_art",
+        "sql_name": "art",
+        "header": "Art.",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_libelle_article",
+        "sql_name": "libelle_article",
+        "header": "Libellé article",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_couleur",
+        "sql_name": "couleur",
+        "header": "Couleur",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_pu_ht",
+        "sql_name": "pu_ht",
+        "header": "PU HT",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_pvc",
+        "sql_name": "pvc",
+        "header": "PVC",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_qte_mag",
+        "sql_name": "qte_mag",
+        "header": "Qté mag.",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_qte_entrepot",
+        "sql_name": "qte_entrepot",
+        "header": "Qté entrepôt",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_poids_g",
+        "sql_name": "poids_g",
+        "header": "Poids (g)",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_gtin",
+        "sql_name": "gtin",
+        "header": "GTIN",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_date_maj",
+        "sql_name": "date_maj",
+        "header": "Date maj",
+        "sql_type": "TEXT",
+        "nullable": true
+       }
+      ],
+      "primary_key": [
+       "c_art"
+      ],
+      "foreign_keys": []
+     }
+    },
+    "warnings": []
+   },
+   "roles": {
+    "columns": {
+     "Art.": {
+      "role": "dedicated_key",
+      "kind": "record_reference",
+      "level": "individual_record"
+     },
+     "Libellé article": {
+      "role": "descriptive_base",
+      "kind": "name"
+     },
+     "Couleur": {
+      "role": "qualifier",
+      "kind": "attribute"
+     },
+     "PU HT": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "PVC": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Qté mag.": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Qté entrepôt": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Poids (g)": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "GTIN": {
+      "role": "dedicated_key",
+      "kind": "record_reference",
+      "level": "individual_record"
+     },
+     "Date maj": {
+      "role": "none",
+      "kind": "value_or_text"
+     }
+    },
+    "warnings": []
+   },
+   "keys": {
+    "warnings": []
+   },
+   "profile": {
+    "rows": 10,
+    "columns": {
+     "Art.": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "A1001",
+       "A1002",
+       "A1003",
+       "A1004",
+       "A1005",
+       "A1006",
+       "A1007",
+       "A1008",
+       "A1009",
+       "A1011"
+      ]
+     },
+     "Libellé article": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "Amazon Basics - HDMI Cable 2m",
+       "Anker - USB-C Hub 7 in 1",
+       "Bose - QuietComfort 45",
+       "Corsair - Mechanical Keyboard K70 RGB",
+       "Dell - Monitor 27in 4K U2723QE",
+       "Logitech - MX Keys S",
+       "Logitech - Webcam C920 HD Pro",
+       "Logitech - Wireless Mouse M200",
+       "Rain Design - Laptop Stand Aluminium",
+       "Samsung - External SSD 1TB T7"
+      ]
+     },
+     "Couleur": {
+      "empty": 0,
+      "distinct": 6,
+      "max_repeat": 5,
+      "values": [
+       "Argent",
+       "Blanc",
+       "Bleu",
+       "Graphite",
+       "Gris",
+       "Noir"
+      ]
+     },
+     "PU HT": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "107,50",
+       "18,25",
+       "249,17",
+       "35,00",
+       "49,99",
+       "499,17",
+       "66,58",
+       "7,49",
+       "90,83",
+       "91,58"
+      ]
+     },
+     "PVC": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "109,00 €",
+       "109,90 €",
+       "129,00 €",
+       "21,90 €",
+       "299,00 €",
+       "42,00 €",
+       "59,99 €",
+       "599,00 €",
+       "79,90 €",
+       "8,99 €"
+      ]
+     },
+     "Qté mag.": {
+      "empty": 0,
+      "distinct": 9,
+      "max_repeat": 2,
+      "values": [
+       "0",
+       "1",
+       "10",
+       "2",
+       "3",
+       "4",
+       "40",
+       "5",
+       "6"
+      ]
+     },
+     "Qté entrepôt": {
+      "empty": 0,
+      "distinct": 9,
+      "max_repeat": 2,
+      "values": [
+       "0",
+       "110",
+       "12",
+       "15",
+       "16",
+       "20",
+       "3",
+       "30",
+       "5"
+      ]
+     },
+     "Poids (g)": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "120",
+       "1200",
+       "1500",
+       "162",
+       "240",
+       "58",
+       "6600",
+       "810",
+       "85",
+       "98"
+      ]
+     },
+     "GTIN": {
+      "empty": 1,
+      "distinct": 9,
+      "max_repeat": 1,
+      "values": [
+       "0017817800433",
+       "0194644002015",
+       "0843591050364",
+       "0848719043969",
+       "0884116417668",
+       "5099206061279",
+       "5099206089184",
+       "5099206109063",
+       "8806090308376"
+      ]
+     },
+     "Date maj": {
+      "empty": 0,
+      "distinct": 6,
+      "max_repeat": 2,
+      "values": [
+       "12/09/2026",
+       "15/09/2026",
+       "18/09/2026",
+       "20/09/2026",
+       "21/09/2026",
+       "22/09/2026"
+      ]
+     }
+    }
+   },
+   "joins": {
+    "groups": [],
+    "warnings": []
+   }
+  }
+ }
+}

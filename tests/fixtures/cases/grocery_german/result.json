@@ -1,0 +1,344 @@
+{
+ "tables": {
+  "incoming.csv": {
+   "read": {
+    "encoding": "utf-8",
+    "delimiter": ",",
+    "has_header": true,
+    "header": [
+     "GTIN-13",
+     "Artikelbezeichnung",
+     "Gewicht (kg)",
+     "VK-Preis",
+     "Grundpreis (€/kg)",
+     "Bestand",
+     "Lieferant",
+     "MHD",
+     "Lagerort"
+    ],
+    "rows": 10,
+    "probability": 0.98
+   },
+   "context": {
+    "table": "incoming",
+    "context_columns": {},
+    "source_context": {
+     "Gewicht (kg)": {
+      "kind": "physical_unit",
+      "from": "header",
+      "unit": "kg"
+     },
+     "Grundpreis (€/kg)": {
+      "kind": "compound_unit",
+      "from": "header",
+      "unit": "EUR/kg"
+     }
+    },
+    "warnings": [
+     {
+      "column": "VK-Preis",
+      "problem": "context option uncertain",
+      "answer": "none",
+      "probability": 0.71
+     }
+    ]
+   },
+   "schema": {
+    "create_table": {
+     "id": "r_create_incoming",
+     "type": "create_table",
+     "definition": {
+      "table_id": "t_incoming",
+      "sql_name": "incoming",
+      "columns": [
+       {
+        "column_id": "c_gtin_13",
+        "sql_name": "gtin_13",
+        "header": "GTIN-13",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_artikelbezeichnung",
+        "sql_name": "artikelbezeichnung",
+        "header": "Artikelbezeichnung",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_gewicht_kg",
+        "sql_name": "gewicht_kg",
+        "header": "Gewicht (kg)",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_vk_preis",
+        "sql_name": "vk_preis",
+        "header": "VK-Preis",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_grundpreis_kg",
+        "sql_name": "grundpreis_kg",
+        "header": "Grundpreis (€/kg)",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_bestand",
+        "sql_name": "bestand",
+        "header": "Bestand",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_lieferant",
+        "sql_name": "lieferant",
+        "header": "Lieferant",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_mhd",
+        "sql_name": "mhd",
+        "header": "MHD",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_lagerort",
+        "sql_name": "lagerort",
+        "header": "Lagerort",
+        "sql_type": "TEXT",
+        "nullable": true
+       }
+      ],
+      "primary_key": [
+       "c_gtin_13"
+      ],
+      "foreign_keys": []
+     }
+    },
+    "warnings": []
+   },
+   "roles": {
+    "columns": {
+     "GTIN-13": {
+      "role": "dedicated_key",
+      "kind": "record_reference",
+      "level": "individual_record"
+     },
+     "Artikelbezeichnung": {
+      "role": "descriptive_base",
+      "kind": "name"
+     },
+     "Gewicht (kg)": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "VK-Preis": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Grundpreis (€/kg)": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Bestand": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Lieferant": {
+      "role": "descriptive_base",
+      "kind": "name"
+     },
+     "MHD": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Lagerort": {
+      "role": "dedicated_key",
+      "kind": "record_reference",
+      "flagged": true,
+      "level": "individual_record"
+     }
+    },
+    "warnings": [
+     {
+      "column": "Lagerort",
+      "problem": "kind uncertain",
+      "answer": "record_reference",
+      "probability": 0.66
+     },
+     {
+      "column": "Lagerort",
+      "problem": "level uncertain",
+      "answer": "individual_record",
+      "probability": 0.71
+     }
+    ]
+   },
+   "keys": {
+    "warnings": []
+   },
+   "profile": {
+    "rows": 10,
+    "columns": {
+     "GTIN-13": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "3017620422003",
+       "3033710065967",
+       "3046920029759",
+       "3175681851849",
+       "3228857000166",
+       "4008400402222",
+       "5000159461122",
+       "7613035974685",
+       "8000500310427",
+       "8410076472175"
+      ]
+     },
+     "Artikelbezeichnung": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "Barilla Spaghetti Nr. 5 1 kg",
+       "Bonne Maman Erdbeer-Konfitüre 370 g",
+       "Chupa Chups 200 g",
+       "Ferrero Rocher 200 g",
+       "Harrys Sandwichbrot 500 g",
+       "Kinder Bueno 129 g",
+       "Lindt Excellence 70 % Kakao 100 g",
+       "Nescafé Gold 200 g",
+       "Nutella Nuss-Nougat-Creme 400 g",
+       "Snickers 4 x 50 g"
+      ]
+     },
+     "Gewicht (kg)": {
+      "empty": 0,
+      "distinct": 7,
+      "max_repeat": 4,
+      "values": [
+       "0,1",
+       "0,129",
+       "0,2",
+       "0,37",
+       "0,4",
+       "0,5",
+       "1"
+      ]
+     },
+     "VK-Preis": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "1,99",
+       "2,15",
+       "2,20",
+       "2,49",
+       "2,99",
+       "3,10",
+       "3,49",
+       "4,19",
+       "5,99",
+       "8,99"
+      ]
+     },
+     "Grundpreis (€/kg)": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "1,99",
+       "10,48",
+       "11,00",
+       "15,50",
+       "19,30",
+       "29,90",
+       "29,95",
+       "4,30",
+       "44,95",
+       "9,43"
+      ]
+     },
+     "Bestand": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "15",
+       "20",
+       "24",
+       "28",
+       "30",
+       "40",
+       "50",
+       "55",
+       "70",
+       "85"
+      ]
+     },
+     "Lieferant": {
+      "empty": 0,
+      "distinct": 7,
+      "max_repeat": 3,
+      "values": [
+       "Andros GmbH",
+       "Barilla GmbH",
+       "Ferrero Deutschland",
+       "Lindt & Sprüngli",
+       "Mars GmbH",
+       "Nestlé Deutschland",
+       "Perfetti Van Melle"
+      ]
+     },
+     "MHD": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "05.10.2026",
+       "15.01.2027",
+       "28.02.2027",
+       "30.04.2027",
+       "30.06.2027",
+       "30.09.2027",
+       "31.03.2027",
+       "31.05.2028",
+       "31.08.2028",
+       "31.12.2027"
+      ]
+     },
+     "Lagerort": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "R1-F1",
+       "R1-F4",
+       "R2-F1",
+       "R3-F1",
+       "R3-F2",
+       "R3-F3",
+       "R3-F4",
+       "R4-F1",
+       "R4-F3",
+       "R5-F2"
+      ]
+     }
+    }
+   },
+   "joins": {
+    "groups": [],
+    "warnings": []
+   }
+  }
+ }
+}

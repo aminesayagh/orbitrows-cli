@@ -1,0 +1,208 @@
+{
+ "context": {
+  "catalog": {
+   "pk": [
+    "sku"
+   ],
+   "refs": {}
+  }
+ },
+ "ctx_mixed": {
+  "store": {
+   "pk": [
+    "sku"
+   ],
+   "refs": {}
+  }
+ },
+ "ctx_store": {
+  "store": {
+   "pk": [
+    "sku"
+   ],
+   "refs": {}
+  }
+ },
+ "ctx_supplier": {
+  "store": {
+   "pk": [
+    "sku"
+   ],
+   "refs": {}
+  }
+ },
+ "ctx_traps": {
+  "products": {
+   "pk": [
+    "sku"
+   ],
+   "refs": {}
+  }
+ },
+ "flat": {
+  "orders_flat": {
+   "pk": [
+    "id"
+   ],
+   "refs": {
+    "order_id": "order",
+    "product_sku": "product"
+   }
+  },
+  "order": {
+   "pk": [
+    "order_id"
+   ],
+   "refs": {
+    "customer_id": "customer"
+   }
+  },
+  "customer": {
+   "pk": [
+    "customer_id"
+   ],
+   "refs": {}
+  },
+  "product": {
+   "pk": [
+    "product_sku"
+   ],
+   "refs": {}
+  }
+ },
+ "french": {
+  "fournisseurs": {
+   "pk": [
+    "ref_fournisseur"
+   ],
+   "refs": {}
+  },
+  "tarifs": {
+   "pk": [
+    "ref_article"
+   ],
+   "refs": {
+    "ref_fournisseur": "fournisseurs"
+   }
+  }
+ },
+ "joins_chain": {
+  "export": {
+   "pk": [
+    "id"
+   ],
+   "refs": {
+    "order_id": "order"
+   }
+  },
+  "order": {
+   "pk": [
+    "order_id"
+   ],
+   "refs": {
+    "customer_id": "customer"
+   }
+  },
+  "customer": {
+   "pk": [
+    "customer_id"
+   ],
+   "refs": {}
+  }
+ },
+ "joins_nokey": {
+  "export": {
+   "pk": [
+    "id"
+   ],
+   "refs": {
+    "order_id": "order"
+   }
+  },
+  "order": {
+   "pk": [
+    "order_id"
+   ],
+   "refs": {}
+  }
+ },
+ "joins_one_line": {
+  "export": {
+   "pk": [
+    "order_id"
+   ],
+   "refs": {
+    "customer_id": "customer"
+   }
+  },
+  "customer": {
+   "pk": [
+    "customer_id"
+   ],
+   "refs": {}
+  }
+ },
+ "joins_star": {
+  "export": {
+   "pk": [
+    "id"
+   ],
+   "refs": {
+    "product_sku": "product"
+   }
+  },
+  "product": {
+   "pk": [
+    "product_sku"
+   ],
+   "refs": {}
+  }
+ },
+ "noheader": {
+  "inventaire": {
+   "pk": [
+    "col_1"
+   ],
+   "refs": {}
+  }
+ },
+ "shop": {
+  "customers": {
+   "pk": [
+    "customer_id"
+   ],
+   "refs": {}
+  },
+  "order_lines": {
+   "pk": [
+    "id"
+   ],
+   "refs": {
+    "order_id": "orders",
+    "product_sku": "products"
+   }
+  },
+  "orders": {
+   "pk": [
+    "order_id"
+   ],
+   "refs": {
+    "customer_id": "customers"
+   }
+  },
+  "products": {
+   "pk": [
+    "sku"
+   ],
+   "refs": {}
+  }
+ },
+ "store": {
+  "store": {
+   "pk": [
+    "sku"
+   ],
+   "refs": {}
+  }
+ }
+}

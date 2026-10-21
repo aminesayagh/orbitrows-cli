@@ -1,0 +1,9 @@
+order_id,customer_id,order_date,status
+101,1,2026-09-01,shipped
+102,3,2026-09-02,shipped
+103,1,2026-09-05,pending
+104,2,2026-09-06,cancelled
+105,5,2026-09-08,shipped
+106,4,2026-09-10,pending
+107,3,2026-09-11,shipped
+108,2,2026-09-12,pending

@@ -1,0 +1,588 @@
+{
+ "tables": {
+  "store.csv": {
+   "read": {
+    "encoding": "utf-8",
+    "delimiter": ",",
+    "has_header": true,
+    "header": [
+     "sku",
+     "name",
+     "brand",
+     "price",
+     "stock",
+     "ean"
+    ],
+    "rows": 10,
+    "probability": 0.99
+   },
+   "context": {
+    "table": "store",
+    "context_columns": {},
+    "source_context": {},
+    "warnings": []
+   },
+   "schema": {
+    "create_table": {
+     "id": "r_create_store",
+     "type": "create_table",
+     "definition": {
+      "table_id": "t_store",
+      "sql_name": "store",
+      "columns": [
+       {
+        "column_id": "c_sku",
+        "sql_name": "sku",
+        "header": "sku",
+        "sql_type": "TEXT",
+        "nullable": false
+       },
+       {
+        "column_id": "c_name",
+        "sql_name": "name",
+        "header": "name",
+        "sql_type": "TEXT",
+        "nullable": false
+       },
+       {
+        "column_id": "c_brand",
+        "sql_name": "brand",
+        "header": "brand",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_price",
+        "sql_name": "price",
+        "header": "price",
+        "sql_type": "REAL",
+        "nullable": false
+       },
+       {
+        "column_id": "c_stock",
+        "sql_name": "stock",
+        "header": "stock",
+        "sql_type": "INTEGER",
+        "nullable": true
+       },
+       {
+        "column_id": "c_ean",
+        "sql_name": "ean",
+        "header": "ean",
+        "sql_type": "TEXT",
+        "nullable": true
+       }
+      ],
+      "primary_key": [
+       "c_sku"
+      ],
+      "foreign_keys": []
+     }
+    },
+    "warnings": []
+   },
+   "roles": {
+    "columns": {
+     "sku": {
+      "role": "dedicated_key",
+      "kind": "record_reference",
+      "level": "individual_record"
+     },
+     "name": {
+      "role": "descriptive_base",
+      "kind": "name"
+     },
+     "brand": {
+      "role": "qualifier",
+      "kind": "attribute"
+     },
+     "price": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "stock": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "ean": {
+      "role": "dedicated_key",
+      "kind": "record_reference",
+      "level": "individual_record"
+     }
+    },
+    "warnings": []
+   },
+   "keys": {
+    "warnings": []
+   },
+   "profile": {
+    "rows": 10,
+    "columns": {
+     "sku": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "A-1001",
+       "A-1002",
+       "A-1003",
+       "A-1004",
+       "A-1005",
+       "A-1006",
+       "A-1007",
+       "A-1008",
+       "A-1009",
+       "A-1010"
+      ]
+     },
+     "name": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "Desk Mat XL Black",
+       "External SSD 1TB T7",
+       "HDMI Cable 2m",
+       "Laptop Stand Alu",
+       "Mechanical Keyboard K70",
+       "Monitor 27in 4K U2723QE",
+       "Noise Cancelling Headphones QC45",
+       "USB-C Hub 7-in-1",
+       "Webcam C920 HD Pro",
+       "Wireless Mouse M200"
+      ]
+     },
+     "brand": {
+      "empty": 0,
+      "distinct": 8,
+      "max_repeat": 3,
+      "values": [
+       "Amazon Basics",
+       "Anker",
+       "Bose",
+       "Corsair",
+       "Dell",
+       "Logitech",
+       "Rain Design",
+       "Samsung"
+      ]
+     },
+     "price": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "109.00",
+       "129.00",
+       "19.90",
+       "24.90",
+       "299.00",
+       "45.50",
+       "59.99",
+       "619.00",
+       "79.90",
+       "8.99"
+      ]
+     },
+     "stock": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "0",
+       "12",
+       "150",
+       "18",
+       "23",
+       "3",
+       "31",
+       "4",
+       "42",
+       "7"
+      ]
+     },
+     "ean": {
+      "empty": 2,
+      "distinct": 8,
+      "max_repeat": 1,
+      "values": [
+       "0017817800433",
+       "0194644002015",
+       "0843591050364",
+       "0848719043969",
+       "0884116417668",
+       "5099206061279",
+       "5099206089184",
+       "8806090308376"
+      ]
+     }
+    }
+   },
+   "joins": {
+    "groups": [],
+    "warnings": []
+   }
+  }
+ },
+ "store_schema": {
+  "tables": [
+   {
+    "id": "r_create_store",
+    "type": "create_table",
+    "definition": {
+     "table_id": "t_store",
+     "sql_name": "store",
+     "columns": [
+      {
+       "column_id": "c_sku",
+       "sql_name": "sku",
+       "header": "sku",
+       "sql_type": "TEXT",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_name",
+       "sql_name": "name",
+       "header": "name",
+       "sql_type": "TEXT",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_brand",
+       "sql_name": "brand",
+       "header": "brand",
+       "sql_type": "TEXT",
+       "nullable": true,
+       "default": null
+      },
+      {
+       "column_id": "c_price",
+       "sql_name": "price",
+       "header": "price",
+       "sql_type": "REAL",
+       "nullable": false,
+       "default": null
+      },
+      {
+       "column_id": "c_stock",
+       "sql_name": "stock",
+       "header": "stock",
+       "sql_type": "INTEGER",
+       "nullable": true,
+       "default": null
+      },
+      {
+       "column_id": "c_ean",
+       "sql_name": "ean",
+       "header": "ean",
+       "sql_type": "TEXT",
+       "nullable": true,
+       "default": null
+      }
+     ],
+     "primary_key": [
+      "c_sku"
+     ],
+     "foreign_keys": []
+    },
+    "query": null
+   }
+  ],
+  "metadata_table": {
+   "id": "r_create__columns",
+   "type": "create_table",
+   "definition": {
+    "table_id": "t__columns",
+    "sql_name": "_columns",
+    "columns": [
+     {
+      "column_id": "c_table_id",
+      "sql_name": "table_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": false,
+      "default": null
+     },
+     {
+      "column_id": "c_column_id",
+      "sql_name": "column_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": false,
+      "default": null
+     },
+     {
+      "column_id": "c_source_file",
+      "sql_name": "source_file",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_source_header",
+      "sql_name": "source_header",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_position",
+      "sql_name": "position",
+      "header": null,
+      "sql_type": "INTEGER",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_role",
+      "sql_name": "role",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_kind",
+      "sql_name": "kind",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_level",
+      "sql_name": "level",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_unit",
+      "sql_name": "unit",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_unit_kind",
+      "sql_name": "unit_kind",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_unit_from",
+      "sql_name": "unit_from",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_context_table_id",
+      "sql_name": "context_table_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_context_column_id",
+      "sql_name": "context_column_id",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     },
+     {
+      "column_id": "c_edited_by",
+      "sql_name": "edited_by",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": false,
+      "default": null
+     },
+     {
+      "column_id": "c_extra_json",
+      "sql_name": "extra_json",
+      "header": null,
+      "sql_type": "TEXT",
+      "nullable": true,
+      "default": null
+     }
+    ],
+    "primary_key": [
+     "c_table_id",
+     "c_column_id"
+    ],
+    "foreign_keys": []
+   },
+   "query": null
+  },
+  "metadata": [
+   {
+    "table_id": "t_store",
+    "column_id": "c_sku",
+    "source_file": "store.csv",
+    "source_header": "sku",
+    "position": 0,
+    "role": "dedicated_key",
+    "kind": "record_reference",
+    "level": "individual_record",
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_store",
+    "column_id": "c_name",
+    "source_file": "store.csv",
+    "source_header": "name",
+    "position": 1,
+    "role": "descriptive_base",
+    "kind": "name",
+    "level": null,
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_store",
+    "column_id": "c_brand",
+    "source_file": "store.csv",
+    "source_header": "brand",
+    "position": 2,
+    "role": "qualifier",
+    "kind": "attribute",
+    "level": null,
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_store",
+    "column_id": "c_price",
+    "source_file": "store.csv",
+    "source_header": "price",
+    "position": 3,
+    "role": "none",
+    "kind": "value_or_text",
+    "level": null,
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_store",
+    "column_id": "c_stock",
+    "source_file": "store.csv",
+    "source_header": "stock",
+    "position": 4,
+    "role": "none",
+    "kind": "value_or_text",
+    "level": null,
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   },
+   {
+    "table_id": "t_store",
+    "column_id": "c_ean",
+    "source_file": "store.csv",
+    "source_header": "ean",
+    "position": 5,
+    "role": "dedicated_key",
+    "kind": "record_reference",
+    "level": "individual_record",
+    "unit": null,
+    "unit_kind": null,
+    "unit_from": null,
+    "context_table_id": null,
+    "context_column_id": null,
+    "edited_by": "import",
+    "extra_json": null
+   }
+  ],
+  "export": [
+   {
+    "file": "store.csv",
+    "has_header": true,
+    "root": "t_store",
+    "columns": [
+     {
+      "header": "sku",
+      "table_id": "t_store",
+      "column_id": "c_sku",
+      "via": []
+     },
+     {
+      "header": "name",
+      "table_id": "t_store",
+      "column_id": "c_name",
+      "via": []
+     },
+     {
+      "header": "brand",
+      "table_id": "t_store",
+      "column_id": "c_brand",
+      "via": []
+     },
+     {
+      "header": "price",
+      "table_id": "t_store",
+      "column_id": "c_price",
+      "via": []
+     },
+     {
+      "header": "stock",
+      "table_id": "t_store",
+      "column_id": "c_stock",
+      "via": []
+     },
+     {
+      "header": "ean",
+      "table_id": "t_store",
+      "column_id": "c_ean",
+      "via": []
+     }
+    ]
+   }
+  ],
+  "problems": [],
+  "round_trip": {
+   "value_differences": 0,
+   "number_format_cells": 8,
+   "number_format_columns": [
+    "store.csv: price"
+   ],
+   "shown": []
+  }
+ }
+}

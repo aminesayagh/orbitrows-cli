@@ -1,0 +1,191 @@
+{
+ "context": {
+  "primary_key": {
+   "catalog.csv": "sku"
+  },
+  "foreign_keys": []
+ },
+ "ctx_supplier": {
+  "primary_key": {
+   "incoming.csv": "Réf.",
+   "store.csv": "sku"
+  },
+  "foreign_keys": []
+ },
+ "ctx_mixed": {
+  "primary_key": {
+   "incoming.csv": "SKU",
+   "store.csv": "sku"
+  },
+  "foreign_keys": []
+ },
+ "ctx_store": {
+  "primary_key": {
+   "incoming.csv": "SKU",
+   "store.csv": "sku"
+  },
+  "foreign_keys": []
+ },
+ "ctx_traps": {
+  "primary_key": {
+   "products.csv": "sku"
+  },
+  "foreign_keys": []
+ },
+ "french": {
+  "primary_key": {
+   "fournisseurs.csv": "Réf fournisseur",
+   "tarifs.csv": "Réf article"
+  },
+  "foreign_keys": [
+   [
+    "tarifs.csv",
+    "Réf fournisseur",
+    "fournisseurs.csv",
+    "Réf fournisseur"
+   ]
+  ]
+ },
+ "shop": {
+  "primary_key": {
+   "customers.csv": "customer_id",
+   "orders.csv": "order_id",
+   "order_lines.csv": null,
+   "products.csv": "sku"
+  },
+  "foreign_keys": [
+   [
+    "orders.csv",
+    "customer_id",
+    "customers.csv",
+    "customer_id"
+   ],
+   [
+    "order_lines.csv",
+    "order_id",
+    "orders.csv",
+    "order_id"
+   ],
+   [
+    "order_lines.csv",
+    "product_sku",
+    "products.csv",
+    "sku"
+   ]
+  ]
+ },
+ "flat": {
+  "primary_key": {
+   "orders_flat.csv": null
+  },
+  "foreign_keys": []
+ },
+ "store": {
+  "primary_key": {
+   "store.csv": "sku"
+  },
+  "foreign_keys": []
+ },
+ "noheader": {
+  "primary_key": {
+   "inventaire.csv": "col_1"
+  },
+  "foreign_keys": []
+ },
+ "basic": {
+  "primary_key": {
+   "incoming.csv": "Référence"
+  },
+  "foreign_keys": []
+ },
+ "fashion_variants": {
+  "primary_key": {
+   "incoming.csv": "Réf fournisseur"
+  },
+  "foreign_keys": []
+ },
+ "grocery_german": {
+  "primary_key": {
+   "incoming.csv": "GTIN-13"
+  },
+  "foreign_keys": []
+ },
+ "reverse_composite": {
+  "primary_key": {
+   "incoming.csv": [
+    "SKU",
+    "Part No."
+   ]
+  },
+  "foreign_keys": []
+ },
+ "no_headers": {
+  "primary_key": {
+   "incoming.csv": "col3"
+  },
+  "foreign_keys": []
+ },
+ "numeric_decoys": {
+  "primary_key": {
+   "incoming.csv": "Référence"
+  },
+  "foreign_keys": []
+ },
+ "identifier_traps": {
+  "primary_key": {
+   "incoming.csv": [
+    "Réf.",
+    "ASIN"
+   ]
+  },
+  "foreign_keys": []
+ },
+ "hard_supplier": {
+  "primary_key": {
+   "incoming.csv": "Art."
+  },
+  "foreign_keys": []
+ },
+ "furniture_parsing": {
+  "primary_key": {
+   "incoming.csv": [
+    "Réf.",
+    "EAN"
+   ]
+  },
+  "foreign_keys": []
+ },
+ "family_updates": {
+  "primary_key": {
+   "incoming.csv": null
+  },
+  "foreign_keys": []
+ },
+ "joins_chain": {
+  "primary_key": {
+   "export.csv": null
+  },
+  "foreign_keys": []
+ },
+ "joins_star": {
+  "primary_key": {
+   "export.csv": null
+  },
+  "foreign_keys": []
+ },
+ "joins_nokey": {
+  "primary_key": {
+   "export.csv": null
+  },
+  "foreign_keys": []
+ },
+ "joins_one_line": {
+  "primary_key": {
+   "export.csv": [
+    "order_id",
+    null
+   ]
+  },
+  "foreign_keys": []
+ }
+}

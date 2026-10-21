@@ -1,0 +1,9 @@
+SKU,Title,Description,Description language,Price,Sale price,Currency,Weight unit (kg),Weight,Volume (litres),Price EUR/kg
+B-201,Orange Juice,Frischer Orangensaft,de,3.49,2.99,EUR,kg,1.05,1.0,3.32
+B-202,Apple Juice,Pur jus de pomme,fr,3.19,,EUR,kg,1.04,1.0,3.07
+B-203,Sparkling Water,Natural sparkling mineral water,en,0.89,0.79,USD,kg,1.52,1.5,0.59
+B-204,Cold Brew Coffee,Kalt gebruehter Kaffee,de,4.20,3.80,EUR,kg,0.26,0.25,16.15
+B-205,Green Tea Drink,The vert infuse a froid,fr,2.50,,EUR,kg,0.52,0.5,4.81
+B-206,Lemonade,Classic cloudy lemonade,en,2.10,1.90,USD,kg,0.34,0.33,6.18
+B-207,Tomato Juice,Jus de tomate bio,fr,2.80,2.40,EUR,kg,1.02,1.0,2.75
+B-208,Coconut Water,Pure coconut water,en,3.90,,USD,kg,0.53,0.5,7.36

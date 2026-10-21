@@ -1,0 +1,15 @@
+order_id,order_date,status,customer_id,customer_name,customer_email,customer_city,line_no,product_sku,product_name,brand,quantity,unit_price
+101,2026-09-01,shipped,1,Alice Martin,alice@example.com,Paris,1,A-1001,Wireless Mouse M200,Logitech,2,19.90
+101,2026-09-01,shipped,1,Alice Martin,alice@example.com,Paris,2,A-1003,USB-C Hub 7-in-1,Anker,1,39.99
+102,2026-09-02,shipped,3,Chloé Dubois,chloe@example.com,Lyon,1,A-1004,Noise Cancelling Headphones,Bose,1,329.00
+103,2026-09-05,pending,1,Alice Martin,alice@example.com,Paris,1,A-1002,Mechanical Keyboard K70,Corsair,1,129.00
+103,2026-09-05,pending,1,Alice Martin,alice@example.com,Paris,2,A-1001,Wireless Mouse M200,Logitech,3,19.90
+103,2026-09-05,pending,1,Alice Martin,alice@example.com,Paris,3,A-1006,Webcam C920,Logitech,1,79.00
+104,2026-09-06,cancelled,2,Bruno Keller,bruno@example.com,Berlin,1,A-1005,27in Monitor S27,Samsung,2,249.00
+105,2026-09-08,shipped,5,Emma Novak,emma@example.com,Prague,1,A-1003,USB-C Hub 7-in-1,Anker,1,39.99
+106,2026-09-10,pending,4,David Rossi,david@example.com,Milan,1,A-1001,Wireless Mouse M200,Logitech,1,17.90
+106,2026-09-10,pending,4,David Rossi,david@example.com,Milan,2,A-1004,Noise Cancelling Headphones,Bose,1,329.00
+107,2026-09-11,shipped,3,Chloé Dubois,chloe@example.com,Lyon,1,A-1006,Webcam C920,Logitech,2,79.00
+108,2026-09-12,pending,2,Bruno Keller,bruno@example.com,Berlin,1,A-1002,Mechanical Keyboard K70,Corsair,1,129.00
+108,2026-09-12,pending,2,Bruno Keller,bruno@example.com,Berlin,2,A-1005,27in Monitor S27,Samsung,1,249.00
+108,2026-09-12,pending,2,Bruno Keller,bruno@example.com,Berlin,3,A-1003,USB-C Hub 7-in-1,Anker,2,39.99

@@ -1,0 +1,453 @@
+{
+  "context/catalog.csv": {
+    "context_columns": {
+      "description_language": {
+        "kind": "language",
+        "describes": [
+          "description"
+        ],
+        "context": [
+          "dedicated_context",
+          "both"
+        ]
+      },
+      "currency": {
+        "kind": "currency",
+        "describes": [
+          "price",
+          "sale_price"
+        ],
+        "context": [
+          "dedicated_context",
+          "both"
+        ]
+      },
+      "weight_unit": {
+        "kind": "physical_unit",
+        "describes": [
+          "weight"
+        ],
+        "context": [
+          "dedicated_context",
+          "both"
+        ]
+      },
+      "sold_by": {
+        "kind": "counting_unit",
+        "describes": [
+          "stock"
+        ],
+        "context": [
+          "dedicated_context",
+          "both"
+        ]
+      }
+    },
+    "source_context": {
+      "description": {
+        "from": "column",
+        "kind": "language",
+        "column": "description_language"
+      },
+      "price": {
+        "from": "column",
+        "kind": "currency",
+        "column": "currency"
+      },
+      "sale_price": {
+        "from": "column",
+        "kind": "currency",
+        "column": "currency"
+      },
+      "weight": {
+        "from": "column",
+        "kind": "physical_unit",
+        "column": "weight_unit"
+      },
+      "stock": {
+        "from": "column",
+        "kind": "counting_unit",
+        "column": "sold_by"
+      },
+      "Volume (L)": {
+        "from": "header",
+        "kind": "physical_unit",
+        "unit": "l"
+      },
+      "Price per kg (EUR)": {
+        "from": "header",
+        "kind": "compound_unit",
+        "unit": "EUR/kg"
+      }
+    }
+  },
+  "ctx_supplier/incoming.csv": {
+    "context_columns": {
+      "Devise": {
+        "kind": "currency",
+        "describes": [
+          "Prix de vente"
+        ],
+        "context": [
+          "dedicated_context",
+          "both"
+        ]
+      },
+      "Unité poids": {
+        "kind": "physical_unit",
+        "describes": [
+          "Poids"
+        ],
+        "context": [
+          "dedicated_context",
+          "both"
+        ]
+      }
+    },
+    "source_context": {
+      "Prix de vente": {
+        "from": "column",
+        "kind": "currency",
+        "column": "Devise"
+      },
+      "Poids": {
+        "from": "column",
+        "kind": "physical_unit",
+        "column": "Unité poids"
+      }
+    }
+  },
+  "ctx_supplier/store.csv": {
+    "context_columns": {},
+    "source_context": {
+      "weight_kg": {
+        "from": "header",
+        "kind": "physical_unit",
+        "unit": "kg"
+      }
+    }
+  },
+  "ctx_mixed/incoming.csv": {
+    "context_columns": {
+      "Description language": {
+        "kind": "language",
+        "describes": [
+          "Description"
+        ],
+        "context": [
+          "dedicated_context",
+          "both"
+        ]
+      },
+      "Currency": {
+        "kind": "currency",
+        "describes": [
+          "Price",
+          "Sale price"
+        ],
+        "context": [
+          "dedicated_context",
+          "both"
+        ]
+      },
+      "Weight unit (kg)": {
+        "kind": "physical_unit",
+        "describes": [
+          "Weight"
+        ],
+        "context": [
+          "dedicated_context",
+          "both"
+        ]
+      }
+    },
+    "source_context": {
+      "Description": {
+        "from": "column",
+        "kind": "language",
+        "column": "Description language"
+      },
+      "Price": {
+        "from": "column",
+        "kind": "currency",
+        "column": "Currency"
+      },
+      "Sale price": {
+        "from": "column",
+        "kind": "currency",
+        "column": "Currency"
+      },
+      "Weight": {
+        "from": "column",
+        "kind": "physical_unit",
+        "column": "Weight unit (kg)"
+      },
+      "Volume (litres)": {
+        "from": "header",
+        "kind": "physical_unit",
+        "unit": "l"
+      },
+      "Price EUR/kg": {
+        "from": "header",
+        "kind": "compound_unit",
+        "unit": "EUR/kg"
+      }
+    }
+  },
+  "ctx_mixed/store.csv": {
+    "context_columns": {},
+    "source_context": {
+      "weight_kg": {
+        "from": "header",
+        "kind": "physical_unit",
+        "unit": "kg"
+      },
+      "volume_l": {
+        "from": "header",
+        "kind": "physical_unit",
+        "unit": "l"
+      }
+    },
+    "not_scored": [
+      "price_per_kg"
+    ]
+  },
+  "ctx_store/store.csv": {
+    "context_columns": {
+      "currency": {
+        "kind": "currency",
+        "describes": [
+          "price"
+        ],
+        "context": [
+          "dedicated_context",
+          "both"
+        ]
+      },
+      "weight_unit": {
+        "kind": "physical_unit",
+        "describes": [
+          "weight"
+        ],
+        "context": [
+          "dedicated_context",
+          "both"
+        ]
+      }
+    },
+    "source_context": {
+      "price": {
+        "from": "column",
+        "kind": "currency",
+        "column": "currency"
+      },
+      "weight": {
+        "from": "column",
+        "kind": "physical_unit",
+        "column": "weight_unit"
+      }
+    }
+  },
+  "ctx_store/incoming.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "ctx_traps/products.csv": {
+    "context_columns": {
+      "Currency code": {
+        "kind": "currency",
+        "describes": [
+          "Price (incl. VAT)"
+        ],
+        "context": [
+          "dedicated_context",
+          "both"
+        ]
+      },
+      "Unit": {
+        "kind": "counting_unit",
+        "describes": [
+          "Stock"
+        ],
+        "context": [
+          "dedicated_context",
+          "both"
+        ]
+      },
+      "Lang": {
+        "kind": "language",
+        "describes": [
+          "name"
+        ],
+        "context": [
+          "dedicated_context",
+          "both"
+        ]
+      }
+    },
+    "source_context": {
+      "Price (incl. VAT)": {
+        "from": "column",
+        "kind": "currency",
+        "column": "Currency code"
+      },
+      "Stock": {
+        "from": "column",
+        "kind": "counting_unit",
+        "column": "Unit"
+      },
+      "name": {
+        "from": "column",
+        "kind": "language",
+        "column": "Lang"
+      },
+      "Capacity (GB)": {
+        "from": "header",
+        "kind": "physical_unit",
+        "unit": "GB"
+      },
+      "Weight (kg)": {
+        "from": "header",
+        "kind": "physical_unit",
+        "unit": "kg"
+      }
+    },
+    "warnings": [
+      "Weight (kg): 1 cell written '500 g'"
+    ]
+  },
+  "french/fournisseurs.csv": {
+    "context_columns": {},
+    "source_context": {
+      "Délai (jours)": {
+        "from": "header",
+        "kind": "physical_unit",
+        "unit": "d"
+      }
+    }
+  },
+  "french/tarifs.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "shop/products.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "shop/customers.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "shop/orders.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "shop/order_lines.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "flat/orders_flat.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "store/store.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "noheader/inventaire.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "basic/incoming.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "fashion_variants/incoming.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "grocery_german/incoming.csv": {
+    "context_columns": {},
+    "source_context": {
+      "Gewicht (kg)": {
+        "from": "header",
+        "kind": "physical_unit",
+        "unit": "kg"
+      },
+      "Grundpreis (€/kg)": {
+        "from": "header",
+        "kind": "compound_unit",
+        "unit": "EUR/kg"
+      }
+    }
+  },
+  "reverse_composite/incoming.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "no_headers/incoming.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "numeric_decoys/incoming.csv": {
+    "context_columns": {},
+    "source_context": {
+      "TVA (%)": {
+        "from": "header",
+        "kind": "percentage",
+        "unit": "%"
+      }
+    },
+    "not_scored": [
+      "Délai (j)",
+      "Délai"
+    ]
+  },
+  "identifier_traps/incoming.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "hard_supplier/incoming.csv": {
+    "context_columns": {},
+    "source_context": {
+      "Poids (g)": {
+        "from": "header",
+        "kind": "physical_unit",
+        "unit": "g"
+      }
+    }
+  },
+  "furniture_parsing/incoming.csv": {
+    "context_columns": {},
+    "source_context": {
+      "Colis (cm)": {
+        "from": "header",
+        "kind": "physical_unit",
+        "unit": "cm"
+      }
+    },
+    "not_scored": [
+      "Dimensions (L x l x H)"
+    ]
+  },
+  "family_updates/incoming.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "joins_chain/export.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "joins_star/export.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "joins_nokey/export.csv": {
+    "context_columns": {},
+    "source_context": {}
+  },
+  "joins_one_line/export.csv": {
+    "context_columns": {},
+    "source_context": {}
+  }
+}

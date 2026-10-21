@@ -1,0 +1,15 @@
+order_id,line_no,product_sku,quantity,unit_price,order_date,status,product_name,brand
+101,1,A-1001,2,19.90,2026-09-01,shipped,Wireless Mouse M200,Logitech
+101,2,A-1003,1,39.99,2026-09-01,shipped,USB-C Hub 7-in-1,Anker
+102,1,A-1004,1,329.00,2026-09-02,shipped,Noise Cancelling Headphones,Bose
+103,1,A-1002,1,129.00,2026-09-05,pending,Mechanical Keyboard K70,Corsair
+103,2,A-1001,3,19.90,2026-09-05,pending,Wireless Mouse M200,Logitech
+103,3,A-1006,1,79.00,2026-09-05,pending,Webcam C920,Logitech
+104,1,A-1005,2,249.00,2026-09-06,cancelled,27in Monitor S27,Samsung
+105,1,A-1003,1,39.99,2026-09-08,shipped,USB-C Hub 7-in-1,Anker
+106,1,A-1001,1,19.90,2026-09-10,pending,Wireless Mouse M200,Logitech
+106,2,A-1004,1,329.00,2026-09-10,pending,Noise Cancelling Headphones,Bose
+107,1,A-1006,2,79.00,2026-09-11,shipped,Webcam C920,Logitech
+108,1,A-1002,1,129.00,2026-09-12,pending,Mechanical Keyboard K70,Corsair
+108,2,A-1005,1,249.00,2026-09-12,pending,27in Monitor S27,Samsung
+108,3,A-1003,2,39.99,2026-09-12,pending,USB-C Hub 7-in-1,Anker

@@ -1,0 +1,397 @@
+{
+ "tables": {
+  "incoming.csv": {
+   "read": {
+    "encoding": "utf-8",
+    "delimiter": ",",
+    "has_header": true,
+    "header": [
+     "Réf.",
+     "Article",
+     "Dimensions (L x l x H)",
+     "Colis (cm)",
+     "Poids net",
+     "Poids brut",
+     "Coloris / Finition",
+     "Prix public",
+     "Dispo",
+     "EAN"
+    ],
+    "rows": 10,
+    "probability": 0.98
+   },
+   "context": {
+    "table": "incoming",
+    "context_columns": {},
+    "source_context": {
+     "Colis (cm)": {
+      "kind": "physical_unit",
+      "from": "header",
+      "unit": "cm"
+     }
+    },
+    "warnings": [
+     {
+      "column": "Dimensions (L x l x H)",
+      "problem": "context option uncertain",
+      "answer": "header_context",
+      "probability": 0.77
+     },
+     {
+      "column": "Poids net",
+      "problem": "context option uncertain",
+      "answer": "header_context",
+      "probability": 0.59
+     },
+     {
+      "column": "Poids brut",
+      "problem": "context option uncertain",
+      "answer": "header_context",
+      "probability": 0.53
+     },
+     {
+      "column": "Dimensions (L x l x H)",
+      "problem": "the header declares a unit the readers cannot name: no source"
+     },
+     {
+      "column": "Poids net",
+      "problem": "the header declares a unit the readers cannot name: no source"
+     },
+     {
+      "column": "Poids brut",
+      "problem": "the header declares a unit the readers cannot name: no source"
+     }
+    ]
+   },
+   "schema": {
+    "create_table": {
+     "id": "r_create_incoming",
+     "type": "create_table",
+     "definition": {
+      "table_id": "t_incoming",
+      "sql_name": "incoming",
+      "columns": [
+       {
+        "column_id": "c_ref",
+        "sql_name": "ref",
+        "header": "Réf.",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_article",
+        "sql_name": "article",
+        "header": "Article",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_dimensions_l_x_l_x_h",
+        "sql_name": "dimensions_l_x_l_x_h",
+        "header": "Dimensions (L x l x H)",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_colis_cm",
+        "sql_name": "colis_cm",
+        "header": "Colis (cm)",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_poids_net",
+        "sql_name": "poids_net",
+        "header": "Poids net",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_poids_brut",
+        "sql_name": "poids_brut",
+        "header": "Poids brut",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_coloris_finition",
+        "sql_name": "coloris_finition",
+        "header": "Coloris / Finition",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_prix_public",
+        "sql_name": "prix_public",
+        "header": "Prix public",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_dispo",
+        "sql_name": "dispo",
+        "header": "Dispo",
+        "sql_type": "TEXT",
+        "nullable": true
+       },
+       {
+        "column_id": "c_ean",
+        "sql_name": "ean",
+        "header": "EAN",
+        "sql_type": "TEXT",
+        "nullable": true
+       }
+      ],
+      "primary_key": [
+       "c_ref"
+      ],
+      "foreign_keys": []
+     }
+    },
+    "warnings": []
+   },
+   "roles": {
+    "columns": {
+     "Réf.": {
+      "role": "dedicated_key",
+      "kind": "record_reference",
+      "level": "individual_record"
+     },
+     "Article": {
+      "role": "descriptive_base",
+      "kind": "name"
+     },
+     "Dimensions (L x l x H)": {
+      "role": "qualifier",
+      "kind": "attribute",
+      "flagged": true
+     },
+     "Colis (cm)": {
+      "role": "none",
+      "kind": "value_or_text",
+      "flagged": true
+     },
+     "Poids net": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Poids brut": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Coloris / Finition": {
+      "role": "qualifier",
+      "kind": "attribute"
+     },
+     "Prix public": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "Dispo": {
+      "role": "none",
+      "kind": "value_or_text"
+     },
+     "EAN": {
+      "role": "dedicated_key",
+      "kind": "record_reference",
+      "level": "individual_record"
+     }
+    },
+    "warnings": [
+     {
+      "column": "Dimensions (L x l x H)",
+      "problem": "kind uncertain",
+      "answer": "attribute",
+      "probability": 0.71
+     },
+     {
+      "column": "Colis (cm)",
+      "problem": "kind uncertain",
+      "answer": "value_or_text",
+      "probability": 0.57
+     }
+    ]
+   },
+   "keys": {
+    "warnings": []
+   },
+   "profile": {
+    "rows": 10,
+    "columns": {
+     "Réf.": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "AB-4001",
+       "AB-4012",
+       "AB-4020",
+       "AB-4031",
+       "CO-3105",
+       "CO-3120",
+       "CO-3150",
+       "NV-2001",
+       "NV-2002",
+       "NV-2010"
+      ]
+     },
+     "Article": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "Atelier Brun - Bibliothèque Oslo 5 étagères",
+       "Atelier Brun - Bureau Tove",
+       "Atelier Brun - Lampadaire Luma",
+       "Atelier Brun - Miroir mural Vera",
+       "Casa Olmo - Canapé 3 places Bruno",
+       "Casa Olmo - Fauteuil Mila",
+       "Casa Olmo - Table basse Pino",
+       "Nordvik - Chaise Ilse",
+       "Nordvik - Table à manger Lisa 120",
+       "Nordvik - Table à manger Lisa 160"
+      ]
+     },
+     "Dimensions (L x l x H)": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "1100 x 550 x 400 mm",
+       "120 x 60 x 74 cm",
+       "120 x 80 x 75 cm",
+       "1600 x 900 x 750 mm",
+       "210 x 92 x 84 cm",
+       "35 x 35 x 160 cm",
+       "45 x 52 x 82 cm",
+       "60 x 2 x 90 cm",
+       "78 x 80 x 90 cm",
+       "80 x 30 x 180 cm"
+      ]
+     },
+     "Colis (cm)": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "115 x 60 x 12",
+       "125 x 65 x 10",
+       "125 x 85 x 15",
+       "165 x 95 x 15",
+       "185 x 35 x 12",
+       "215 x 95 x 70",
+       "40 x 40 x 25",
+       "60 x 55 x 50",
+       "68 x 8 x 98",
+       "82 x 84 x 60"
+      ]
+     },
+     "Poids net": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "14,2 kg",
+       "18,5 kg",
+       "21,5 kg",
+       "27 kg",
+       "32,5 kg",
+       "41 kg",
+       "4100 g",
+       "5,8 kg",
+       "58 kg",
+       "6,5 kg"
+      ]
+     },
+     "Poids brut": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "16 kg",
+       "21 kg",
+       "24 kg",
+       "30,5 kg",
+       "36 kg",
+       "45,5 kg",
+       "5 kg",
+       "66 kg",
+       "7,2 kg",
+       "8 kg"
+      ]
+     },
+     "Coloris / Finition": {
+      "empty": 0,
+      "distinct": 9,
+      "max_repeat": 2,
+      "values": [
+       "Blanc / laqué",
+       "Blanc / mat",
+       "Chêne naturel / huilé",
+       "Doré / patiné",
+       "Gris chiné / tissu",
+       "Laiton / brossé",
+       "Moutarde / velours",
+       "Noir / mat",
+       "Noyer / vernis"
+      ]
+     },
+     "Prix public": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "129,00 € TTC",
+       "179,00 € TTC",
+       "189,00 € TTC",
+       "229,00 € TTC",
+       "329,00 € TTC",
+       "419,00 € TTC",
+       "519,00 € TTC",
+       "89,00 € TTC",
+       "899,00 € TTC",
+       "99,00 € TTC"
+      ]
+     },
+     "Dispo": {
+      "empty": 0,
+      "distinct": 9,
+      "max_repeat": 2,
+      "values": [
+       "En stock (14)",
+       "En stock (2)",
+       "En stock (30)",
+       "En stock (4)",
+       "En stock (7)",
+       "En stock (8)",
+       "En stock (9)",
+       "Rupture",
+       "Sur commande (3 sem.)"
+      ]
+     },
+     "EAN": {
+      "empty": 0,
+      "distinct": 10,
+      "max_repeat": 1,
+      "values": [
+       "3760123450010",
+       "3760123450027",
+       "3760123450102",
+       "4260987650018",
+       "4260987650124",
+       "4260987650209",
+       "4260987650315",
+       "8007654321057",
+       "8007654321200",
+       "8007654321507"
+      ]
+     }
+    }
+   },
+   "joins": {
+    "groups": [],
+    "warnings": []
+   }
+  }
+ }
+}

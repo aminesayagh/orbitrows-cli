@@ -1,0 +1,935 @@
+{
+ "context/catalog.csv": {
+  "sku": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "name": {
+   "role": "descriptive_base"
+  },
+  "description": {
+   "role": [
+    "descriptive_base",
+    "none"
+   ]
+  },
+  "price": {
+   "role": "none"
+  },
+  "sale_price": {
+   "role": "none"
+  },
+  "weight": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "Volume (L)": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "Price per kg (EUR)": {
+   "role": "none"
+  },
+  "net_content": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "shipping_fee": {
+   "role": "none"
+  },
+  "stock": {
+   "role": "none"
+  },
+  "size": {
+   "role": "qualifier"
+  }
+ },
+ "ctx_supplier/incoming.csv": {
+  "Réf.": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Désignation": {
+   "role": "descriptive_base"
+  },
+  "Prix de vente": {
+   "role": "none"
+  },
+  "Poids": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "Stock": {
+   "role": "none"
+  }
+ },
+ "ctx_supplier/store.csv": {
+  "sku": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "name": {
+   "role": "descriptive_base"
+  },
+  "price": {
+   "role": "none"
+  },
+  "weight_kg": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "stock": {
+   "role": "none"
+  }
+ },
+ "ctx_mixed/incoming.csv": {
+  "SKU": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Title": {
+   "role": "descriptive_base"
+  },
+  "Description": {
+   "role": [
+    "descriptive_base",
+    "none"
+   ]
+  },
+  "Price": {
+   "role": "none"
+  },
+  "Sale price": {
+   "role": "none"
+  },
+  "Weight": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "Volume (litres)": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "Price EUR/kg": {
+   "role": "none"
+  }
+ },
+ "ctx_mixed/store.csv": {
+  "sku": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "title": {
+   "role": "descriptive_base"
+  },
+  "description": {
+   "role": [
+    "descriptive_base",
+    "none"
+   ]
+  },
+  "price": {
+   "role": "none"
+  },
+  "sale_price": {
+   "role": "none"
+  },
+  "weight_kg": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "volume_l": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "price_per_kg": {
+   "role": "none"
+  }
+ },
+ "ctx_store/store.csv": {
+  "sku": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "name": {
+   "role": "descriptive_base"
+  },
+  "price": {
+   "role": "none"
+  },
+  "weight": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "stock": {
+   "role": "none"
+  }
+ },
+ "ctx_store/incoming.csv": {
+  "SKU": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Product": {
+   "role": "descriptive_base"
+  },
+  "Unit price": {
+   "role": "none"
+  },
+  "Weight": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "Stock": {
+   "role": "none"
+  }
+ },
+ "ctx_traps/products.csv": {
+  "sku": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "name": {
+   "role": "descriptive_base"
+  },
+  "Price (incl. VAT)": {
+   "role": "none"
+  },
+  "Capacity (GB)": {
+   "role": "qualifier"
+  },
+  "Weight (kg)": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "Stock": {
+   "role": "none"
+  },
+  "Color": {
+   "role": "qualifier"
+  }
+ },
+ "french/fournisseurs.csv": {
+  "Réf fournisseur": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Raison sociale": {
+   "role": "descriptive_base"
+  },
+  "Ville": {
+   "role": [
+    "qualifier",
+    "none"
+   ]
+  },
+  "Délai (jours)": {
+   "role": "none"
+  },
+  "Remise": {
+   "role": "none"
+  }
+ },
+ "french/tarifs.csv": {
+  "Réf article": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Réf fournisseur": {
+   "role": [
+    "dedicated_key",
+    "qualifier"
+   ],
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "Prix HT": {
+   "role": "none"
+  },
+  "Date tarif": {
+   "role": "none"
+  }
+ },
+ "shop/products.csv": {
+  "sku": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "name": {
+   "role": "descriptive_base"
+  },
+  "brand": {
+   "role": "qualifier"
+  },
+  "price": {
+   "role": "none"
+  },
+  "ean": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  }
+ },
+ "shop/customers.csv": {
+  "customer_id": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "name": {
+   "role": "descriptive_base"
+  },
+  "email": {
+   "role": [
+    "descriptive_base",
+    "qualifier",
+    "none"
+   ]
+  },
+  "city": {
+   "role": [
+    "qualifier",
+    "none"
+   ]
+  }
+ },
+ "shop/orders.csv": {
+  "order_id": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "customer_id": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "order_date": {
+   "role": "none"
+  },
+  "status": {
+   "role": "none"
+  }
+ },
+ "shop/order_lines.csv": {
+  "order_id": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "line_no": {
+   "role": "qualifier"
+  },
+  "product_sku": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "quantity": {
+   "role": "none"
+  },
+  "unit_price": {
+   "role": "none"
+  }
+ },
+ "flat/orders_flat.csv": {
+  "order_id": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "order_date": {
+   "role": "none"
+  },
+  "status": {
+   "role": "none"
+  },
+  "customer_id": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "customer_name": {
+   "role": [
+    "descriptive_base",
+    "qualifier",
+    "none"
+   ]
+  },
+  "customer_email": {
+   "role": [
+    "descriptive_base",
+    "qualifier",
+    "none"
+   ]
+  },
+  "customer_city": {
+   "role": [
+    "qualifier",
+    "none"
+   ]
+  },
+  "line_no": {
+   "role": "qualifier"
+  },
+  "product_sku": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "product_name": {
+   "role": "descriptive_base"
+  },
+  "brand": {
+   "role": "qualifier"
+  },
+  "quantity": {
+   "role": "none"
+  },
+  "unit_price": {
+   "role": "none"
+  }
+ },
+ "store/store.csv": {
+  "sku": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "name": {
+   "role": "descriptive_base"
+  },
+  "brand": {
+   "role": "qualifier"
+  },
+  "price": {
+   "role": "none"
+  },
+  "stock": {
+   "role": "none"
+  },
+  "ean": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  }
+ },
+ "noheader/inventaire.csv": {
+  "col_1": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "col_2": {
+   "role": "none"
+  },
+  "col_3": {
+   "role": "none"
+  }
+ },
+ "basic/incoming.csv": {
+  "Référence": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Désignation": {
+   "role": "descriptive_base"
+  },
+  "Marque": {
+   "role": "qualifier"
+  },
+  "Code EAN": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Prix TTC": {
+   "role": "none"
+  },
+  "Stock dispo": {
+   "role": "none"
+  }
+ },
+ "fashion_variants/incoming.csv": {
+  "Réf fournisseur": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Modèle": {
+   "role": "descriptive_base"
+  },
+  "Taille": {
+   "role": "qualifier"
+  },
+  "Coloris": {
+   "role": "qualifier"
+  },
+  "Prix barré": {
+   "role": "none"
+  },
+  "Prix soldé": {
+   "role": "none"
+  },
+  "Qté dispo": {
+   "role": "none"
+  },
+  "Colisage": {
+   "role": "none"
+  }
+ },
+ "grocery_german/incoming.csv": {
+  "GTIN-13": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Artikelbezeichnung": {
+   "role": "descriptive_base"
+  },
+  "Gewicht (kg)": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "VK-Preis": {
+   "role": "none"
+  },
+  "Grundpreis (€/kg)": {
+   "role": "none"
+  },
+  "Bestand": {
+   "role": "none"
+  },
+  "Lieferant": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "MHD": {
+   "role": "none"
+  },
+  "Lagerort": {
+   "role": "none"
+  }
+ },
+ "reverse_composite/incoming.csv": {
+  "SKU": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Brand": {
+   "role": "qualifier"
+  },
+  "Model": {
+   "role": [
+    "descriptive_base",
+    "qualifier"
+   ]
+  },
+  "Capacity": {
+   "role": "qualifier"
+  },
+  "Part No.": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Unit Cost": {
+   "role": "none"
+  },
+  "MSRP": {
+   "role": "none"
+  },
+  "Qty Available": {
+   "role": "none"
+  }
+ },
+ "no_headers/incoming.csv": {
+  "col1": {
+   "role": "none"
+  },
+  "col2": {
+   "role": "qualifier"
+  },
+  "col3": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "col4": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "col5": {
+   "role": "descriptive_base"
+  },
+  "col6": {
+   "role": "none"
+  }
+ },
+ "numeric_decoys/incoming.csv": {
+  "Référence": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Désignation": {
+   "role": "descriptive_base"
+  },
+  "Prix achat HT": {
+   "role": "none"
+  },
+  "Prix TTC": {
+   "role": "none"
+  },
+  "TVA (%)": {
+   "role": "none"
+  },
+  "Éco-part.": {
+   "role": "none"
+  },
+  "Stock": {
+   "role": "none"
+  },
+  "Stock mini": {
+   "role": "none"
+  },
+  "Qté commandée": {
+   "role": "none"
+  },
+  "Délai (j)": {
+   "role": "none"
+  },
+  "Disponibilité": {
+   "role": "none"
+  }
+ },
+ "identifier_traps/incoming.csv": {
+  "Code": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Réf.": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "ASIN": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "UPC": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Nom": {
+   "role": "descriptive_base"
+  },
+  "Prix": {
+   "role": "none"
+  },
+  "Qté": {
+   "role": "none"
+  }
+ },
+ "hard_supplier/incoming.csv": {
+  "Art.": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Libellé article": {
+   "role": "descriptive_base"
+  },
+  "Couleur": {
+   "role": "qualifier"
+  },
+  "PU HT": {
+   "role": "none"
+  },
+  "PVC": {
+   "role": "none"
+  },
+  "Qté mag.": {
+   "role": "none"
+  },
+  "Qté entrepôt": {
+   "role": "none"
+  },
+  "Poids (g)": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "GTIN": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Date maj": {
+   "role": "none"
+  }
+ },
+ "furniture_parsing/incoming.csv": {
+  "Réf.": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  },
+  "Article": {
+   "role": "descriptive_base"
+  },
+  "Dimensions (L x l x H)": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "Colis (cm)": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "Poids net": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "Poids brut": {
+   "role": [
+    "none",
+    "qualifier"
+   ]
+  },
+  "Coloris / Finition": {
+   "role": "qualifier"
+  },
+  "Prix public": {
+   "role": "none"
+  },
+  "Dispo": {
+   "role": "none"
+  },
+  "EAN": {
+   "role": "dedicated_key",
+   "level": "individual_record"
+  }
+ },
+ "family_updates/incoming.csv": {
+  "Model ref": {
+   "role": "dedicated_key",
+   "level": "product_family"
+  },
+  "Product": {
+   "role": "descriptive_base"
+  },
+  "Size": {
+   "role": "qualifier"
+  },
+  "Price": {
+   "role": "none"
+  }
+ },
+ "joins_chain/export.csv": {
+  "order_id": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "line_no": {
+   "role": "qualifier"
+  },
+  "product_sku": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "quantity": {
+   "role": "none"
+  },
+  "unit_price": {
+   "role": "none"
+  },
+  "order_date": {
+   "role": "none"
+  },
+  "customer_id": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "customer_name": {
+   "role": [
+    "descriptive_base",
+    "qualifier",
+    "none"
+   ]
+  },
+  "customer_city": {
+   "role": [
+    "qualifier",
+    "none"
+   ]
+  }
+ },
+ "joins_star/export.csv": {
+  "order_id": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "line_no": {
+   "role": "qualifier"
+  },
+  "product_sku": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "quantity": {
+   "role": "none"
+  },
+  "unit_price": {
+   "role": "none"
+  },
+  "order_date": {
+   "role": "none"
+  },
+  "status": {
+   "role": "none"
+  },
+  "product_name": {
+   "role": "descriptive_base"
+  },
+  "brand": {
+   "role": "qualifier"
+  }
+ },
+ "joins_nokey/export.csv": {
+  "order_id": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "line_no": {
+   "role": "qualifier"
+  },
+  "product_sku": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "quantity": {
+   "role": "none"
+  },
+  "unit_price": {
+   "role": "none"
+  },
+  "order_date": {
+   "role": "none"
+  },
+  "customer_name": {
+   "role": [
+    "descriptive_base",
+    "qualifier",
+    "none"
+   ]
+  },
+  "customer_city": {
+   "role": [
+    "qualifier",
+    "none"
+   ]
+  }
+ },
+ "joins_one_line/export.csv": {
+  "order_id": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "line_no": {
+   "role": "qualifier"
+  },
+  "product_sku": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "quantity": {
+   "role": "none"
+  },
+  "unit_price": {
+   "role": "none"
+  },
+  "order_date": {
+   "role": "none"
+  },
+  "customer_id": {
+   "role": "dedicated_key",
+   "level": [
+    "individual_record",
+    "product_family"
+   ]
+  },
+  "customer_name": {
+   "role": [
+    "descriptive_base",
+    "qualifier",
+    "none"
+   ]
+  },
+  "customer_city": {
+   "role": [
+    "qualifier",
+    "none"
+   ]
+  }
+ }
+}
