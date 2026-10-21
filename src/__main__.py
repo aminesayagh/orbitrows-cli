@@ -1,3 +1,5 @@
-from orbitrows.services.cli.app import main
+import sys
 
-main()
+from orbitrows.services.cli.main import main
+
+sys.exit(main())

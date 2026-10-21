@@ -4,7 +4,7 @@ A command-line tool that reconciles a **store CSV export** with an **incoming up
 
 - **Jev** (TypeSafe System One) handles the judgment calls: column meanings, column links, and ranking of ambiguous row candidates.
 - **Deterministic code** handles everything that must be exact: key matching, fuzzy/embedding search, unit and currency conversion, and validation.
-- **Three commands**, one process each, so a person or an agent (Claude, Codex) can drive it from a shell.
+- **A few commands**, one short process each (a store's open session runs in the background), so a person or an agent (Claude, Codex) can drive it from a shell.
 
 The design comes from the approved PoC (`../poc`).
 
