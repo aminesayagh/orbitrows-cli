@@ -68,3 +68,11 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 - [ ] **Role, kind and level are stored as integers** (user decision 2026-10-21): the index in `ROLES`, `KINDS` and `LEVELS` (`src/services/storage/store.py`). The order must stay fixed once stores exist. `created_by`/`edited_by` aren't stored yet: `_history` exists (its first row is the import), and they come once requests write to it.
 - [ ] **The classification tables start with `_`** (`_store_tables`, `_column_context`, `_store_columns`, `_export`, `_history`; the plan says `store_tables`, `export`…). A store table is named after its file, so `export.csv` would collide with `export`. `sql_name()` never starts a name with `_`, so the prefix rules out any collision.
 - [ ] **No guardrail on `message`** since the Jev intent check was removed with the chat. Add it back when messages run: is it about the data, and for the store or the incoming file.
+
+## Store upload: questions to the user (review leftovers, all low)
+
+- [ ] **`answer` without `-s` can wait silently** behind another `answer` that is resuming a newer store, then refuse with that store's id. Fix: try the lock without blocking first and say "waiting for another answer on <id>…", or prefer a waiting store over one being resumed.
+- [ ] **The keys grouping is untested.** A pause keeps one call's questions per step across all files for keys (the reference call depends on every primary key). Add a test with a primary-key question on one file and a reference question on another.
+- [ ] **A notice can describe an answer the user then changes.** A held-back call's notices are still shown (for example "dedicated_context but typed INTEGER: none kept" before the role question is answered). Cosmetic: notices never block.
+- [ ] **A kill right after `COMMIT` in `storage.write`** leaves a complete `session.db`: the next retry fails creating its tables and deletes it, and the one after succeeds. Recovery takes two `answer` runs.
+- [ ] **Some CLI tests load the real GLiNER2** (the end-to-end resume tests run the real classify). No paid call, but slow and a 1.2 GB download on a fresh machine. Stub the extractor there.
