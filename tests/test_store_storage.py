@@ -39,7 +39,7 @@ def test_fourteen_cases():
 @pytest.mark.parametrize("name", sorted(EXPECTED))
 def test_store_is_written(name):
     files, rows = case(name)
-    built = run.build(files, rows)
+    built = run.build(files)
     st = built["store"]
     counts = storage.write("st_test", st, rows)
     folder = storage.folder("st_test")
@@ -87,7 +87,7 @@ def test_store_is_written(name):
 
 def test_a_value_lost_on_the_way_refuses_the_store():
     files, rows = case("joins_chain")
-    st = run.build(files, rows)["store"]
+    st = run.build(files)["store"]
     rows["export.csv"][1][7] = "Alice M."                      # customer 1's name now disagrees with row 0's
     with pytest.raises(storage.Lost) as lost:
         storage.write("st_test", st, rows)
@@ -105,7 +105,7 @@ def test_a_cell_beyond_the_header_refuses_the_store(tmp_path):
     files = json.loads((CASES / "shop" / "result.json").read_text())["tables"]
     rows = run.rows([tmp_path / f for f in files], files)
     with pytest.raises(storage.Lost) as lost:
-        storage.write("st_test", run.build(files, rows)["store"], rows)
+        storage.write("st_test", run.build(files)["store"], rows)
     assert lost.value.diffs == [{"file": "customers.csv", "row": 0, "header": None, "uploaded": "LOST CELL",
                                  "rebuilt": "", "kind": "value"}]
     assert sorted(p.name for p in storage.folder("st_test").iterdir()) == []
@@ -116,3 +116,10 @@ def test_files_are_copied_unchanged():
     storage.copy_files("st_test", paths)
     for p in paths:
         assert (storage.folder("st_test") / "files" / p.name).read_bytes() == p.read_bytes()
+
+
+def test_the_stored_integers_are_fixed():
+    assert storage.ROLES == ("dedicated_key", "descriptive_base", "qualifier", "none")
+    assert storage.KINDS == ("record_reference", "model_reference", "name", "attribute", "contact_or_address",
+                             "value_or_text")
+    assert storage.LEVELS == ("individual_record", "product_family")

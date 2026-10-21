@@ -15,6 +15,7 @@ from orbitrows.services.csv.reader import read_table
 from orbitrows.services.model.client import connect
 from orbitrows.services.storage import registry
 from orbitrows.services.storage import store as storage
+from orbitrows.sql.ddl import sql_name
 
 SHOWN = 5                                                     # differences listed when a store would lose data
 
@@ -71,7 +72,7 @@ def warning(w: dict) -> str:
     return f"Warning: {where}: {w['problem']}{p}"
 
 
-async def store(paths: list[Path], name: str | None) -> None:
+def store(paths: list[Path], name: str | None) -> None:
     # Every file is checked first, so a bad one refuses the store before anything is registered.
     unique = {}
     for p in paths:                                           # the same file twice is read once
@@ -79,32 +80,37 @@ async def store(paths: list[Path], name: str | None) -> None:
     paths = list(unique.values())
     for path in paths:
         read(path)
-    names = [p.name for p in paths]
-    if repeated := sorted({n for n in names if names.count(n) > 1}):
-        raise Refusal(f"Several files are named {', '.join(repeated)}; a store keeps its files by name. Rename them.")
-    if not os.environ.get("MODEL"):                           # MODEL picks another model (a test stub)
+    tables = {}
+    for p in paths:
+        tables.setdefault(sql_name(p.stem), []).append(p)
+    for table, files in tables.items():
+        if len(files) > 1:                                    # order-lines.csv and order_lines.csv are one table
+            raise Refusal(f"{', '.join(str(f) for f in files)} would all be the table {table}. Rename one of them.")
+    if os.environ.get("MODEL", "jev") == "jev":               # any other MODEL is a stub class path
         need("TYPESAFE_API_KEY")
     store_id = registry.create(name)
     try:
         storage.copy_files(store_id, paths)
         step = lambda text: print(f"  {text}…", file=sys.stderr)
-        async with connect() as model:
-            saved = await run.classify(model, paths, step=step)
+
+        async def ask_model():
+            async with connect() as model:
+                return await run.classify(model, paths, step=step)
+
+        saved = asyncio.run(ask_model())                      # only the model is awaited; Ctrl+C reaches the rest too
         rows = run.rows(paths, saved)
-        built = run.build(saved, rows)
+        built = run.build(saved)
         for w in built["warnings"]:                           # before writing, so a refusal shows them too
             print(warning(w))
-        if diffs := [d for d in built["diffs"] if d["kind"] == "value"]:
-            raise Refusal(lost(diffs))
         try:
-            tables = storage.write(store_id, built["store"], rows)
+            written = storage.write(store_id, built["store"], rows)
         except storage.Lost as e:
             raise Refusal(lost(e.diffs)) from None
+        registry.set_status(store_id, registry.READY)
     except BaseException:  # Jev failing, Ctrl+C, a crash, data lost: the store is marked failed, never left importing
         registry.set_status(store_id, registry.FAILED)
         raise
-    registry.set_status(store_id, registry.READY)
-    for t in tables:
+    for t in written:
         print(f"{t['table']}: {t['rows']} rows · {t['columns']} columns, from {t['file']}")
     print(f"Store {label((store_id, name))}")
 
@@ -143,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         match args.command:
             case "store":
-                asyncio.run(store(args.files, args.name))
+                store(args.files, args.name)
             case "incoming":
                 incoming(args.file, args.store)
             case "message":

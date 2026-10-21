@@ -131,13 +131,51 @@ def test_files_with_the_same_name_are_refused(env, capsys):
     (env / "other").mkdir()
     shutil.copy(env / "customers.csv", env / "other" / "customers.csv")
     code, out, err = run(capsys, "store", "customers.csv", "other/customers.csv")
-    assert code == 1 and "Several files are named customers.csv" in err and stores() == []
+    assert code == 1 and "customers.csv, other/customers.csv would all be the table customers. Rename one" in err
+    assert stores() == []
+
+    shutil.copy(env / "order_lines.csv", env / "order-lines.csv")    # other names, same table
+    code, out, err = run(capsys, "store", "order_lines.csv", "order-lines.csv")
+    assert code == 1 and "would all be the table order_lines. Rename one" in err and stores() == []
+    shutil.copy(env / "customers.csv", env / "Customers.csv")
+    code, out, err = run(capsys, "store", "customers.csv", "Customers.csv")
+    assert code == 1 and "all be the table customers" in err and stores() == []
 
 
 def test_the_key_is_needed_for_jev(env, capsys, monkeypatch):
     monkeypatch.delenv("MODEL")
     code, out, err = run(capsys, "store", "customers.csv")
     assert code == 1 and err.startswith("TYPESAFE_API_KEY is not set") and stores() == []
+
+
+def test_the_key_is_needed_when_the_model_is_named_jev(env, capsys, monkeypatch):
+    monkeypatch.setenv("MODEL", "jev")
+    code, out, err = run(capsys, "store", "customers.csv")
+    assert code == 1 and err.startswith("TYPESAFE_API_KEY is not set") and stores() == []
+
+
+@pytest.mark.parametrize("step", ["rows", "build"])
+def test_ctrl_c_in_the_code_after_the_model_stops_the_import(env, capsys, monkeypatch, step):
+    def interrupt(*args):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli.run, step, interrupt)
+    code, out, err = run(capsys, "store", "customers.csv")
+    assert code == 130 and "Store " not in out
+    assert [s for _, _, s in stores()] == [registry.FAILED]
+
+
+def test_a_failure_setting_the_status_marks_the_store_failed(env, capsys, monkeypatch):
+    real = registry.set_status
+
+    def broken(store_id, status):
+        if status == registry.READY:
+            raise OSError("disk full")
+        real(store_id, status)
+
+    monkeypatch.setattr(cli.registry, "set_status", broken)
+    code, out, err = run(capsys, "store", "customers.csv")
+    assert code == 1 and [s for _, _, s in stores()] == [registry.FAILED]
 
 
 def test_same_name_needs_the_id(env, capsys):

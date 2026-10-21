@@ -2,7 +2,7 @@
 
     classify(jev, paths)   the questions: header, types, profile, context, roles per file, then keys over all the files,
                            then joins per file → {"<file>.csv": its saved sections}
-    build(saved, rows)     the code: the store schema and the round-trip proof, with every step's warnings in one list
+    build(saved)           the code: the store schema, with every step's warnings in one list
 """
 from orbitrows.services.csv.reader import read_table
 
@@ -46,8 +46,8 @@ def rows(paths: list, saved: dict) -> dict[str, list]:
     return {p.name: read_table(p, has_header=saved[p.name]["read"]["has_header"])["rows"] for p in paths}
 
 
-def build(saved: dict, rows: dict) -> dict:
-    """{"store": schema.assemble's output, "diffs": schema.round_trip's, "warnings": [{"file", "step", "column"?,
+def build(saved: dict) -> dict:
+    """{"store": schema.assemble's output, "warnings": [{"file", "step", "column"?,
     "problem", …}]}: every step's warnings, then the schema's problems."""
     store = schema.assemble(saved)
     warnings = []
@@ -62,4 +62,4 @@ def build(saved: dict, rows: dict) -> dict:
                 warnings.append({"file": f, "step": name} | w)
     file_of = {m["table_id"]: m["source_file"] for m in store["metadata"] if m["source_file"]}
     warnings += [{"file": file_of.get(p["table_id"]), "step": "schema"} | p for p in store["problems"]]
-    return {"store": store, "diffs": schema.round_trip(store, rows), "warnings": warnings}
+    return {"store": store, "warnings": warnings}

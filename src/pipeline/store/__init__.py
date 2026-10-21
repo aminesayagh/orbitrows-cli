@@ -11,5 +11,6 @@ joins per file and keys and schema over all the store files together. run.py cha
     joins.classify(jev, table, saved)              groups of columns that describe another record, per file (Jev + code)
     keys.classify(jev, [(table, saved), ...])      primary and foreign keys over all the store files (Jev + code)
     schema.assemble(files)                         the store schema, its metadata rows and export map (code)
-    schema.round_trip(store, rows)                 proof: rebuild every file from the loaded rows (code)
+    schema.round_trip(store, rows)                 proof: rebuild every file from the loaded rows (code); the import
+                                                   itself proves it on disk, in storage.write
 """

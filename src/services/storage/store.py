@@ -11,13 +11,14 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+from orbitrows.pipeline.store import roles
 from orbitrows.pipeline.store.schema import check, load, nodes, q, table_at
 from orbitrows.services.storage import registry
 
-# the stored integer is the index (user decision 2026-10-21); the PoC's order
-ROLES = ("dedicated_key", "descriptive_base", "qualifier", "none")
-KINDS = ("record_reference", "model_reference", "name", "attribute", "contact_or_address", "value_or_text")
-LEVELS = ("individual_record", "product_family")
+# the stored integer is the index (user decision 2026-10-21); the PoC's order, which is roles.py's
+ROLES = tuple(dict.fromkeys(roles.KIND_ROLE.values()))
+KINDS = tuple(roles.KINDS)
+LEVELS = tuple(roles.LEVELS)
 
 # The plan's store_tables, column_context, store_columns and export, with a leading _: a store table is named after its
 # file (export.csv → export) and sql_name() never starts a name with _, so the two can never collide.

@@ -6,7 +6,7 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 
 - [ ] **Is the column type useful?** Jev classifies each column's type (`string`, `enum`, `integer`, `number`, `boolean`, `date`, `datetime`), kept in the column profile (`ColumnProfile.type`).
   - Planned use: generating the staging version at merge time.
-  - If the staging step doesn't need it, drop the type question. It only takes a Choice out of the first Jev request (`TYPE_CRITERIA` in `src/pipeline/context.py`).
+  - If the staging step doesn't need it, drop the type question. It only takes a Choice out of the first Jev request (`TYPE_CRITERIA` in `src/pipeline/store/context.py`).
 - [ ] **The merge needs more than `{"name", "type"}` in `schema`** (raised by the `poc` session). The PoC's conversion algorithms read:
   - `x-type`, `x-decimals` and `pattern` (parse_cell);
   - `x-unit`, `x-currency`, and `x-decimals` for rounding (units.py);
@@ -27,7 +27,7 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
   - a `header_context` whose header didn't resolve (`header_context` is null);
   - a context column that describes nothing.
 - [ ] **The conflict question** (two context columns claim one column) is the only question asked at upload. It was never seen in the PoC's 12 cases. Check that it stays rare.
-- [ ] **header_context uses GLiNER2 + the dictionary** (`src/pipeline/units.py`), and it never guesses.
+- [ ] **header_context uses GLiNER2 + the dictionary** (`src/units/header.py`), and it never guesses.
   - **Benchmark (207 headers):** 88% exact, **0 wrong values**, 4 kept ambiguous, 18 missed, 2 false positives.
   - **Setup it was measured with:** `fastino/gliner2-multi-v1`, threshold 0.5, gliner2 2.0.0, torch 2.14.0+cpu, transformers 4.57.6, pint 0.26.1, babel 2.18.0.
   - **The trade-off:** before the resolver review it scored 92% exact, but with 1 wrong value and several guessed currencies.
@@ -63,7 +63,6 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 
 ## Command line
 
-- [ ] **A conflict takes Jev's top pick** (two context columns claim one column). `store` prints the pick and the alternatives instead of asking, since the CLI runs without questions (agents drive it). Check that the top pick is right often enough, or add a flag to choose.
 - [ ] **`incoming` only checks the file,** and `message` only finds the store: neither saves nor runs anything yet. They plug into the storage (store folder, `session.db`) and the prompt pipeline.
 - [ ] **Only the store schema is saved, not the step sections.** `store` writes the classification into `session.db` (`_store_columns`, `_column_context`, `_export`), but not the raw sections behind it (the profile, the probabilities, the warnings). Warnings are printed once. Decide whether the merge needs them, and save them in `session.db` if it does.
 - [ ] **Role, kind and level are stored as integers** (user decision 2026-10-21): the index in `ROLES`, `KINDS` and `LEVELS` (`src/services/storage/store.py`). The order must stay fixed once stores exist. `created_by`/`edited_by` aren't stored yet: they come with the `history` table, once requests run.

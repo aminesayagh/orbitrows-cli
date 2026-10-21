@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from orbitrows.pipeline.store import run
+from orbitrows.pipeline.store import run, schema
 from orbitrows.services.model.client import Model
 
 CASES = Path(__file__).parent / "fixtures" / "cases"
@@ -30,8 +30,8 @@ async def test_classify_runs_every_step_on_every_file():
         assert {"header", "has_header", "probability"} <= set(s["read"])
         assert all("warnings" in s[name] for name in run.STEPS)
     assert jev.calls > 0 and "keys between the files" in steps
-    built = run.build(saved, run.rows(paths, saved))         # the chain goes through to the proof, which catches
-    assert any("datatype mismatch" in d.get("problem", "") for d in built["diffs"])   # the stub's INTEGER for text
+    diffs = schema.round_trip(run.build(saved)["store"], run.rows(paths, saved))   # the chain goes through to the proof,
+    assert any("datatype mismatch" in d.get("problem", "") for d in diffs)         # which catches the stub's INTEGER for text
 
 
 def fixture(case):
@@ -47,10 +47,8 @@ def test_build_collects_every_warning():
     saved["orders.csv"]["roles"]["warnings"].append({"column": "status", "problem": "role uncertain", "answer": "none"})
     saved["customers.csv"]["joins"]["warnings"].append({"column": "city", "problem": "joined record uncertain: not split"})
     saved["products.csv"]["keys"]["warnings"].append({"column": None, "problem": "no single-column primary key"})
-    rows = run.rows([CASES / "shop" / f for f in saved], saved)
-    built = run.build(saved, rows)
-    assert set(built) == {"store", "diffs", "warnings"}
-    assert [d for d in built["diffs"] if d["kind"] == "value"] == []
+    built = run.build(saved)
+    assert set(built) == {"store", "warnings"}
     got = {(w["file"], w["step"], w["problem"]) for w in built["warnings"]}
     assert got >= {("orders.csv", "header", "header row uncertain: first row kept as header"),
                    ("orders.csv", "schema", "1 values do not fit REAL: does not fit REAL"),
@@ -64,6 +62,6 @@ def test_build_reports_the_schema_problems():
     saved = fixture("shop")
     columns = saved["orders.csv"]["schema"]["create_table"]["definition"]["columns"]
     next(c for c in columns if c["column_id"] == "c_customer_id")["sql_type"] = "TEXT"   # references an INTEGER key
-    built = run.build(saved, {f: [] for f in saved})
+    built = run.build(saved)
     assert {"file": "orders.csv", "step": "schema", "table_id": "t_orders",
             "problem": "TYPE_MISMATCH c_customer_id TEXT → t_customers.c_customer_id INTEGER"} in built["warnings"]
