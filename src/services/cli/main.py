@@ -2,17 +2,21 @@
 
 import argparse
 import asyncio
+import csv
 import os
 import sys
 from pathlib import Path
 
 from typesafe_sdk import TypeSafeError
 
-from orbitrows.pipeline.context import classify_columns
+from orbitrows.pipeline.store import run
 from orbitrows.services.cli.crash import report
-from orbitrows.services.csv.reader import load_csv
-from orbitrows.services.jev.client import connect
+from orbitrows.services.csv.reader import read_table
+from orbitrows.services.model.client import connect
 from orbitrows.services.storage import registry
+from orbitrows.services.storage import store as storage
+
+SHOWN = 5                                                     # differences listed when a store would lose data
 
 
 class Refusal(Exception):
@@ -24,13 +28,16 @@ def need(variable: str) -> None:
         raise Refusal(f"{variable} is not set. Add it to .env and run with: uv run --env-file .env orbitrows …")
 
 
-def read(path: Path) -> tuple[list[str], list[list[str]]]:
+def read(path: Path) -> dict:
+    """The file as read_table reads it (Sniffer's header guess), or a refusal."""
     if not path.is_file():
         raise Refusal(f"File not found: {path}")
     try:
-        return load_csv(path)
-    except ValueError as e:
-        raise Refusal(f"Cannot read {e}") from None
+        return read_table(path)
+    except (ValueError, csv.Error, OSError) as e:
+        raise Refusal(f"Cannot read {path.name}: {e}") from None
+    except IndexError:                                        # not one non-empty row
+        raise Refusal(f"Cannot read {path.name}: empty file") from None
 
 
 def resolve(ref: str | None) -> tuple[str, str | None]:
@@ -48,56 +55,65 @@ def label(store: tuple[str, str | None]) -> str:
     return f"{store_id} ({name})" if name else store_id
 
 
-def context_lines(header: list[str], context: dict) -> list[str]:
-    """One line per column that carries or declares a unit, currency or language."""
-    name = lambda key: header[int(key[1:]) - 1] or f"column {key[1:]}"
-    lines = []
-    for key, c in context.items():
-        if c.role in ("dedicated_context", "both") and c.category:
-            described = [name(k) for k, other in context.items() if other.client == key]
-            unit = f" {c.header_context}" if c.header_context else ""
-            lines.append(f"{name(key)} → {c.category}{unit}" + (f", for {', '.join(described)}" if described else ""))
-        elif c.role == "header_context" and c.header_context:
-            lines.append(f"{name(key)} → {c.category} {c.header_context}")
-    return lines
+def lost(diffs: list[dict]) -> str:
+    """The refusal when the store's tables would not give the uploaded files back."""
+    def line(d):
+        if "header" in d:
+            return f'{d["file"]}, row {d["row"] + 1}, {d["header"]}: "{d["uploaded"]}" would come back as "{d["rebuilt"]}"'
+        return f'{d.get("file") or d.get("table")}: {d["problem"]}'
+    more = [f"… and {len(diffs) - SHOWN} more"] if len(diffs) > SHOWN else []
+    return "\n  ".join(["The store would lose data, so it wasn't saved:"] + [line(d) for d in diffs[:SHOWN]] + more)
 
 
-async def profile(header: list[str], rows: list[list[str]]) -> list[str]:
-    """Jev's column profile, without questions: a conflict takes Jev's top pick and says so."""
-    step = lambda text: print(f"  {text}…", file=sys.stderr)
-    context, conflicts = await classify_columns(connect(), header, rows, step=step)
-    name = lambda key: header[int(key[1:]) - 1] or f"column {key[1:]}"
-    notes = []
-    for conflict in conflicts:
-        (pick, p), *others = conflict.options
-        context[conflict.key].client = pick
-        alternatives = ", ".join(f"{name(k)} ({q:.0%})" for k, q in others)
-        notes.append(f"{name(conflict.key)}: context from {name(pick)} (Jev {p:.0%}); also claimed by {alternatives}")
-    return context_lines(header, context) + notes
+def warning(w: dict) -> str:
+    where = " · ".join(str(x) for x in (w["file"], w["step"], w.get("column")) if x)
+    p = f" ({w['probability']:.0%})" if isinstance(w.get("probability"), float) else ""
+    return f"Warning: {where}: {w['problem']}{p}"
 
 
 async def store(paths: list[Path], name: str | None) -> None:
-    # Every file is read first, so a bad one refuses the store before anything is registered.
-    tables = [(path, *read(path)) for path in dict.fromkeys(paths)]
-    need("OPENROUTER_API_KEY")
+    # Every file is checked first, so a bad one refuses the store before anything is registered.
+    unique = {}
+    for p in paths:                                           # the same file twice is read once
+        unique.setdefault(p.resolve(), p)
+    paths = list(unique.values())
+    for path in paths:
+        read(path)
+    names = [p.name for p in paths]
+    if repeated := sorted({n for n in names if names.count(n) > 1}):
+        raise Refusal(f"Several files are named {', '.join(repeated)}; a store keeps its files by name. Rename them.")
+    if not os.environ.get("MODEL"):                           # MODEL picks another model (a test stub)
+        need("TYPESAFE_API_KEY")
     store_id = registry.create(name)
     try:
-        for path, header, rows in tables:
-            print(f"{path.name}: {len(rows)} rows · {len(header)} columns")
-            for line in await profile(header, rows) or ["no unit, currency or language columns"]:
-                print(f"  {line}")
-    except BaseException:  # Jev failing, Ctrl+C, a crash: the store is marked failed, never left importing
+        storage.copy_files(store_id, paths)
+        step = lambda text: print(f"  {text}…", file=sys.stderr)
+        async with connect() as model:
+            saved = await run.classify(model, paths, step=step)
+        rows = run.rows(paths, saved)
+        built = run.build(saved, rows)
+        if diffs := [d for d in built["diffs"] if d["kind"] == "value"]:
+            raise Refusal(lost(diffs))
+        try:
+            tables = storage.write(store_id, built["store"], rows)
+        except storage.Lost as e:
+            raise Refusal(lost(e.diffs)) from None
+    except BaseException:  # Jev failing, Ctrl+C, a crash, data lost: the store is marked failed, never left importing
         registry.set_status(store_id, registry.FAILED)
         raise
     registry.set_status(store_id, registry.READY)
+    for t in tables:
+        print(f"{t['table']}: {t['rows']} rows · {t['columns']} columns, from {t['file']}")
+    for w in built["warnings"]:
+        print(warning(w))
     print(f"Store {label((store_id, name))}")
 
 
 def incoming(path: Path, ref: str | None) -> None:
     target = resolve(ref)
-    header, rows = read(path)
+    table = read(path)
     # ponytail: not saved anywhere yet; the file is only checked
-    print(f"{path.name}: {len(rows)} rows · {len(header)} columns, incoming for store {label(target)}")
+    print(f"{path.name}: {len(table['rows'])} rows · {len(table['header'])} columns, incoming for store {label(target)}")
     print("Incoming files aren't saved yet, so nothing else uses it.")
 
 

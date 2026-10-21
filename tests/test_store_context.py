@@ -13,7 +13,7 @@ TABLE = {"name": "t", "header": ["sku", "price", "currency"],
 
 @pytest.fixture(autouse=True)
 def no_header_units(monkeypatch):
-    """The header readers (GLiNER2 + dictionary) are tested in test_units_v2; here no header declares a unit."""
+    """The header readers (GLiNER2 + dictionary) are tested in test_units; here no header declares a unit."""
     monkeypatch.setattr(context, "declaration", lambda header, kind=None: None)
 
 

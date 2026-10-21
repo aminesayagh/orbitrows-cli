@@ -1,6 +1,6 @@
 import pytest
 
-from orbitrows.pipeline.units import resolve_header
+from orbitrows.units.header import resolve_header
 
 KNOWN = pytest.mark.xfail(strict=True, reason="known miss (see doc/to-review.md)")
 
@@ -39,11 +39,11 @@ KNOWN = pytest.mark.xfail(strict=True, reason="known miss (see doc/to-review.md)
 ])
 def test_resolve_header(header, category, expected):
     found = resolve_header(header, category)
-    assert (found and (found["category"], found["unit"])) == expected
+    assert (found and (found["kind"], found["unit"])) == expected
 
 
 # Review of the resolver: dimension checks, label-aware lookup, no guessed ambiguity, complete compounds.
-from orbitrows.pipeline.units import lookup, skipped_units  # noqa: E402
+from orbitrows.units.header import lookup, skipped_units  # noqa: E402
 
 
 def test_cldr_units_keep_their_dimension():
@@ -74,7 +74,7 @@ def test_lookup(token, kind, expected):
 ])
 def test_resolve_header_spans(header, expected):
     found = resolve_header(header)
-    assert (found and (found["category"], found["unit"])) == expected
+    assert (found and (found["kind"], found["unit"])) == expected
 
 
 @pytest.mark.parametrize("parts, how, expected", [
@@ -86,5 +86,37 @@ def test_resolve_header_spans(header, expected):
     ([("currency", "EUR"), ("physical_unit", "kg")], "multiply", None),  # only physical units multiply
 ])
 def test_combine(parts, how, expected):
-    from orbitrows.pipeline.units import _combine
+    from orbitrows.units.header import _combine
     assert _combine(parts, how) == expected
+
+
+# Cell units and per-unit headers (units/dictionary.py)
+from orbitrows.units.dictionary import cell_unit, declared, per_unit  # noqa: E402
+
+
+def test_cell_unit():
+    assert cell_unit("16,50 €") == (16.5, {"kind": "currency", "unit": "EUR"})
+    assert cell_unit("extra 1 L") is None
+
+
+@pytest.mark.parametrize("header, expected", [
+    ("Cost USD/l", "USD/l"), ("Kosten EUR/m", "EUR/m"), ("Preis EUR/kg", "EUR/kg"), ("Prix au litre (€/L)", "EUR/l"),
+    ("EUR/m2", None), ("Price per litre", "?/l"), ("Precio por litro", "?/l"), ("Prix par mètre", "?/m"),
+    ("Preis pro Stück", "?/piece"), ("Price per kg", "?/kg"), ("Price per kg (EUR)", "EUR/kg"), ("price_per_kg", "?/kg"),
+    ("Preis je 100 g", "?/100g"), ("Prezzo al kg (€)", "EUR/kg"), ("Prix au kilo", "?/kg"), ("Price (per L)", "?/l"),
+])
+def test_per_unit(header, expected):
+    got = per_unit(header)
+    assert got and got["kind"] == "compound_unit" and got["unit"] == expected
+
+
+@pytest.mark.parametrize("header", [
+    "Weight per piece (g)", "Price in store", "Stock per store", "Taille (S/M/L)", "Poids/kg", "Type (in/out)",
+    "Weight unit (kg)", "Currency (EUR)", "Volume (L)", "length_cm", "Capacity (GB)", "Price (a)",
+])
+def test_per_unit_none(header):
+    assert per_unit(header) is None
+
+
+def test_declared():
+    assert declared("Capacity (GB)") == {"kind": "physical_unit", "unit": "GB"} and declared("Price per kg") is None

@@ -1,34 +1,44 @@
+import json
+import shutil
+import sqlite3
 from contextlib import closing
+from pathlib import Path
 
 import pytest
 from typesafe_sdk import TypeSafeError
 
-from orbitrows.pipeline.context import ColumnProfile, Conflict
 from orbitrows.services.cli import main as cli
 from orbitrows.services.storage import registry
+from orbitrows.services.storage import store as storage
+
+CASES = Path(__file__).parent / "fixtures" / "cases"
+SHOP = ["customers.csv", "orders.csv", "order_lines.csv", "products.csv"]
+
+
+def saved(case) -> dict:
+    return json.loads((CASES / case / "result.json").read_text())["tables"]
+
+
+SAVED = saved("shop") | saved("joins_chain")                  # what the model's steps decided, by file name
 
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
-    """Registry and crash logs in tmp_path, a fake key, and Jev's profiling replaced."""
+    """Registry, stores and crash logs in tmp_path; the model is a stub and its steps are replaced by the fixtures'
+    saved sections, so no model is ever asked."""
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test")
-    monkeypatch.setattr(cli, "connect", lambda: None)
+    monkeypatch.setenv("MODEL", "orbitrows.services.model.client:Model")
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
 
-    async def fake_columns(jev, header, rows, step=lambda text: None):
-        step("Jev: classifying column context")
-        context = {f"c{i}": ColumnProfile("none", 0.9) for i in range(1, len(header) + 1)}
-        if "price" not in header:
-            return context, []
-        context["c4"] = ColumnProfile("dedicated_context", 0.95, category="currency")
-        context["c5"] = ColumnProfile("dedicated_context", 0.9, category="other")
-        context["c2"].client = "c4"
-        return context, [Conflict("c3", [("c4", 0.81), ("c5", 0.64)])]  # price claimed by c4 and c5
+    async def fake_classify(jev, paths, step=lambda text: None):
+        step("classifying")
+        return {p.name: json.loads(json.dumps(SAVED[p.name])) for p in paths}
 
-    monkeypatch.setattr(cli, "classify_columns", fake_columns)
-    (tmp_path / "store.csv").write_text("sku;name;price;currency;note\n001;Tee;9,90;EUR;x\n")
-    (tmp_path / "variants.csv").write_text("sku,color\n001,black\n")
+    monkeypatch.setattr(cli.run, "classify", fake_classify)
+    for f in SHOP:
+        shutil.copy(CASES / "shop" / f, tmp_path / f)
+    shutil.copy(CASES / "joins_chain" / "export.csv", tmp_path / "export.csv")
     (tmp_path / "supplier.csv").write_text("ref,prix\n001,10\n")
     (tmp_path / "empty.csv").write_text("")
     monkeypatch.chdir(tmp_path)
@@ -50,25 +60,23 @@ def test_store_incoming_message(env, capsys):
     code, out, err = run(capsys, "message", "hi")
     assert code == 1 and "No store yet" in err
 
-    code, out, err = run(capsys, "store", "store.csv", "empty.csv")
-    assert code == 1 and "Cannot read" in err and stores() == []  # every file is read before registering
+    code, out, err = run(capsys, "store", "customers.csv", "empty.csv")
+    assert code == 1 and "Cannot read empty.csv" in err and stores() == []  # every file is read before registering
 
-    code, out, err = run(capsys, "store", "store.csv", "variants.csv", "store.csv")  # a repeat is read once
-    assert code == 0
+    code, out, err = run(capsys, "store", *SHOP, "customers.csv")  # a repeat is read once
+    assert code == 0, err
     [(first, name, status)] = stores()
     assert (name, status) == (None, 1) and first.startswith("st_")
     assert out.splitlines()[-1] == f"Store {first}"  # the last line is the store
-    assert "store.csv: 1 rows · 5 columns" in out and "variants.csv: 1 rows · 2 columns" in out
-    assert "currency → currency, for name" in out
-    assert "price: context from currency (Jev 81%); also claimed by note (64%)" in out  # no question asked
-    assert "Jev: classifying column context" in err  # progress goes to stderr
+    assert "customers: 5 rows · 4 columns, from customers.csv" in out
+    assert "classifying…" in err  # progress goes to stderr
 
-    code, out, err = run(capsys, "store", "variants.csv", "-n", "Orbitrow shop")
+    code, out, err = run(capsys, "store", "export.csv", "-n", "Orbitrow shop")
     second = stores()[-1][0]
     assert code == 0 and out.splitlines()[-1] == f"Store {second} (Orbitrow shop)"
 
     code, out, err = run(capsys, "incoming", "supplier.csv")  # the latest store by default
-    assert code == 0 and f"incoming for store {second} (Orbitrow shop)" in out
+    assert code == 0 and f"supplier.csv: 1 rows · 2 columns, incoming for store {second} (Orbitrow shop)" in out
     code, out, err = run(capsys, "incoming", "supplier.csv", "--store", first)
     assert code == 0 and f"incoming for store {first}" in out
     assert run(capsys, "incoming", "missing.csv")[2].startswith("File not found")
@@ -80,9 +88,56 @@ def test_store_incoming_message(env, capsys):
     assert len(stores()) == 2  # incoming and message never create a store
 
 
+def test_store_is_written_to_disk(env, capsys):
+    code, out, err = run(capsys, "store", *SHOP, "-n", "shop")
+    assert code == 0, err
+    [(store_id, name, status)] = stores()
+    assert out.splitlines()[-1] == f"Store {store_id} (shop)" and status == registry.READY
+    folder = storage.folder(store_id)
+    assert sorted(p.name for p in (folder / "files").iterdir()) == sorted(SHOP)
+    assert (folder / "original.db").is_file()
+    with closing(sqlite3.connect(folder / "session.db")) as db:
+        assert db.execute("SELECT COUNT(*) FROM orders").fetchone() == (8,)
+    for line in ["orders: 8 rows · 4 columns, from orders.csv", "products: 6 rows · 5 columns, from products.csv"]:
+        assert line in out
+
+
+def test_warnings_are_printed(env, capsys, monkeypatch):
+    SAVED["orders.csv"]["roles"]["warnings"].append({"column": "status", "problem": "role uncertain", "probability": 0.62})
+    try:
+        code, out, err = run(capsys, "store", *SHOP)
+    finally:
+        SAVED["orders.csv"]["roles"]["warnings"].pop()
+    assert code == 0 and "Warning: orders.csv · roles · status: role uncertain (62%)" in out.splitlines()
+
+
+def test_a_store_that_loses_data_is_refused(env, capsys):
+    lines = (env / "export.csv").read_text().splitlines()
+    lines[2] = lines[2].replace("Alice Martin", "Alice M.")  # customer 1's name now disagrees with row 1's
+    (env / "export.csv").write_text("\n".join(lines) + "\n")
+    code, out, err = run(capsys, "store", "export.csv")
+    assert code == 1 and "would lose data" in err
+    assert 'export.csv, row 2, customer_name: "Alice M." would come back as "Alice Martin"' in err
+    [(store_id, _, status)] = stores()
+    assert status == registry.FAILED and not (storage.folder(store_id) / "session.db").exists()
+
+
+def test_files_with_the_same_name_are_refused(env, capsys):
+    (env / "other").mkdir()
+    shutil.copy(env / "customers.csv", env / "other" / "customers.csv")
+    code, out, err = run(capsys, "store", "customers.csv", "other/customers.csv")
+    assert code == 1 and "Several files are named customers.csv" in err and stores() == []
+
+
+def test_the_key_is_needed_for_jev(env, capsys, monkeypatch):
+    monkeypatch.delenv("MODEL")
+    code, out, err = run(capsys, "store", "customers.csv")
+    assert code == 1 and err.startswith("TYPESAFE_API_KEY is not set") and stores() == []
+
+
 def test_same_name_needs_the_id(env, capsys):
-    run(capsys, "store", "variants.csv", "-n", "shop")
-    run(capsys, "store", "variants.csv", "-n", "shop")
+    run(capsys, "store", "customers.csv", "-n", "shop")
+    run(capsys, "store", "customers.csv", "-n", "shop")
     code, out, err = run(capsys, "message", "hi", "-s", "shop")
     assert code == 1 and "Several stores are named shop" in err
 
@@ -94,19 +149,19 @@ def test_store_needs_files(env, capsys):
 
 
 def test_failed_import_marks_the_store_failed(env, capsys, monkeypatch):
-    async def broken(jev, header, rows, step=lambda text: None):
+    async def broken(jev, paths, step=lambda text: None):
         raise TypeSafeError("down")
 
-    monkeypatch.setattr(cli, "classify_columns", broken)
-    code, out, err = run(capsys, "store", "store.csv")
+    monkeypatch.setattr(cli.run, "classify", broken)
+    code, out, err = run(capsys, "store", "customers.csv")
     assert code == 1 and "Jev couldn't answer" in err
     assert [s for _, _, s in stores()] == [-1]
     assert "No store yet" in run(capsys, "message", "hi")[2]  # a failed store is never picked
 
 
 def test_crash_shows_message_not_traceback(env, capsys, monkeypatch):
-    monkeypatch.setattr(cli, "load_csv", lambda path: 1 / 0)
-    code, out, err = run(capsys, "store", "store.csv")
+    monkeypatch.setattr(cli, "read_table", lambda path: 1 / 0)
+    code, out, err = run(capsys, "store", "customers.csv")
     assert code == 1 and "unexpected error" in err and "Traceback" not in err + out
     [log] = (env / "state" / "orbitrows").glob("crash-*.log")
     assert "ZeroDivisionError" in log.read_text() and "Traceback" in log.read_text()

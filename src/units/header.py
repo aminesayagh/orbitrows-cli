@@ -1,7 +1,6 @@
 """header_context: the unit, currency or language a column header declares ("Poids (kg)" -> kg).
 
-Newer than src/pipeline/units.py (benchmark poc/docs/header-context-benchmark.md); returns {"kind", "unit"}
-instead of {"category", "unit"}.
+The PoC's header reader (benchmark poc/docs/header-context-benchmark.md); returns {"kind", "unit"}.
 
 GLiNER2 finds labelled spans in the header ("kilos" as a measurement unit, "fr" as a language); the dictionary
 turns each span into a standard unit, looking only at meanings of the span's category (CLDR unit names in every
