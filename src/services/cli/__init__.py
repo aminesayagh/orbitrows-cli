@@ -1,1 +1,1 @@
-"""Terminal UI: Textual app, screens, crash reporting."""
+"""The `orbitrows` command line and its crash reporting."""

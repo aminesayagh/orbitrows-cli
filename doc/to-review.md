@@ -61,22 +61,9 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
   The machine has an RTX 4060: switching to the CUDA build would speed it up, at the cost of a much larger install.
 - [ ] **Enum detection.** Removed from the upload, and meant to be its own later step (the diagram puts it at merge time). The `enum` type now partly overlaps with it; decide whether it replaces that step.
 
-## Prompt guardrail and commands (Jev intent)
+## Command line
 
-- [ ] **Cut-off at 0.5** for "on topic", "about the store / incoming", and command detection. It's untuned, so tune it on real prompts.
-- [ ] **Near-tie file targets resolve to the higher score** ("reverse the table": store 0.64 vs incoming 0.43). This was accepted; check that users don't find it surprising.
-- [ ] **A request mixed with an off-topic one is refused as a whole** ("sort my store, then tell me the weather"). The alternative is to run the CSV part only.
-- [ ] **"undo that" sits right on the cut-off** (on-topic at 0.50) and is currently caught as the undo command. Plain words like "export" or "help" aren't handled before Jev.
-- [ ] **One command per prompt.** "merge them then show me the store" runs only the merge.
-
-## Commands
-
-- [ ] **`/preview`, `/undo`, `/reset` are placeholders** since the database was dropped. Their behaviour comes back with the storage design.
-- [ ] **`/merge`:** it checks its preconditions only; the merge pipeline isn't built.
-
-## CLI
-
-- [ ] **Each run starts a new session.** There's no way to resume a store uploaded in an earlier run.
-- [ ] **A path containing spaces isn't recognised as a file** in the prompt line.
-- [ ] **Running a prompt** (turning it into a MongoDB-style update and applying it) isn't built. Today the CLI only says which file a prompt targets.
-
+- [ ] **A conflict takes Jev's top pick** (two context columns claim one column). `store` prints the pick and the alternatives instead of asking, since the CLI runs without questions (agents drive it). Check that the top pick is right often enough, or add a flag to choose.
+- [ ] **`incoming` only checks the file,** and `message` only finds the store: neither saves nor runs anything yet. They plug into the storage (store folder, `session.db`) and the prompt pipeline.
+- [ ] **The profile `store` prints isn't saved,** so it's recomputed (and paid for) on every `store`. It goes into `session.db` with the PoC import.
+- [ ] **No guardrail on `message`** since the Jev intent check was removed with the chat. Add it back when messages run: is it about the data, and for the store or the incoming file.

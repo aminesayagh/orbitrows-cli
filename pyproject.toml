@@ -1,7 +1,7 @@
 [project]
 name = "orbitrows"
 version = "0.1.0"
-description = "Reconcile a store CSV export with an incoming update CSV, using Jev plus deterministic matching, with human review in a Textual TUI."
+description = "Reconcile a store CSV export with an incoming update CSV, using Jev plus deterministic matching, driven from the command line."
 readme = "README.md"
 authors = [
     { name = "aminesayagh", email = "aminesayagh1997@gmail.com" }
@@ -11,14 +11,12 @@ dependencies = [
     "babel>=2.18.0",
     "gliner2[local]>=2.0.0",
     "pint>=0.26.1",
-    "textual>=8.2.8",
-    "textual-autocomplete>=4.0.6",
     "torch>=2.14.0",
     "typesafe-sdk>=0.7.1",
 ]
 
 [project.scripts]
-orbitrows = "orbitrows.services.cli.app:main"
+orbitrows = "orbitrows.services.cli.main:main"
 
 [build-system]
 requires = ["setuptools>=80"]
