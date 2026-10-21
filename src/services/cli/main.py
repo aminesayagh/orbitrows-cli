@@ -301,6 +301,8 @@ def leave(ref: str | None) -> None:
     if not (reply := ask(target, {"op": "exit"}, launch=False)):
         print(f"Nothing to save: store {label(target)} has no open session.")
         return
+    if not reply.get("ok"):                                   # the COMMIT failed: nothing is said saved
+        raise Refusal(reply["error"])
     print("Saved." + (f" The message waiting for answers ({reply['dropped']}) was dropped." if "dropped" in reply else ""))
 
 
