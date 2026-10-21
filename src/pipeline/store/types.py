@@ -2,7 +2,7 @@
 
     Jev   one call per table: per column, a type among SQLite's STRICT types (the cells' original format, not their
           meaning) and "can it be empty?"
-    code  uncertain type → TEXT (keeps the cell as written), flagged; uncertain nullability → nullable (safe, no
+    code  uncertain type → TEXT (keeps the cell as written), flagged with a choice question for the user; uncertain nullability → nullable (safe, no
           warning); the AST's nullable field is the only output
     code  the create_table AST node (orbitrows.sql.ddl), checked by SQLite
 
@@ -13,7 +13,7 @@ import re
 import sqlite3
 
 from orbitrows.sql.ddl import create_table
-from orbitrows.services.model.client import SURE, ask, choice, sure, yes_no
+from orbitrows.services.model.client import SURE, ask, choice, options, sure, yes_no
 from .context import ACTIVITY, SAMPLE
 
 TYPES = {
@@ -116,8 +116,11 @@ async def classify(jev, table: dict, context: dict) -> dict:
         t = sure(a, f"{k}_type")
         if not t:
             top, probs = a.get(f"{k}_type", (None, {}))
-            warnings.append({"column": h, "problem": "type uncertain: TEXT kept", "answer": top,
-                             "probability": round(probs.get(top, 0), 2) if top else None})
+            w = {"column": h, "problem": "type uncertain: TEXT kept", "answer": top,
+                 "probability": round(probs.get(top, 0), 2) if top else None}
+            if top:                                           # a model answer below SURE: the user picks the type
+                w["question"] = {"type": "choice", "call": a.call, "key": f"{k}_type", "options": options(probs)}
+            warnings.append(w)
         p = a.get(f"{k}_nullable", 1.0)
         columns.append({"header": h, "sql_type": t or "TEXT", "nullable": p > NOT_NULL})
     node = create_table(table["name"], columns).model_dump()

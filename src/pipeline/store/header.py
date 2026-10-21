@@ -2,7 +2,8 @@
 
     code  the first rows, decoded with the table's own encoding and delimiter; csv.Sniffer's guess as a weak hint
     Jev   one yes/no: does the first row name the columns?
-    code  ≥ SURE → header; ≤ 1 − SURE → no header; between → header (most exports have one), flagged
+    code  ≥ SURE → header; ≤ 1 − SURE → no header; between → header (most exports have one), flagged with a yes/no
+          question for the user: once answered, the import runs again with that answer as certain
 """
 from pathlib import Path
 
@@ -33,10 +34,13 @@ def decide(p: float) -> dict:
 
 
 async def detect(jev, path) -> dict:
-    """{"has_header": bool, "probability": float, "warning"?: str}."""
+    """{"has_header": bool, "probability": float, "warning"?: str, "question"?: {"type": "yes_no", "call", "key"}}."""
     ev = first_rows(path, ROWS)
     state = {"file": Path(path).name, "first_rows": ev["rows"],
              "sniffer_hint": {True: "header", False: "no header", None: "no guess"}[ev["sniffer_header"]]}
     a = await ask(jev, state, {"header": yes_no(
         ACTIVITY, "Is the first row of first_rows a header row that names the columns, rather than a row of data?", RULES)})
-    return decide(a["header"])
+    out = decide(a["header"])
+    if "warning" in out:
+        out["question"] = {"type": "yes_no", "call": a.call, "key": "header"}
+    return out

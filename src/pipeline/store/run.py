@@ -1,44 +1,94 @@
 """The store import from end to end, in two halves so each can be tested alone:
 
-    classify(jev, paths)   the questions: header, types, profile, context, roles per file, then keys over all the files,
-                           then joins per file → {"<file>.csv": its saved sections}
+    classify(jev, paths)   the questions, phase by phase over all the files: header, types (with the profile), context,
+                           roles, keys, joins → {"<file>.csv": its saved sections}
     build(saved)           the code: the store schema, with every step's warnings in one list
+
+A model answer below SURE is a question for the user: classify stops after the first phase that has one (Paused); once
+the user has answered (client.settle), the import runs again from the start, replaying the recorded answers
+(client.Recorded). Every other warning is a notice: shown, and the import goes on.
 """
+import hashlib
+
 from orbitrows.services.csv.reader import read_table
 
 from . import context, header, joins, keys, profile, roles, schema, types
 
 NO_CONTEXT = {"context_columns": {}, "source_context": {}}    # the types step runs before the context step
 STEPS = ("schema", "context", "roles", "keys", "joins")       # the saved sections that carry "warnings"
+PHASES = ("header", "types", "context", "roles", "keys", "joins")
+SECTION = {"types": "schema"}                                 # a phase's warnings are listed under its section, as in build()
+
+
+class Paused(Exception):
+    """The import stopped after `phase`: `questions` for the user (warnings with "question" and a stable "id"), and the
+    `notices` of the phases run so far (warnings without a question). Each has "file" and "step"."""
+
+    def __init__(self, phase: str, questions: list, notices: list):
+        super().__init__(f"{len(questions)} question(s) after the {phase} step")
+        self.phase, self.questions, self.notices = phase, questions, notices
 
 
 async def classify(jev, paths: list, step=lambda text: None) -> dict[str, dict]:
     """{"<file name>": {"read", "schema", "profile", "context", "roles", "keys", "joins"}} for the store files.
-    The rows are not kept: read them again with read_table(path, has_header=saved[file]["read"]["has_header"])."""
-    saved, tables = {}, {}
+    The rows are not kept: read them again with read_table(path, has_header=saved[file]["read"]["has_header"]).
+    Raises Paused after the first phase whose warnings carry a question."""
+    saved, tables, notices = {}, {}, []
+
+    def pause(phase):
+        found = [w for f, s in saved.items() for w in _warnings(f, s, SECTION.get(phase, phase))]
+        notices.extend(w for w in found if "question" not in w)
+        questions = [w | {"id": "q_" + hashlib.sha256((w["question"]["call"] + w["question"]["key"]).encode())
+                          .hexdigest()[:8]} for w in found if "question" in w]
+        if questions:
+            raise Paused(phase, questions, notices)
+
     for path in paths:
-        f = path.name
-        step(f"{f}: header row")
-        read = await header.detect(jev, path)
-        table = read_table(path, has_header=read["has_header"])
+        step(f"{path.name}: header row")
+        saved[path.name] = {"read": await header.detect(jev, path)}
+    pause("header")
+    for path in paths:
+        f, s = path.name, saved[path.name]
+        tables[f] = table = read_table(path, has_header=s["read"]["has_header"])
         step(f"{f}: column types")
-        s = {"read": {"header": table["header"]} | read, "schema": await types.classify(jev, table, NO_CONTEXT),
-             "profile": profile.profile(table)}
+        s["read"] = {"header": table["header"]} | s["read"]
+        s["schema"], s["profile"] = await types.classify(jev, table, NO_CONTEXT), profile.profile(table)
+    pause("types")
+    for f, s in saved.items():
         step(f"{f}: column context")
-        s["context"] = await context.classify(jev, table, s["schema"], s["profile"])
+        s["context"] = await context.classify(jev, tables[f], s["schema"], s["profile"])
+    pause("context")
+    for f, s in saved.items():
         step(f"{f}: column roles")
-        s["roles"] = await roles.classify(jev, table, s["context"], s["schema"], s["profile"])
-        saved[f], tables[f] = s, table
+        s["roles"] = await roles.classify(jev, tables[f], s["context"], s["schema"], s["profile"])
+    pause("roles")
     step("keys between the files")
     found = await keys.classify(jev, [(tables[f], s) for f, s in saved.items()])
     for f, s in saved.items():
         k = found[tables[f]["path"]]
         s["schema"]["create_table"] = k["create_table"]
         s["keys"] = {"warnings": k["warnings"]}
+    pause("keys")
     for f, s in saved.items():
         step(f"{f}: joined records")
         s["joins"] = await joins.classify(jev, tables[f], s)
+    pause("joins")
     return saved
+
+
+def _warnings(f: str, s: dict, name: str) -> list[dict]:
+    """The warnings of one file's step `name` ("header" or one of STEPS), as build() lists them."""
+    if name == "header":
+        r = s["read"]
+        return [{"file": f, "step": "header", "problem": r["warning"], "probability": r["probability"]}
+                | ({"question": r["question"]} if "question" in r else {})] if "warning" in r else []
+    out = []
+    for w in s.get(name, {}).get("warnings", []):
+        if "problem" not in w:                                # the types check: rows that do not fit, listed in w["rows"]
+            w = w | {"problem": f'{w["count"]} values do not fit {w["type"]}: '
+                                + "; ".join(dict.fromkeys(r["problem"] for r in w["rows"]))}
+        out.append({"file": f, "step": name} | w)
+    return out
 
 
 def rows(paths: list, saved: dict) -> dict[str, list]:
@@ -55,16 +105,7 @@ def build(saved: dict) -> dict:
         if m["source_header"] is not None:
             p = saved[m["source_file"]]["profile"]
             m["profile"] = p["columns"][m["source_header"]] | ({"profiled": p["profiled"]} if "profiled" in p else {})
-    warnings = []
-    for f, s in saved.items():
-        if w := s["read"].get("warning"):
-            warnings.append({"file": f, "step": "header", "problem": w, "probability": s["read"]["probability"]})
-        for name in STEPS:
-            for w in s.get(name, {}).get("warnings", []):
-                if "problem" not in w:                        # the types check: rows that do not fit, listed in w["rows"]
-                    w = w | {"problem": f'{w["count"]} values do not fit {w["type"]}: '
-                                        + "; ".join(dict.fromkeys(r["problem"] for r in w["rows"]))}
-                warnings.append({"file": f, "step": name} | w)
+    warnings = [w for f, s in saved.items() for name in ("header", *STEPS) for w in _warnings(f, s, name)]
     file_of = {m["table_id"]: m["source_file"] for m in store["metadata"] if m["source_file"]}
     warnings += [{"file": file_of.get(p["table_id"]), "step": "schema"} | p for p in store["problems"]]
     return {"store": store, "warnings": warnings}

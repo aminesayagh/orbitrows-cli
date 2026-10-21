@@ -34,6 +34,11 @@ async def test_detect_asks_one_question_about_the_first_rows():
 async def test_detect_uncertain_keeps_the_header_flagged():
     out = await detect(Stub(0.5), CASES / "store" / "store.csv")
     assert out["has_header"] and out["warning"] == "header row uncertain: first row kept as header"
+    assert out["question"]["type"] == "yes_no" and out["question"]["key"] == "header" and out["question"]["call"]
+
+
+async def test_detect_sure_asks_the_user_nothing():
+    assert "question" not in await detect(Stub(0.9), CASES / "store" / "store.csv")
 
 
 async def test_detect_no_header():

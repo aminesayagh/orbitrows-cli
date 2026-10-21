@@ -78,5 +78,10 @@ async def test_uncertain_type_keeps_text_and_unsure_nullability_is_nullable():
     out = await classify(jev, TABLE, NO_CONTEXT)
     cols = out["create_table"]["definition"]["columns"]
     assert [(c["sql_type"], c["nullable"]) for c in cols] == [("TEXT", True), ("INTEGER", True)]
-    assert out["warnings"][0] == {"column": "sku", "problem": "type uncertain: TEXT kept", "answer": "INTEGER",
-                                  "probability": 0.6}
+    w = out["warnings"][0]
+    assert w | {"question": None} == {"column": "sku", "problem": "type uncertain: TEXT kept", "answer": "INTEGER",
+                                      "probability": 0.6, "question": None}
+    assert w["question"] == {"type": "choice", "call": w["question"]["call"], "key": "k1_type",     # for the user
+                             "options": [{"answer": "INTEGER", "value": "INTEGER", "probability": 0.6},
+                                         {"answer": "TEXT", "value": "TEXT", "probability": 0.4}]}
+    assert len(w["question"]["call"]) == 16 and all("question" not in w for w in out["warnings"][1:])

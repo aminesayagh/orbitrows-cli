@@ -1,8 +1,10 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from orbitrows.pipeline.store import run, schema
-from orbitrows.services.model.client import Model
+from orbitrows.services.model.client import Model, Recorded, options, settle
 
 CASES = Path(__file__).parent / "fixtures" / "cases"
 SECTIONS = {"read", "schema", "profile", "context", "roles", "keys", "joins"}
@@ -32,6 +34,57 @@ async def test_classify_runs_every_step_on_every_file():
     assert jev.calls > 0 and "keys between the files" in steps
     diffs = schema.round_trip(run.build(saved)["store"], run.rows(paths, saved))   # the chain goes through to the proof,
     assert any("datatype mismatch" in d.get("problem", "") for d in diffs)         # which catches the stub's INTEGER for text
+
+
+class Unsure(Generic):
+    """Generic, except the answers in `given` ({key: answer}) wherever that key is asked."""
+
+    def __init__(self, given):
+        super().__init__()
+        self.given = given
+
+    async def answer(self, state, questions):
+        out, usage = await super().answer(state, questions)
+        return out | {k: v for k, v in self.given.items() if k in questions}, usage
+
+
+async def test_a_second_run_replays_every_answer_without_a_call():
+    paths, calls = sorted((CASES / "french").glob("*.csv")), {}
+    first, second = Generic(), Generic()
+    async with Recorded(first, calls) as m:
+        saved = await run.classify(m, paths)
+    async with Recorded(second, calls) as m:
+        assert await run.classify(m, paths) == saved
+    assert first.calls == len(calls) > 0 and second.calls == 0
+
+
+async def test_an_unsure_header_is_a_question_then_the_user_answer():
+    path, calls = CASES / "store" / "store.csv", {}
+    with pytest.raises(run.Paused) as paused:
+        await run.classify(Recorded(Unsure({"header": 0.5}), calls), [path])
+    [q] = paused.value.questions
+    assert paused.value.phase == "header" and (q["file"], q["step"], q["question"]["type"]) == ("store.csv", "header", "yes_no")
+    with pytest.raises(run.Paused) as again:                                    # the replay asks the same question
+        await run.classify(Recorded(stub := Unsure({"header": 0.5}), calls), [path])
+    assert again.value.questions[0]["id"] == q["id"] and q["id"].startswith("q_") and stub.calls == 0
+    settle(calls, q["question"]["call"], q["question"]["key"], "no")
+    saved = await run.classify(Recorded(Unsure({"header": 0.5}), calls), [path])
+    assert saved["store.csv"]["read"]["has_header"] is False and "warning" not in saved["store.csv"]["read"]
+
+
+async def test_an_unsure_type_is_a_question_and_the_rows_that_do_not_fit_are_notices():
+    path, calls = CASES / "store" / "store.csv", {}
+    probs = {"INTEGER": 0.5, "REAL": 0.4, "TEXT": 0.1}
+    with pytest.raises(run.Paused) as paused:
+        await run.classify(Recorded(Unsure({"k1_type": ("INTEGER", probs)}), calls), [path])
+    [q] = paused.value.questions
+    assert paused.value.phase == "types" and q["step"] == "schema" and q["question"]["key"] == "k1_type"
+    assert q["question"]["options"] == options(probs) and len(options(probs)) == 3
+    notices = paused.value.notices
+    assert notices and all(n["step"] == "schema" and "question" not in n and n["problem"] for n in notices)
+    settle(calls, q["question"]["call"], "k1_type", q["question"]["options"][1]["value"])
+    saved = await run.classify(Recorded(Unsure({"k1_type": ("INTEGER", probs)}), calls), [path])
+    assert saved["store.csv"]["schema"]["create_table"]["definition"]["columns"][0]["sql_type"] == "REAL"
 
 
 def fixture(case):
