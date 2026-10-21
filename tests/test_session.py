@@ -225,6 +225,11 @@ EVERY = {"step": "assembly", "request": "r1", "problem": "changes every record o
 async def doubling(prompt, jev, db, step=lambda text: None):
     """pipeline.run, stubbed: "broken" fails to build; else one yes/no call, a question until answered yes, then
     DOUBLE as the program."""
+    if prompt == "lower all":                                 # the rows' step unsure, so every row would change
+        unsure = {"request": "r1", "problem": "some records, but no condition column found"}
+        return {"conditions": {"warnings": [unsure]},
+                "assembly": {"program": [{"request": "r1", "ast": {"type": "update"}, "sql": [DOUBLE], "rows": 2}],
+                             "questions": [EVERY], "errors": []}}
     if prompt == "broken":
         error = {"request": "r1", "stage": "sqlite", "error": "no such column: x"}
         return {"assembly": {"program": [], "questions": [{"step": "assembly"} | error], "errors": [error]}}
@@ -288,3 +293,13 @@ def test_a_program_with_errors_changes_nothing(piped, capsys):
     code, out, err = run(capsys, "message", "broken")
     assert code == 1 and out == "" and "r1 (sqlite): no such column: x" in err
     assert piped.session.db.execute(SELECT).fetchall() == [(10.0,), (20.0,)] and not piped.session.changes
+
+
+def test_every_row_changed_while_unsure_is_confirmed_first(piped, capsys):
+    code, out, err = run(capsys, "message", "lower", "all")
+    [q] = json.loads(out)["questions"]
+    assert code == 3 and q["id"] == "m_all_r1" and q["type"] == "yes_no" and not piped.session.changes
+    assert run(capsys, "answer", "m_all_r1", "no")[0] == 0 and not piped.session.changes
+    run(capsys, "message", "lower", "all")
+    assert run(capsys, "answer", "m_all_r1", "yes")[0] == 0
+    assert piped.session.db.execute(SELECT).fetchall() == [(20.0,), (40.0,)]
