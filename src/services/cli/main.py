@@ -1,4 +1,4 @@
-"""The `orbitrows` command: store, answer, incoming, message, undo, exit. One process per command; the registry links
+"""The `orbitrows` command: store, answer, incoming, message, undo, exit, export. One process per command; the registry links
 them, and a store's session server holds its messages' changes until exit."""
 
 import argparse
@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import signal
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from orbitrows.services.cli.crash import report
 from orbitrows.services.csv.reader import read_table
 from orbitrows.services.model.client import Recorded, answers, connect, settle
 from orbitrows.services.session import client as session
+from orbitrows.services.storage import export as exporting
 from orbitrows.services.storage import registry
 from orbitrows.services.storage import store as storage
 from orbitrows.sql.ddl import sql_name
@@ -306,6 +308,23 @@ def leave(ref: str | None) -> None:
     print("Saved." + (f" The message waiting for answers ({reply['dropped']}) was dropped." if "dropped" in reply else ""))
 
 
+def export(folder: Path, force: bool, ref: str | None) -> None:
+    """Every uploaded file rebuilt from the store's tables into folder, as one JSON object on stdout: through the
+    store's session when one runs (its unsaved changes included), else from session.db, read only."""
+    target, folder = resolve(ref), folder.resolve()          # absolute: the session runs in another folder
+    path = storage.folder(target[0])
+    request = {"op": "export", "folder": str(folder), "force": force}
+    if (path / "session.sock").exists() and (reply := ask(target, request, launch=False)) is not None:
+        files = reply["files"]
+    else:
+        with contextlib.closing(sqlite3.connect(f"file:{path / 'session.db'}?mode=ro", uri=True)) as db:
+            try:
+                files = exporting.export(db, path, folder, force)
+            except FileExistsError as e:
+                raise Refusal(str(e)) from None
+    print(json.dumps({"store": target[0], "name": target[1], "files": files}, ensure_ascii=False))
+
+
 def parser() -> argparse.ArgumentParser:
     cli = argparse.ArgumentParser(prog="orbitrows", description="Reconcile a store's CSV export with supplier files.")
     commands = cli.add_subparsers(dest="command", required=True)
@@ -323,7 +342,10 @@ def parser() -> argparse.ArgumentParser:
     m.add_argument("text", nargs="+")
     u = commands.add_parser("undo", help="revert the session's last change")
     e = commands.add_parser("exit", help="save the session's changes and end it")
-    for sub in (i, m, u, e):
+    x = commands.add_parser("export", help="write the store's files, rebuilt from its tables, into a folder")
+    x.add_argument("-o", "--output", type=Path, required=True, metavar="folder")
+    x.add_argument("--force", action="store_true", help="replace files already in the folder")
+    for sub in (i, m, u, e, x):
         sub.add_argument("-s", "--store", help="store id or name (default: the latest store)")
     return cli
 
@@ -345,6 +367,8 @@ def main(argv: list[str] | None = None) -> int:
                 undo(args.store)
             case "exit":
                 leave(args.store)
+            case "export":
+                export(args.output, args.force, args.store)
     except Refusal as e:
         print(e, file=sys.stderr)
         return 1

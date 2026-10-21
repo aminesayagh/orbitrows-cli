@@ -189,24 +189,11 @@ def check(db, store: dict, rows: dict) -> list[dict]:
     differences and the references SQLite cannot resolve (round_trip's kinds)."""
     defs = nodes(store)
     diffs = []
-    for ex in store["export"]:
-        # rebuild: the root, then one LEFT JOIN per reference path
-        root = defs[ex["root"]]
-        alias, joins = {(): "r0"}, []
-        for c in ex["columns"]:
-            path = tuple(c["via"])
-            for i in range(1, len(path) + 1):
-                if path[:i] in alias:
-                    continue
-                parent = defs[table_at(defs, ex["root"], path[:i - 1])]
-                target = defs[table_at(defs, ex["root"], path[:i])]
-                a = alias[path[:i]] = f"r{len(alias)}"
-                col = {x.column_id: x.sql_name for x in parent.columns}[path[i - 1]]
-                pk = {x.column_id: x.sql_name for x in target.columns}[target.primary_key[0]]
-                joins.append(f'LEFT JOIN {q(target.sql_name)} {a} ON {a}.{q(pk)} = {alias[path[:i - 1]]}.{q(col)}')
-        select = [f'{alias[tuple(c["via"])]}.{q({x.column_id: x.sql_name for x in defs[c["table_id"]].columns}[c["column_id"]])}'
-                  for c in ex["columns"]]
-        got = db.execute(f'SELECT {", ".join(select)} FROM {q(root.sql_name)} r0 {" ".join(joins)} ORDER BY r0.rowid').fetchall()
+    names = lambda t_id: {x.column_id: x.sql_name for x in defs[t_id].columns}
+    for ex in store["export"]:                                # the export's own rebuild, by names
+        got = rebuild(db, defs[ex["root"]].sql_name, [
+            ([names(table_at(defs, ex["root"], c["via"][:i]))[k] for i, k in enumerate(c["via"])],
+             names(c["table_id"])[c["column_id"]]) for c in ex["columns"]])
         want = rows[ex["file"]]
         if len(got) != len(want):
             diffs.append({"file": ex["file"], "problem": f"{len(got)} rows rebuilt, {len(want)} uploaded", "kind": "value"})
@@ -223,6 +210,27 @@ def check(db, store: dict, rows: dict) -> list[dict]:
     for table, rowid, parent, _ in db.execute("PRAGMA foreign_key_check"):     # SQLite checks every reference
         diffs.append({"table": table, "rowid": rowid, "problem": f"references a missing {parent} record", "kind": "value"})
     return diffs
+
+
+def rebuild(db, root: str, columns: list[tuple[list[str], str]]) -> list[tuple]:
+    """A file's rows rebuilt from the tables in db, as check() proves them and the export writes them: the root table,
+    one LEFT JOIN per reference path (each step a reference column of the table it leaves, joined to the table and
+    column its foreign key names in SQLite), one value per column, in the root's rowid order.
+    columns: [(via: the reference columns' names, from the root on; the column's name)], in the file's order."""
+    alias, table, joins = {(): "r0"}, {(): root}, []
+    for via, _ in columns:
+        path = tuple(via)
+        for i in range(1, len(path) + 1):
+            if path[:i] in alias:
+                continue
+            here = path[:i - 1]
+            _, _, target, col, pk, *_ = next(fk for fk in db.execute(f"PRAGMA foreign_key_list({q(table[here])})")
+                                             if fk[3] == path[i - 1])
+            a = alias[path[:i]] = f"r{len(alias)}"
+            table[path[:i]] = target
+            joins.append(f'LEFT JOIN {q(target)} {a} ON {a}.{q(pk)} = {alias[here]}.{q(col)}')
+    select = [f"{alias[tuple(via)]}.{q(name)}" for via, name in columns]
+    return db.execute(f'SELECT {", ".join(select)} FROM {q(root)} r0 {" ".join(joins)} ORDER BY r0.rowid').fetchall()
 
 
 def table_at(defs, root, path) -> str:

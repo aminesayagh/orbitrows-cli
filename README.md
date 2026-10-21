@@ -25,6 +25,7 @@ orbitrows incoming supplier.csv                               # for the latest s
 orbitrows message "raise all prices by 5%" --store st_7f3a91c2
 orbitrows undo                                                # reverts the last change of the session
 orbitrows exit                                                # saves the session's changes: prints Saved.
+orbitrows export -o out/                                      # writes the store's files, rebuilt from its tables
 ```
 
 | Command | Takes | Does |
@@ -35,6 +36,7 @@ orbitrows exit                                                # saves the sessio
 | `message` | the request (quoted or not), `-s/--store` | runs the request through the prompt pipeline in the store's session (below), starting it if none is open, and applies its SQL: prints one JSON object with each statement's rows (a query) or row count (a change). When Jev is unsure, it stops on its questions instead, like the import |
 | `undo` | `-s/--store` | reverts the session's last change |
 | `exit` | `-s/--store` | saves the session's changes and ends it |
+| `export` | `-o/--output` folder (required), `--force`, `-s/--store` | rebuilds every uploaded file from the store's tables (the same rebuild the import's proof runs) and writes it into the folder: same file name, encoding, delimiter and line ending as the upload, the header row only if it had one, an empty cell for NULL, numbers as stored (`12.50` comes back `12.5`), rows in the order they were loaded. With a session open, it exports through it, so its unsaved changes are included. A file already in the folder refuses the export (nothing is written) unless `--force`. Prints one JSON object: `{"store", "name", "files": [{"file", "path", "rows"}]}` |
 
 `--store` takes a store's id or name; without it, the latest ready store is used (for `answer`, the latest store waiting for answers, or left importing after its questions by a killed resume). Two `answer` commands on one store run one after the other: the second waits for the first. Progress goes to stderr and results to stdout; a refusal exits with 1, Ctrl+C with 130 (SIGTERM is handled like Ctrl+C).
 
@@ -71,7 +73,7 @@ A store's messages run in a **session**: a background process per store (`python
 - **Messages and their questions.** The session runs the prompt pipeline on its own connection, so it sees the session's unsaved changes; GLiNER2 and CorPipe stay loaded between messages, and progress goes to `session.log`. A message ends in one of three ways:
   - **Questions** (exit 3): the same JSON as the import's, with ids `m_…` (`{"store", "name", "step", "questions": [{"id", "request", "step", "problem", "type", "options"?}], "notices"}`). Answer them with `orbitrows answer m_… <answer>` (by default, the latest ready store with an open session). When the last one is answered, the message runs again, replaying Jev's recorded answers. One message waits at a time: a new message replaces it, and says so in a notice.
   - **Applied** (exit 0): `{"store", "name", "applied": [{"request", "sql", "columns", "rows"} | {"request", "sql", "changed"}], "notices"}`.
-  - **Refused** (exit 1): the pipeline found errors. Nothing is applied, and the errors are printed on stderr.
+  - **Refused** (exit 1): the pipeline found errors. Nothing is applied, and the errors are printed on stderr. A request that would change the table structure (add, drop or rename a column or a table: a `CREATE`, `ALTER` or `DROP` statement) is refused too, with "Changing the table structure isn't supported yet: nothing was changed.", so the export map and the classification stay true.
 
   Notices are the pipeline's warnings without a question (for example "changes no record" or "changes every record"). Each is shown once per message. A message waiting for answers lives only in the session's memory: it's lost when the session ends or its run fails.
 - **Undo.** Each change runs in its own savepoint; `undo` rolls back to the last one, `_history` row included. A query, or a request that changes no row, is no change: there is nothing to undo for it. A statement SQLite refuses cancels the whole message.
@@ -86,7 +88,7 @@ src/                imported as `orbitrows`
       run.py        the steps chained: classify (the model's questions), build (the schema and the round-trip proof)
   services/
     cli/
-      main.py       the `orbitrows` command: store, answer, incoming, message, undo, exit
+      main.py       the `orbitrows` command: store, answer, incoming, message, undo, exit, export
       crash.py      unexpected errors -> short message + log file
     session/
       server.py     a store's session: one open transaction, a savepoint per change, COMMIT when it ends
@@ -100,6 +102,7 @@ src/                imported as `orbitrows`
     storage/
       registry.py   stores.db: the list of imported stores (CLI plan §3.3)
       store.py      a store's folder: files/, import.json, session.db, original.db
+      export.py     the store's files rebuilt from session.db (orbitrows export)
   units/            header_context: GLiNER2 finds the unit in a header, the dictionary normalises it ("Poids (kilos)" -> kg)
   sql/
     ddl.py          the create_table AST node and the SQLite DDL it is checked with

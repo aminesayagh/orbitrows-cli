@@ -151,6 +151,29 @@ def test_a_change_is_kept_until_exit_and_undo_reverts_it(served, capsys):
     assert run(capsys, "undo")[0] == 1                        # no session, nothing to undo
 
 
+def test_export_has_the_unsaved_changes_and_structure_changes_are_refused(served, capsys, tmp_path):
+    with closing(sqlite3.connect(served.folder / "session.db")) as db, db:   # products.csv's export map
+        db.execute("INSERT INTO _store_tables VALUES (1, 'products', 'products.csv', '2026-10-21T00:00:00Z')")
+        db.execute("INSERT INTO _store_columns (id, table_id, sql_name, sql_type) VALUES "
+                   "(1, 1, 'id', 'INTEGER'), (2, 1, 'price', 'REAL')")
+        db.execute("INSERT INTO _export VALUES ('products.csv', 1, 1, ?)", (json.dumps(
+            [{"header": h, "table_id": 1, "column_id": n, "via": []} for n, h in ((1, "id"), (2, "price"))]),))
+    (served.folder / "files").mkdir()
+    (served.folder / "files" / "products.csv").write_text("id;price\n1;10\n2;20\n")
+    assert run(capsys, "message", DOUBLE)[0] == 0
+    pid(served)
+    code, out, err = run(capsys, "export", "-o", str(tmp_path))
+    assert code == 0, err
+    assert json.loads(out)["files"] == [{"file": "products.csv", "path": str(tmp_path / "products.csv"), "rows": 2}]
+    assert (tmp_path / "products.csv").read_text() == "id;price\n1;20.0\n2;40.0\n"   # unsaved, in the upload's format
+
+    code, out, err = run(capsys, "message", "-- add one\n alter TABLE products ADD COLUMN x TEXT")
+    assert code == 1 and err == "Changing the table structure isn't supported yet: nothing was changed.\n"
+    code, out, err = run(capsys, "message", "SELECT * FROM products")
+    assert json.loads(out)["applied"][0]["columns"] == ["id", "price"]
+    assert session.ask(served.id, {"op": "status"}, launch=False)["changes"] == 1
+
+
 def test_a_statement_sqlite_refuses_keeps_nothing(served, capsys):
     code, out, err = run(capsys, "message", "UPDATE products SET price = 1; UPDATE nope SET x = 1")
     assert code == 1 and err == "SQLite refused UPDATE nope SET x = 1: no such table: nope. Nothing was changed.\n"

@@ -19,12 +19,14 @@ import fcntl
 import importlib
 import json
 import os
+import re
 import signal
 import socket
 import sqlite3
 import time
 import traceback
 from datetime import UTC, datetime
+from pathlib import Path
 
 from orbitrows.services.storage import registry
 
@@ -33,6 +35,9 @@ TICK = 1                                                      # seconds between 
 READ = 30                                                     # seconds a client has to send its request line
 WAIT = 10                                                     # seconds a new server waits for the last one to end
 NAME = 60                                                     # characters of the prompt kept as the change's name
+# a statement that changes the tables' structure: its first keyword, after blanks and comments (one statement each:
+# sqlite3 runs no more); refused for now (user, 2026-10-21)
+STRUCTURE = re.compile(r"(?:\s|--[^\n]*|/\*.*?\*/)*(?:CREATE|ALTER|DROP)\b", re.IGNORECASE | re.DOTALL)
 
 
 def folder(store_id: str):
@@ -243,6 +248,8 @@ class Session:
             return reply
         by = [(p["request"], s) for p in program for s in ([p["sql"]] if isinstance(p["sql"], str) else p["sql"])]
         statements = [s for _, s in by]
+        if any(STRUCTURE.match(s) for s in statements):      # the export map and the classification would go stale
+            return {"ok": False, "error": "Changing the table structure isn't supported yet: nothing was changed."}
         n, before, ddl = self.count + 1, self.db.total_changes, False
         self.db.execute(f"SAVEPOINT c{n}")
         try:
@@ -331,6 +338,13 @@ class Session:
                     reply = self.undo()
                 case "status":
                     reply = {"ok": True, "pid": os.getpid(), "changes": len(self.changes)}
+                case "export":                                # on the open transaction: unsaved changes included
+                    from orbitrows.services.storage.export import export
+                    try:
+                        reply = {"ok": True, "files": export(self.db, self.dir, Path(request["folder"]),
+                                                             bool(request.get("force")))}
+                    except FileExistsError as e:
+                        reply = {"ok": False, "error": str(e)}
                 case "exit":
                     dropped = self.pending and self.pending["prompt"]
                     error = self.end()

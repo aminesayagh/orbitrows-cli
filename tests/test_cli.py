@@ -10,7 +10,9 @@ from pathlib import Path
 import pytest
 from typesafe_sdk import TypeSafeError
 
+from orbitrows.pipeline.store.schema import _same_number
 from orbitrows.services.cli import main as cli
+from orbitrows.services.csv.reader import read_table
 from orbitrows.services.model.client import Model, call_id
 from orbitrows.services.storage import registry
 from orbitrows.services.storage import store as storage
@@ -444,3 +446,22 @@ def test_parallel_answers_wait_for_each_other(env, capsys, monkeypatch):
         t.join(10)
     assert sorted(codes) == [0, 3] and stores()[0][2] == registry.READY   # one paused on the other's question
     assert sorted(a["id"] for a in storage.load_import(store_id)["answered"]) == ["q_choice01", "q_header01"]
+
+
+def test_export_writes_each_file_like_its_upload(env, capsys):
+    assert run(capsys, "store", *SHOP, "export.csv", "-n", "shop")[0] == 0     # export.csv: joined records
+    [(store_id, _, _)] = stores()
+    files = SHOP + ["export.csv"]
+    code, out, err = run(capsys, "export", "-o", "out")
+    assert code == 0, err
+    assert json.loads(out) == {"store": store_id, "name": "shop", "files": [
+        {"file": f, "path": str(env / "out" / f), "rows": len(read_table(env / f)["rows"])} for f in files]}
+    for f in files:
+        up, back = read_table(env / f), read_table(env / "out" / f)
+        assert back["header"] == up["header"] and len(back["rows"]) == len(up["rows"])
+        for u, b in zip(up["rows"], back["rows"]):            # a number as stored: 19.90 comes back 19.9
+            assert all(x == y or _same_number(x, y) for x, y in zip(u, b, strict=True)), (f, u, b)
+    assert (env / "out" / "customers.csv").read_bytes() == (env / "customers.csv").read_bytes()
+    code, out, err = run(capsys, "export", "-o", "out")
+    assert code == 1 and out == "" and "Already there" in err and "--force" in err
+    assert run(capsys, "export", "-o", "out", "--force")[0] == 0
