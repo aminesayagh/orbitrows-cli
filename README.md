@@ -32,7 +32,7 @@ orbitrows message "raise all prices by 5%" --store st_7f3a91c2
 | `incoming` | one CSV file, `-s/--store` | checks the file for a store; not saved yet |
 | `message` | the request (quoted or not), `-s/--store` | finds the store; running requests isn't built yet |
 
-`--store` takes a store's id or name; without it, the latest ready store is used (for `answer`, the latest store waiting for answers). Progress goes to stderr and results to stdout; a refusal exits with 1, Ctrl+C with 130.
+`--store` takes a store's id or name; without it, the latest ready store is used (for `answer`, the latest store waiting for answers, or left importing after its questions by a killed resume). Two `answer` commands on one store run one after the other: the second waits for the first. Progress goes to stderr and results to stdout; a refusal exits with 1, Ctrl+C with 130 (SIGTERM is handled like Ctrl+C).
 
 ### Questions
 
@@ -48,7 +48,7 @@ A Jev answer below its threshold is a question for the user: a choice (`options`
 
 Answer each question with `orbitrows answer <id> <answer>`: one of its options' `answer` (any case), or `yes`/`no` for a `yes_no` question (it has no `options`). A wrong id or answer is refused with the valid ones. While questions are open, `answer` prints the same JSON with the remaining ones (exit 3). Notices are warnings without a question: each is shown once, in the JSON or in the final warnings, and the import goes on.
 
-If the import fails after its questions were asked (Jev down, Ctrl+C, a crash), the store waits again with its answers kept: `orbitrows answer -s <id>` retries it. Before any question it's failed, and a store that would lose data is always failed.
+If the import fails after its questions were asked (Jev down, Ctrl+C or SIGTERM, a crash), the store waits again with its answers kept: `orbitrows answer -s <id>` retries it. Before any question it's failed, and a store that would lose data is always failed.
 
 Each store is a row in the registry, `~/.local/share/pilotstore/stores.db` (`$XDG_DATA_HOME` moves it): its id (`st_` + 8 hex), its optional name, and its status (`0` importing, `1` ready, `2` waiting for answers, `-1` failed). Each store also has its own folder, `stores/<id>/` next to the registry:
 

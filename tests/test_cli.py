@@ -3,6 +3,7 @@ import os
 import shutil
 import signal
 import sqlite3
+import threading
 from contextlib import closing
 from pathlib import Path
 
@@ -46,7 +47,9 @@ def env(tmp_path, monkeypatch):
     (tmp_path / "supplier.csv").write_text("ref,prix\n001,10\n")
     (tmp_path / "empty.csv").write_text("")
     monkeypatch.chdir(tmp_path)
-    return tmp_path
+    handler = signal.getsignal(signal.SIGTERM)
+    yield tmp_path
+    signal.signal(signal.SIGTERM, handler)                    # main() makes SIGTERM a Ctrl+C
 
 
 def run(capsys, *argv) -> tuple[int, str, str]:
@@ -372,3 +375,68 @@ def test_a_failed_resume_waits_and_retries(stub, capsys, monkeypatch):
     code, out, err = run(capsys, "answer", "-s", store_id)
     assert code == 0, err
     assert stores()[0][2] == registry.READY and price_type(store_id) == "REAL"
+
+
+def test_what_the_pipeline_prints_never_reaches_stdout(env, capsys, monkeypatch):
+    pause = pausing([])
+
+    async def chatty(jev, paths, step=lambda text: None):
+        print("GLiNER2 config banner")                        # what loading the extractor prints
+        return await pause(jev, paths, step)
+
+    monkeypatch.setattr(cli.run, "classify", chatty)
+    code, out, err = run(capsys, "store", "orders.csv", "customers.csv")
+    assert code == 3 and json.loads(out)["step"] == "roles" and "GLiNER2 config banner" in err
+
+
+def test_sigterm_is_a_ctrl_c(env, capsys, monkeypatch):
+    def unhandled(*args):
+        raise RuntimeError("SIGTERM not handled")             # instead of killing the test run
+
+    signal.signal(signal.SIGTERM, unhandled)
+    monkeypatch.setattr(cli.run, "classify", pausing([]))
+    assert run(capsys, "store", "orders.csv", "customers.csv")[0] == 3
+    real = cli.run.build
+
+    def kill(*args):
+        os.kill(os.getpid(), signal.SIGTERM)
+        return real(*args)
+
+    monkeypatch.setattr(cli.run, "build", kill)
+    assert run(capsys, "answer", "q_header01", "yes")[0] == 3
+    code, out, err = run(capsys, "answer", "q_choice01", "price")
+    assert code == 130 and "Store " not in out
+    assert stores()[0][2] == registry.WAITING                 # it had paused: its answers are kept
+
+
+def test_a_killed_resume_is_answered_again(env, capsys, monkeypatch):
+    monkeypatch.setattr(cli.run, "classify", pausing([]))
+    assert run(capsys, "store", "orders.csv", "customers.csv")[0] == 3
+    [(store_id, _, _)] = stores()
+    registry.set_status(store_id, registry.IMPORTING)         # what a SIGKILL during a resume leaves
+    code, out, err = run(capsys, "answer", "q_header01", "yes")   # the default store too
+    assert code == 3 and stores()[0][2] == registry.WAITING
+    registry.set_status(store_id, registry.IMPORTING)
+    code, out, err = run(capsys, "answer", "q_choice01", "price", "-s", store_id)
+    assert code == 0, err
+    assert stores()[0][2] == registry.READY
+    registry.create()                                         # importing, nothing asked: not answer's to resume
+    assert run(capsys, "answer")[2] == "No store is waiting for answers.\n"
+
+
+def test_parallel_answers_wait_for_each_other(env, capsys, monkeypatch):
+    monkeypatch.setattr(cli.run, "classify", pausing([]))
+    assert run(capsys, "store", "orders.csv", "customers.csv")[0] == 3
+    [(store_id, _, _)] = stores()
+    codes = []
+    answers = [threading.Thread(target=lambda a=a: codes.append(cli.answer(*a, None)))
+               for a in (("q_header01", "yes"), ("q_choice01", "price"))]
+    with storage.locked(store_id):                            # an answer already running on the store
+        for t in answers:
+            t.start()
+            t.join(0.2)
+            assert t.is_alive()                               # waits for it
+    for t in answers:
+        t.join(10)
+    assert sorted(codes) == [0, 3] and stores()[0][2] == registry.READY   # one paused on the other's question
+    assert sorted(a["id"] for a in storage.load_import(store_id)["answered"]) == ["q_choice01", "q_header01"]

@@ -46,14 +46,17 @@ def create(name: str | None = None) -> str:
     return store_id
 
 
-def find(ref: str | None = None, status: int = READY) -> list[tuple[str, str | None]]:
-    """Stores with this status as (id, name): the one with this id, those with this name, or the latest if no ref."""
+def find(ref: str | None = None, *status: int) -> list[tuple[str, str | None]]:
+    """Stores with one of these statuses (default ready) as (id, name): the one with this id, those with this name,
+    or, if no ref, all of them, the latest first."""
+    status = status or (READY,)
+    among = f"status IN ({', '.join('?' * len(status))})"
     with closing(connect()) as db:
         if ref:
-            return db.execute("SELECT id, name FROM store WHERE status = ? AND (id = ? OR name = ?) ORDER BY id",
-                              (status, ref, ref)).fetchall()
-        return db.execute("SELECT id, name FROM store WHERE status = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
-                          (status,)).fetchall()
+            return db.execute(f"SELECT id, name FROM store WHERE {among} AND (id = ? OR name = ?) ORDER BY id",
+                              (*status, ref, ref)).fetchall()
+        return db.execute(f"SELECT id, name FROM store WHERE {among} ORDER BY created_at DESC, rowid DESC",
+                          status).fetchall()
 
 
 def set_status(store_id: str, status: Literal[-1, 0, 1, 2]) -> None:

@@ -6,12 +6,14 @@
     original.db   a copy of session.db right after the import (sqlite3 backup API)
     import.json   the import's progress: the files, every model answer (Recorded's calls, with their probabilities),
                   the open and answered questions, the notices already shown; kept once the import is done
+    import.lock   empty; locked (flock) while an `answer` runs, so a second one on the store waits for it
 """
+import fcntl
 import json
 import os
 import shutil
 import sqlite3
-from contextlib import closing
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 from orbitrows.pipeline.store import roles
@@ -91,6 +93,14 @@ def folder(store_id: str) -> Path:
 def load_import(store_id: str) -> dict:
     """import.json: {"files": [names, upload order], "calls", "step", "open": [questions], "answered", "shown"}."""
     return json.loads((folder(store_id) / "import.json").read_text())
+
+
+@contextmanager
+def locked(store_id: str):
+    """The store's import.lock, held until the block ends: another holder, in any process, waits for it."""
+    with open(folder(store_id) / "import.lock", "w") as f:  # closing the file releases the lock, a kill too
+        fcntl.flock(f, fcntl.LOCK_EX)
+        yield
 
 
 def save_import(store_id: str, progress: dict) -> None:

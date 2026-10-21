@@ -2,10 +2,12 @@
 
 import argparse
 import asyncio
+import contextlib
 import csv
 import hashlib
 import json
 import os
+import signal
 import sys
 from pathlib import Path
 
@@ -50,9 +52,20 @@ def read(path: Path) -> dict:
         raise Refusal(f"Cannot read {path.name}: empty file") from None
 
 
+def asked(store_id: str) -> bool:
+    """Whether the store's import has asked questions (open or answered)."""
+    return (storage.folder(store_id) / "import.json").is_file() and any(storage.load_import(store_id)[k]
+                                                                        for k in ("open", "answered"))
+
+
 def resolve(ref: str | None, status: int = registry.READY) -> tuple[str, str | None]:
-    """--store (id or name), or the latest store with this status: ready, or waiting for answers."""
-    found = registry.find(ref, status)
+    """--store (id or name), or the latest store with this status: ready, or waiting for answers. Waiting includes
+    a store left importing after its questions were asked (a killed resume): answer resumes it."""
+    if status == registry.WAITING:
+        found = [s for s in registry.find(ref, registry.WAITING, registry.IMPORTING) if asked(s[0])]
+    else:
+        found = registry.find(ref, status)
+    found = found if ref else found[:1]
     if not found and status == registry.WAITING:
         raise Refusal(f"No store named {ref} is waiting for answers." if ref else "No store is waiting for answers.")
     if not found:
@@ -124,7 +137,8 @@ def importing(store: tuple[str, str | None], progress: dict) -> int:
     try:
         registry.set_status(store_id, registry.IMPORTING)
         try:
-            saved = asyncio.run(ask_model())                  # only the model is awaited; Ctrl+C reaches the rest too
+            with contextlib.redirect_stdout(sys.stderr):      # GLiNER2 prints its config on load: stdout stays JSON
+                saved = asyncio.run(ask_model())              # only the model is awaited; Ctrl+C reaches the rest too
         except run.Paused as p:
             progress |= {"step": p.phase, "open": p.questions}
             notices = unseen(progress, p.notices)
@@ -143,7 +157,7 @@ def importing(store: tuple[str, str | None], progress: dict) -> int:
     except storage.Lost as e:                                 # no answer changes the files: failed for good
         registry.set_status(store_id, registry.FAILED)
         raise Refusal(lost(e.diffs)) from None
-    except BaseException:  # Jev failing, Ctrl+C, a crash: never left importing; a store already asked keeps its answers
+    except BaseException:  # Jev failing, Ctrl+C/SIGTERM, a crash: never left importing; one asked keeps its answers
         asked = progress["open"] or progress["answered"]
         registry.set_status(store_id, registry.WAITING if asked else registry.FAILED)
         raise
@@ -179,8 +193,12 @@ def store(paths: list[Path], name: str | None) -> int:
 
 def answer(question: str | None, given: str | None, ref: str | None) -> int:
     """Records the user's answer to an open question; once none is open, the import runs again (a retry too)."""
-    # ponytail: two `answer` processes on one store at once aren't guarded; the last one to save wins
-    target = resolve(ref, registry.WAITING)
+    store_id = resolve(ref, registry.WAITING)[0]
+    with storage.locked(store_id):                            # to the end: a parallel answer waits, so none is lost
+        return record(resolve(store_id, registry.WAITING), question, given)   # again: the one it waited for may be done
+
+
+def record(target: tuple[str, str | None], question: str | None, given: str | None) -> int:
     progress = storage.load_import(target[0])
     if question is not None:
         q = next((q for q in progress["open"] if q["id"] == question), None)
@@ -201,6 +219,7 @@ def answer(question: str | None, given: str | None, ref: str | None) -> int:
                                     | {"answer": match})
         storage.save_import(target[0], progress)
     if progress["open"]:
+        registry.set_status(target[0], registry.WAITING)      # a killed resume's store was left importing
         return paused(target, progress, [])
     need_key()
     return importing(target, progress)
@@ -240,6 +259,7 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    signal.signal(signal.SIGTERM, signal.default_int_handler)  # a kill is a Ctrl+C: the store is never left importing
     args = parser().parse_args(argv)
     try:
         match args.command:
