@@ -63,7 +63,7 @@ def stores() -> list[tuple]:
         return db.execute("SELECT id, name, status FROM store ORDER BY created_at, rowid").fetchall()
 
 
-def test_store_incoming_message(env, capsys):
+def test_store_incoming_message(env, capsys, monkeypatch):
     code, out, err = run(capsys, "message", "hi")
     assert code == 1 and "No store yet" in err
 
@@ -88,8 +88,11 @@ def test_store_incoming_message(env, capsys):
     assert code == 0 and f"incoming for store {first}" in out
     assert run(capsys, "incoming", "missing.csv")[2].startswith("File not found")
 
+    sent = []                                                 # the session server is tests/test_session.py's
+    monkeypatch.setattr(cli.session, "ask", lambda store_id, request, launch: sent.append((store_id, request))
+                        or {"ok": True, "ran": [], "notice": "the prompt pipeline is not wired yet"})
     code, out, err = run(capsys, "message", "raise", "prices", "by", "5%", "-s", "Orbitrow shop")
-    assert code == 0 and "isn't built yet" in out and second in out
+    assert code == 0 and sent == [(second, {"op": "message", "text": "raise prices by 5%"})] and "not wired" in err
     code, out, err = run(capsys, "message", "hi", "--store", "nope")
     assert code == 1 and "No ready store named nope" in err
     assert len(stores()) == 2  # incoming and message never create a store

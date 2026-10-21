@@ -23,6 +23,8 @@ orbitrows store products.csv variants.csv -n "Orbitrow shop"   # prints: Store s
 orbitrows answer q_1a2b3c4d REAL                              # when the import stopped on a question (exit 3)
 orbitrows incoming supplier.csv                               # for the latest store
 orbitrows message "raise all prices by 5%" --store st_7f3a91c2
+orbitrows undo                                                # reverts the last change of the session
+orbitrows exit                                                # saves the session's changes: prints Saved.
 ```
 
 | Command | Takes | Does |
@@ -30,7 +32,9 @@ orbitrows message "raise all prices by 5%" --store st_7f3a91c2
 | `store` | one or more CSV files, `-n/--name` (optional) | checks every file (one bad file, or two files with the same name, refuses the store), registers the store, and imports it: Jev classifies the header, types, context, roles, keys and joined records; the store's tables are built and proven to give every file back. It writes the store folder, prints each table and every warning, and prints the store's id as the last line. When Jev is unsure, the import stops on its questions instead (below) |
 | `answer` | a question's id and its answer (both optional), `-s/--store` | records the answer to one open question of a store waiting for answers. Once none is open, the import runs again from the start, replaying every answer already given (no new Jev call for them), and ends like `store`, or stops on the next questions. With no question and none open, it only retries the import (after a failure) |
 | `incoming` | one CSV file, `-s/--store` | checks the file for a store; not saved yet |
-| `message` | the request (quoted or not), `-s/--store` | finds the store; running requests isn't built yet |
+| `message` | the request (quoted or not), `-s/--store` | runs the request in the store's session (below), starting it if none is open: prints the rows of a query (tab-separated, under its columns) or the rows each statement changed. The prompt pipeline isn't wired yet, so for now it only says so |
+| `undo` | `-s/--store` | reverts the session's last change |
+| `exit` | `-s/--store` | saves the session's changes and ends it |
 
 `--store` takes a store's id or name; without it, the latest ready store is used (for `answer`, the latest store waiting for answers, or left importing after its questions by a killed resume). Two `answer` commands on one store run one after the other: the second waits for the first. Progress goes to stderr and results to stdout; a refusal exits with 1, Ctrl+C with 130 (SIGTERM is handled like Ctrl+C).
 
@@ -59,6 +63,14 @@ Each store is a row in the registry, `~/.local/share/pilotstore/stores.db` (`$XD
 
 `foreign_keys` and `synchronous` are per-connection settings in SQLite: every connection that writes `session.db` must set them again.
 
+### Sessions
+
+A store's messages run in a **session**: a background process per store (`python -m orbitrows.services.session`, started by the first `message`) that keeps one SQLite transaction open on `session.db`. The CLI talks to it over `stores/<id>/session.sock`; its output goes to `session.log`.
+
+- **When it's saved.** Each change (a message that changes rows or the schema, with its `_history` row) stays uncommitted: other connections don't see it. The session commits everything when it ends: `orbitrows exit` (prints `Saved.` once committed), the terminal that started it closing (only a real terminal: commands run without one, like an LLM's shell, never end it this way), `ORBITROWS_IDLE` seconds without a request (default 1800), or SIGTERM/SIGHUP.
+- **Undo.** Each change runs in its own savepoint; `undo` rolls back to the last one, `_history` row included. A query, or a request that changes no row, is no change: there is nothing to undo for it. A statement SQLite refuses cancels the whole message.
+- **Crash journal.** A crash loses the open session. So each change is also appended (and synced to disk) to `journal.jsonl` as `{"n", "prompt", "sql", "at"}`, an undo as `{"undo": n}`; a successful commit removes it. The next session finds it, keeps it as `journal-lost-<time>.jsonl`, and the next command prints the lost changes (each prompt and its SQL) on stderr. They're not replayed: send them again if they're still wanted.
+
 ## Layout
 
 ```
@@ -68,8 +80,11 @@ src/                imported as `orbitrows`
       run.py        the steps chained: classify (the model's questions), build (the schema and the round-trip proof)
   services/
     cli/
-      main.py       the `orbitrows` command: store, answer, incoming, message
+      main.py       the `orbitrows` command: store, answer, incoming, message, undo, exit
       crash.py      unexpected errors -> short message + log file
+    session/
+      server.py     a store's session: one open transaction, a savepoint per change, COMMIT when it ends
+      client.py     the CLI's side: one request over the socket, starting the server when none runs
     csv/
       reader.py     CSV reading (encoding and delimiter sniffing)
     model/

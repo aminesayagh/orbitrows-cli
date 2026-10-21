@@ -1,4 +1,5 @@
-"""The `orbitrows` command: store, answer, incoming, message. One process per command; the registry links them."""
+"""The `orbitrows` command: store, answer, incoming, message, undo, exit. One process per command; the registry links
+them, and a store's session server holds its messages' changes until exit."""
 
 import argparse
 import asyncio
@@ -17,6 +18,7 @@ from orbitrows.pipeline.store import run
 from orbitrows.services.cli.crash import report
 from orbitrows.services.csv.reader import read_table
 from orbitrows.services.model.client import Recorded, connect, settle
+from orbitrows.services.session import client as session
 from orbitrows.services.storage import registry
 from orbitrows.services.storage import store as storage
 from orbitrows.sql.ddl import sql_name
@@ -233,10 +235,53 @@ def incoming(path: Path, ref: str | None) -> None:
     print("Incoming files aren't saved yet, so nothing else uses it.")
 
 
+def ask(target: tuple[str, str | None], request: dict, launch: bool = True) -> dict | None:
+    """The store's session server's reply (None: no server, and not launch); what its last session lost on stderr."""
+    try:
+        reply = session.ask(target[0], request, launch)
+    except session.Unavailable as e:
+        raise Refusal(str(e)) from None
+    if reply and reply.get("lost"):
+        print(f"The last session of store {label(target)} ended without saving (a crash?), so these changes were "
+              f"lost. Send them again if they're still wanted (journal: {reply['lost']['file']}):", file=sys.stderr)
+        for change in reply["lost"]["changes"]:
+            print("\n    ".join([f"  {change['prompt']}"] + change["sql"]), file=sys.stderr)
+    if reply and not reply["ok"]:
+        raise Refusal(reply["error"])
+    return reply
+
+
 def message(text: str, ref: str | None) -> None:
+    """Applied in the store's session (started if needed): not saved until exit, undo reverts it. A SELECT's rows are
+    printed tab-separated under their columns."""
     target = resolve(ref)
-    # ponytail: the prompt pipeline plugs in here
-    print(f"Message for store {label(target)}: running messages isn't built yet, so nothing was changed.")
+    reply = ask(target, {"op": "message", "text": text})
+    for ran in reply["ran"]:
+        if "rows" in ran:
+            print("\t".join(ran["columns"]))
+            for row in ran["rows"]:
+                print("\t".join("" if v is None else str(v) for v in row))
+        else:
+            print(f"{ran['changed']} rows changed: {ran['sql']}")
+    if reply.get("notice"):
+        print(f"Notice: {reply['notice']}", file=sys.stderr)
+    if "n" in reply:
+        print(f"Change {reply['n']} made in store {label(target)}: saved by orbitrows exit, reverted by orbitrows "
+              "undo.", file=sys.stderr)
+
+
+def undo(ref: str | None) -> None:
+    target = resolve(ref)
+    if not (reply := ask(target, {"op": "undo"}, launch=False)):
+        raise Refusal(f"Nothing to undo: store {label(target)} has no open session.")
+    print(f"Undone: change {reply['undone']} ({reply['prompt']}).")
+
+
+def leave(ref: str | None) -> None:
+    """exit: the session's changes are committed, then its server stops."""
+    target = resolve(ref)
+    print("Saved." if ask(target, {"op": "exit"}, launch=False) else
+          f"Nothing to save: store {label(target)} has no open session.")
 
 
 def parser() -> argparse.ArgumentParser:
@@ -253,7 +298,9 @@ def parser() -> argparse.ArgumentParser:
     i.add_argument("file", type=Path, metavar="csv")
     m = commands.add_parser("message", help="send a request about the store's data")
     m.add_argument("text", nargs="+")
-    for sub in (i, m):
+    u = commands.add_parser("undo", help="revert the session's last change")
+    e = commands.add_parser("exit", help="save the session's changes and end it")
+    for sub in (i, m, u, e):
         sub.add_argument("-s", "--store", help="store id or name (default: the latest store)")
     return cli
 
@@ -271,6 +318,10 @@ def main(argv: list[str] | None = None) -> int:
                 incoming(args.file, args.store)
             case "message":
                 message(" ".join(args.text), args.store)
+            case "undo":
+                undo(args.store)
+            case "exit":
+                leave(args.store)
     except Refusal as e:
         print(e, file=sys.stderr)
         return 1
