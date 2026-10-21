@@ -95,6 +95,15 @@ async def test_an_unsure_link_is_a_yes_no_question(answer, describes):
     assert out["context_columns"]["currency"]["describes"] == describes and out["warnings"] == []
 
 
+async def test_a_column_the_header_names_is_linked_without_a_question():
+    table = {"name": "t", "header": ["sku", "price", "price currency"], "rows": [["A1", "9.90", "EUR"]]}
+    types = {"sku": "TEXT", "price": "REAL", "price currency": "TEXT"}
+    links = LINKS | {"k3_describes_k2": 0.5}                    # unsure, but the header names price: no answer could change it
+    out = await context.classify(Stub(ROLES, links), table, {"create_table": {"definition": {"columns": [
+        {"header": h, "sql_type": t} for h, t in types.items()]}}}, profile(table))
+    assert out["context_columns"]["price currency"]["describes"] == ["price"] and out["warnings"] == []
+
+
 async def test_an_unsure_header_letter_is_a_question(monkeypatch):
     table = {"name": "t", "header": ["sku", "Volume (L)"], "rows": [["A1", "0.5"], ["B2", "1.5"]]}
     litre = {"unit": "l", "kind": "physical_unit"}

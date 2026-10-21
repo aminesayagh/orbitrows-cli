@@ -169,7 +169,7 @@ async def classify(jev, table: dict, schema: dict, profile: dict) -> dict:
             links = {t: p if t in named else 0.0 for t, p in links.items()}
         describes = [t for t, p in links.items() if p >= 0.5 or t in named]
         for t, p in links.items():
-            if 0.2 < p < SURE:                                # 1.0 (yes) and 0.0 (no) from the user are both sure
+            if 0.2 < p < SURE and t not in named:             # a named column is linked by its name: nothing to ask
                 warnings.append({"column": h, "problem": f"does it describe {t}?", "probability": p,
                                  "linked": p >= 0.5, "question": {"type": "yes_no", "call": a2.call,
                                                                   "key": f"{k}_describes_{kid[t]}"}})
