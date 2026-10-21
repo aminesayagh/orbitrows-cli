@@ -10,11 +10,13 @@ import pytest
 from typesafe_sdk import TypeSafeError
 
 from orbitrows.services.cli import main as cli
+from orbitrows.services.model.client import Model, call_id
 from orbitrows.services.storage import registry
 from orbitrows.services.storage import store as storage
 
 CASES = Path(__file__).parent / "fixtures" / "cases"
 SHOP = ["customers.csv", "orders.csv", "order_lines.csv", "products.csv"]
+CLASSIFY = cli.run.classify                                   # the real one, before the env fixture replaces it
 
 
 def saved(case) -> dict:
@@ -214,3 +216,159 @@ def test_crash_shows_message_not_traceback(env, capsys, monkeypatch):
     assert code == 1 and "unexpected error" in err and "Traceback" not in err + out
     [log] = (env / "state" / "orbitrows").glob("crash-*.log")
     assert "ZeroDivisionError" in log.read_text() and "Traceback" in log.read_text()
+
+
+CHOICE = {"file": "orders.csv", "step": "roles", "column": "total", "problem": "role uncertain", "answer": "price",
+          "probability": 0.5, "id": "q_choice01",
+          "question": {"type": "choice", "call": "c" * 16, "key": "k4_role", "options": [
+              {"answer": "price", "value": "price", "probability": 0.5},
+              {"answer": "Quantity", "value": "quantity", "probability": 0.4}]}}
+YES_NO = {"file": "customers.csv", "step": "header", "problem": "header row uncertain: first row kept as header",
+          "probability": 0.6, "id": "q_header01", "question": {"type": "yes_no", "call": "h" * 16, "key": "header"}}
+SHOWN_NOTICE = {"column": "status", "problem": "role uncertain", "probability": 0.62}   # orders.csv's roles
+
+
+def pausing(runs: list):
+    """A classify that pauses on CHOICE and YES_NO the first time, then returns the fixtures' sections."""
+    async def classify(jev, paths, step=lambda text: None):
+        runs.append([p.parent.name for p in paths])
+        if len(runs) == 1:                                    # what the model answered, as Recorded keeps it
+            jev.calls |= {"c" * 16: {"k4_role": ["price", {"price": 0.5, "quantity": 0.4}]}, "h" * 16: {"header": 0.6}}
+            raise cli.run.Paused("roles", [CHOICE, YES_NO], [{"file": "orders.csv", "step": "roles"} | SHOWN_NOTICE])
+        return {p.name: json.loads(json.dumps(SAVED[p.name])) for p in paths}
+    return classify
+
+
+def test_questions_pause_the_import_until_the_user_answers(env, capsys, monkeypatch):
+    runs = []
+    monkeypatch.setattr(cli.run, "classify", pausing(runs))
+    code, out, err = run(capsys, "store", "orders.csv", "customers.csv", "-n", "shop")
+    assert code == 3 and "role uncertain" not in err
+    [(store_id, _, status)] = stores()
+    assert status == registry.WAITING and json.loads(out) == {  # stdout is the JSON and nothing else
+        "store": store_id, "name": "shop", "step": "roles",
+        "questions": [{"id": "q_choice01", "file": "orders.csv", "step": "roles", "column": "total",
+                       "problem": "role uncertain", "type": "choice",
+                       "options": [{"answer": "price", "probability": 0.5},
+                                   {"answer": "Quantity", "probability": 0.4}]},
+                      {"id": "q_header01", "file": "customers.csv", "step": "header", "column": None,
+                       "problem": "header row uncertain: first row kept as header", "type": "yes_no"}],
+        "notices": [{"file": "orders.csv", "step": "roles", "column": "status", "problem": "role uncertain",
+                     "probability": 0.62}]}
+    progress = storage.load_import(store_id)
+    assert progress["open"] == [CHOICE, YES_NO] and progress["files"] == ["orders.csv", "customers.csv"]
+    assert runs == [["files", "files"]]                      # classify reads the store's copies
+    assert "No store yet" in run(capsys, "message", "hi")[2]  # a waiting store is not ready
+
+    code, out, err = run(capsys, "answer", "q_header01", "YES")
+    assert code == 3 and json.loads(out)["questions"][0]["id"] == "q_choice01" and json.loads(out)["notices"] == []
+    assert storage.load_import(store_id)["calls"]["h" * 16] == {"header": 1.0}
+
+    SAVED["orders.csv"]["roles"]["warnings"].append(SHOWN_NOTICE)
+    try:
+        code, out, err = run(capsys, "answer", "q_choice01", "quantity", "-s", "shop")
+    finally:
+        SAVED["orders.csv"]["roles"]["warnings"].pop()
+    assert code == 0, err
+    assert out.splitlines()[-1] == f"Store {store_id} (shop)" and stores()[0][2] == registry.READY
+    assert "role uncertain" not in out                        # shown once, with the questions
+    progress = storage.load_import(store_id)                  # kept: every model answer, and the user's
+    assert progress["calls"]["c" * 16]["k4_role"] == ["quantity", {"quantity": 1.0}] and progress["open"] == []
+    assert [(a["id"], a["answer"]) for a in progress["answered"]] == [("q_header01", "yes"), ("q_choice01", "Quantity")]
+    assert run(capsys, "answer")[2] == "No store is waiting for answers.\n"
+
+
+def test_a_store_that_loses_data_fails_even_after_answers(env, capsys, monkeypatch):
+    lines = (env / "export.csv").read_text().splitlines()
+    lines[2] = lines[2].replace("Alice Martin", "Alice M.")
+    (env / "export.csv").write_text("\n".join(lines) + "\n")
+    monkeypatch.setattr(cli.run, "classify", pausing([]))
+    assert run(capsys, "store", "export.csv")[0] == 3
+    assert run(capsys, "answer", "q_header01", "no")[0] == 3
+    code, out, err = run(capsys, "answer", "q_choice01", "price")
+    assert code == 1 and "would lose data" in err and stores()[0][2] == registry.FAILED   # no answer brings it back
+
+
+class Stub(Model):
+    """Every answer sure (TEXT and nullable for the types, a header row), except the price column's type: INTEGER
+    at 0.5, a question. Logs each call it is asked; raises TypeSafeError while `down`."""
+    down = False
+
+    def __init__(self, log):
+        self.log = log
+
+    async def answer(self, state, questions):
+        if self.down:
+            raise TypeSafeError("down")
+        self.log.append(call_id(state, questions))
+        out = {}
+        for k, q in questions.items():
+            if k == "k4_type":
+                out[k] = ("INTEGER", {"INTEGER": 0.5, "REAL": 0.4, "TEXT": 0.1})
+            elif q["type"] == "choice":
+                pick = "TEXT" if k.endswith("_type") else next(iter(q["criteria"]))
+                out[k] = (pick, {pick: 0.9})
+            else:
+                out[k] = 0.95 if k == "header" or k.endswith("_nullable") else 0.1
+        return out, (None, None)
+
+
+@pytest.fixture
+def stub(env, monkeypatch):
+    """The real classify, with Stub as the model: its calls in the returned log."""
+    log = []
+    monkeypatch.setattr(cli.run, "classify", CLASSIFY)
+    monkeypatch.setattr(cli, "connect", lambda: Stub(log))
+    monkeypatch.setattr(Stub, "down", False)
+    shutil.copy(CASES / "store" / "store.csv", env / "store.csv")
+    return log
+
+
+def price_type(store_id) -> str:
+    with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
+        return db.execute("SELECT sql_type FROM _store_columns WHERE source_header = 'price'").fetchone()[0]
+
+
+def test_an_answer_resumes_the_import_without_asking_the_model_again(stub, capsys):
+    code, out, err = run(capsys, "store", "store.csv")
+    assert code == 3, err
+    [(store_id, _, status)] = stores()
+    [q] = json.loads(out)["questions"]
+    assert status == registry.WAITING and json.loads(out)["step"] == "types"
+    assert (q["column"], q["type"]) == ("price", "choice")
+    assert [o["answer"] for o in q["options"]] == ["INTEGER", "REAL", "TEXT"]
+    asked = len(stub)
+
+    code, out, err = run(capsys, "answer", q["id"], "REAL")
+    assert code == 0, err
+    assert out.splitlines()[-1] == f"Store {store_id}" and stores()[0][2] == registry.READY
+    assert price_type(store_id) == "REAL"
+    assert len(stub) > asked and len(set(stub)) == len(stub)  # the resume asked only calls not answered before
+
+
+def test_a_wrong_id_or_answer_is_refused(stub, capsys):
+    code, out, err = run(capsys, "store", "store.csv")
+    [q] = json.loads(out)["questions"]
+    code, out, err = run(capsys, "answer", "q_nope", "REAL")
+    assert code == 1 and f"Open questions of {stores()[0][0]}: {q['id']}" in err
+    code, out, err = run(capsys, "answer", q["id"], "BLOB")
+    assert code == 1 and "BLOB isn't an answer" in err and "Answers: INTEGER, REAL, TEXT" in err
+    code, out, err = run(capsys, "answer", q["id"])
+    assert code == 1 and q["id"] in err
+    assert stores()[0][2] == registry.WAITING and storage.load_import(stores()[0][0])["answered"] == []
+
+
+def test_a_failed_resume_waits_and_retries(stub, capsys, monkeypatch):
+    code, out, err = run(capsys, "store", "store.csv")
+    [q] = json.loads(out)["questions"]
+    monkeypatch.setattr(Stub, "down", True)
+    code, out, err = run(capsys, "answer", q["id"], "real")
+    assert code == 1 and "Jev couldn't answer" in err
+    [(store_id, _, status)] = stores()
+    assert status == registry.WAITING                         # the answer is kept: no need to give it again
+    code, out, err = run(capsys, "answer", q["id"], "REAL")
+    assert code == 1 and "has no open question" in err
+    monkeypatch.setattr(Stub, "down", False)
+    code, out, err = run(capsys, "answer", "-s", store_id)
+    assert code == 0, err
+    assert stores()[0][2] == registry.READY and price_type(store_id) == "REAL"

@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-FAILED, IMPORTING, READY = -1, 0, 1
+FAILED, IMPORTING, READY, WAITING = -1, 0, 1, 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS store (
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS store (
     name          TEXT,                       -- optional (store --name)
     created_at    TEXT NOT NULL,              -- ISO 8601, UTC
     last_saved_at TEXT,                       -- empty until the first save
-    status        INTEGER NOT NULL CHECK (status IN (-1, 0, 1))  -- -1 failed, 0 importing, 1 ready
+    status        INTEGER NOT NULL CHECK (status IN (-1, 0, 1, 2))  -- -1 failed, 0 importing, 1 ready, 2 waiting
 ) STRICT
 """
 
@@ -46,16 +46,16 @@ def create(name: str | None = None) -> str:
     return store_id
 
 
-def find(ref: str | None = None) -> list[tuple[str, str | None]]:
-    """Ready stores as (id, name): the one with this id, those with this name, or the latest one if no ref."""
+def find(ref: str | None = None, status: int = READY) -> list[tuple[str, str | None]]:
+    """Stores with this status as (id, name): the one with this id, those with this name, or the latest if no ref."""
     with closing(connect()) as db:
         if ref:
             return db.execute("SELECT id, name FROM store WHERE status = ? AND (id = ? OR name = ?) ORDER BY id",
-                              (READY, ref, ref)).fetchall()
+                              (status, ref, ref)).fetchall()
         return db.execute("SELECT id, name FROM store WHERE status = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
-                          (READY,)).fetchall()
+                          (status,)).fetchall()
 
 
-def set_status(store_id: str, status: Literal[-1, 0, 1]) -> None:
+def set_status(store_id: str, status: Literal[-1, 0, 1, 2]) -> None:
     with closing(connect()) as db, db:
         db.execute("UPDATE store SET status = ? WHERE id = ?", (status, store_id))

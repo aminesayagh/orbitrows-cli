@@ -4,8 +4,11 @@
     session.db    the store's tables with their rows (one per table of the import's schema), the classification
                   tables below and the history, whose first row is the import; written in one transaction, kept only when every file rebuilds from it
     original.db   a copy of session.db right after the import (sqlite3 backup API)
+    import.json   the import's progress: the files, every model answer (Recorded's calls, with their probabilities),
+                  the open and answered questions, the notices already shown; kept once the import is done
 """
 import json
+import os
 import shutil
 import sqlite3
 from contextlib import closing
@@ -83,6 +86,19 @@ class Lost(Exception):
 
 def folder(store_id: str) -> Path:
     return registry.home() / "stores" / store_id
+
+
+def load_import(store_id: str) -> dict:
+    """import.json: {"files": [names, upload order], "calls", "step", "open": [questions], "answered", "shown"}."""
+    return json.loads((folder(store_id) / "import.json").read_text())
+
+
+def save_import(store_id: str, progress: dict) -> None:
+    """import.json, atomically: a crash leaves the old file or the new one, never half of one."""
+    path = folder(store_id) / "import.json"
+    temp = path.with_name("import.json.tmp")
+    temp.write_text(json.dumps(progress, ensure_ascii=False))
+    os.replace(temp, path)
 
 
 def copy_files(store_id: str, paths: list) -> None:

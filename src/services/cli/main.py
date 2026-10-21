@@ -1,8 +1,10 @@
-"""The `orbitrows` command: store, incoming, message. One process per command; the registry links them."""
+"""The `orbitrows` command: store, answer, incoming, message. One process per command; the registry links them."""
 
 import argparse
 import asyncio
 import csv
+import hashlib
+import json
 import os
 import sys
 from pathlib import Path
@@ -12,12 +14,14 @@ from typesafe_sdk import TypeSafeError
 from orbitrows.pipeline.store import run
 from orbitrows.services.cli.crash import report
 from orbitrows.services.csv.reader import read_table
-from orbitrows.services.model.client import connect
+from orbitrows.services.model.client import Recorded, connect, settle
 from orbitrows.services.storage import registry
 from orbitrows.services.storage import store as storage
 from orbitrows.sql.ddl import sql_name
 
 SHOWN = 5                                                     # differences listed when a store would lose data
+PAUSED = 3                                                    # exit code: the import waits for the user's answers
+NOTICE = ("file", "step", "column", "problem", "probability")  # a notice's fields in the questions JSON
 
 
 class Refusal(Exception):
@@ -27,6 +31,11 @@ class Refusal(Exception):
 def need(variable: str) -> None:
     if not os.environ.get(variable):
         raise Refusal(f"{variable} is not set. Add it to .env and run with: uv run --env-file .env orbitrows …")
+
+
+def need_key() -> None:
+    if (os.environ.get("MODEL") or "jev") == "jev":           # any other MODEL is a stub class path
+        need("TYPESAFE_API_KEY")
 
 
 def read(path: Path) -> dict:
@@ -41,9 +50,11 @@ def read(path: Path) -> dict:
         raise Refusal(f"Cannot read {path.name}: empty file") from None
 
 
-def resolve(ref: str | None) -> tuple[str, str | None]:
-    """--store (id or name), or the latest ready store."""
-    found = registry.find(ref)
+def resolve(ref: str | None, status: int = registry.READY) -> tuple[str, str | None]:
+    """--store (id or name), or the latest store with this status: ready, or waiting for answers."""
+    found = registry.find(ref, status)
+    if not found and status == registry.WAITING:
+        raise Refusal(f"No store named {ref} is waiting for answers." if ref else "No store is waiting for answers.")
     if not found:
         raise Refusal(f"No ready store named {ref}." if ref else "No store yet. Create one: orbitrows store <csv files…>")
     if len(found) > 1:
@@ -73,7 +84,74 @@ def warning(w: dict) -> str:
     return f"Warning: {where}: {w['problem']}{p}"
 
 
-def store(paths: list[Path], name: str | None) -> None:
+def unseen(progress: dict, warnings: list[dict]) -> list[dict]:
+    """The warnings not shown yet, now recorded as shown (each by a short hash of its JSON)."""
+    new = []
+    for w in warnings:
+        key = hashlib.sha256(json.dumps(w, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:8]
+        if key not in progress["shown"]:
+            progress["shown"].append(key)
+            new.append(w)
+    return new
+
+
+def paused(store: tuple[str, str | None], progress: dict, notices: list[dict]) -> int:
+    """The open questions and the new notices as one JSON object on stdout, for the LLM driving this CLI."""
+    def question(q):
+        ask = q["question"]
+        options = [{"answer": o["answer"], "probability": o["probability"]} for o in ask.get("options", [])]
+        return ({k: q.get(k) for k in ("id", "file", "step", "column", "problem")} | {"type": ask["type"]}
+                | ({"options": options} if ask["type"] == "choice" else {}))   # a yes/no is answered yes or no
+    print(json.dumps({"store": store[0], "name": store[1], "step": progress["step"],
+                      "questions": [question(q) for q in progress["open"]],
+                      "notices": [{k: n[k] for k in NOTICE if n.get(k) is not None} for n in notices]},
+                     ensure_ascii=False))
+    return PAUSED
+
+
+def importing(store: tuple[str, str | None], progress: dict) -> int:
+    """classify on the store's copies, replaying every recorded answer, then pause on its questions or write the
+    store. On a failure, a store whose questions were asked waits again (answers kept); any other one fails."""
+    store_id = store[0]
+    paths = [storage.folder(store_id) / "files" / f for f in progress["files"]]
+    save = lambda: storage.save_import(store_id, progress)   # after each new model answer too: a crash keeps them
+    step = lambda text: print(f"  {text}…", file=sys.stderr)
+
+    async def ask_model():
+        async with Recorded(connect(), progress["calls"], saved=save) as model:
+            return await run.classify(model, paths, step=step)
+
+    try:
+        registry.set_status(store_id, registry.IMPORTING)
+        try:
+            saved = asyncio.run(ask_model())                  # only the model is awaited; Ctrl+C reaches the rest too
+        except run.Paused as p:
+            progress |= {"step": p.phase, "open": p.questions}
+            notices = unseen(progress, p.notices)
+            save()
+            registry.set_status(store_id, registry.WAITING)
+            return paused(store, progress, notices)
+        rows = run.rows(paths, saved)
+        built = run.build(saved)
+        for w in unseen(progress, built["warnings"]):        # before writing, so a refusal shows them too
+            print(warning(w))
+        save()
+        written = storage.write(store_id, built["store"], rows)
+        for t in written:
+            print(f"{t['table']}: {t['rows']} rows · {t['columns']} columns, from {t['file']}")
+        registry.set_status(store_id, registry.READY)         # last: an interrupted import is never left ready
+    except storage.Lost as e:                                 # no answer changes the files: failed for good
+        registry.set_status(store_id, registry.FAILED)
+        raise Refusal(lost(e.diffs)) from None
+    except BaseException:  # Jev failing, Ctrl+C, a crash: never left importing; a store already asked keeps its answers
+        asked = progress["open"] or progress["answered"]
+        registry.set_status(store_id, registry.WAITING if asked else registry.FAILED)
+        raise
+    print(f"Store {label(store)}")
+    return 0
+
+
+def store(paths: list[Path], name: str | None) -> int:
     # Every file is checked first, so a bad one refuses the store before anything is registered.
     unique = {}
     for p in paths:                                           # the same file twice is read once
@@ -87,33 +165,45 @@ def store(paths: list[Path], name: str | None) -> None:
     for table, files in tables.items():
         if len(files) > 1:                                    # order-lines.csv and order_lines.csv are one table
             raise Refusal(f"{', '.join(str(f) for f in files)} would all be the table {table}. Rename one of them.")
-    if (os.environ.get("MODEL") or "jev") == "jev":           # any other MODEL is a stub class path
-        need("TYPESAFE_API_KEY")
+    need_key()
     store_id = registry.create(name)
-    try:
+    progress = {"files": [p.name for p in paths], "calls": {}, "open": [], "answered": [], "shown": []}
+    try:                                                      # the import runs on the copies: a resume needs no path
         storage.copy_files(store_id, paths)
-        step = lambda text: print(f"  {text}…", file=sys.stderr)
-
-        async def ask_model():
-            async with connect() as model:
-                return await run.classify(model, paths, step=step)
-
-        saved = asyncio.run(ask_model())                      # only the model is awaited; Ctrl+C reaches the rest too
-        rows = run.rows(paths, saved)
-        built = run.build(saved)
-        for w in built["warnings"]:                           # before writing, so a refusal shows them too
-            print(warning(w))
-        try:
-            written = storage.write(store_id, built["store"], rows)
-        except storage.Lost as e:
-            raise Refusal(lost(e.diffs)) from None
-        for t in written:
-            print(f"{t['table']}: {t['rows']} rows · {t['columns']} columns, from {t['file']}")
-        registry.set_status(store_id, registry.READY)         # last: an interrupted import is never left ready
-    except BaseException:  # Jev failing, Ctrl+C, a crash, data lost: the store is marked failed, never left importing
+        storage.save_import(store_id, progress)
+    except BaseException:
         registry.set_status(store_id, registry.FAILED)
         raise
-    print(f"Store {label((store_id, name))}")
+    return importing((store_id, name), progress)
+
+
+def answer(question: str | None, given: str | None, ref: str | None) -> int:
+    """Records the user's answer to an open question; once none is open, the import runs again (a retry too)."""
+    # ponytail: two `answer` processes on one store at once aren't guarded; the last one to save wins
+    target = resolve(ref, registry.WAITING)
+    progress = storage.load_import(target[0])
+    if question is not None:
+        q = next((q for q in progress["open"] if q["id"] == question), None)
+        if given is None or q is None:
+            ids = ", ".join(q["id"] for q in progress["open"])
+            raise Refusal(f"Give an open question's id and its answer. Open questions of {label(target)}: {ids}" if ids
+                          else f"Store {label(target)} has no open question. Retry its import: orbitrows answer -s "
+                               f"{target[0]}")
+        ask = q["question"]
+        valid = ({str(o["answer"]): o["value"] for o in ask["options"]} if ask["type"] == "choice"
+                 else {"yes": "yes", "no": "no"})
+        match = next((a for a in valid if a.casefold() == given.casefold()), None)
+        if match is None:
+            raise Refusal(f"{given} isn't an answer to {question}. Answers: {', '.join(valid)}")
+        settle(progress["calls"], ask["call"], ask["key"], valid[match])
+        progress["open"].remove(q)
+        progress["answered"].append({k: q.get(k) for k in ("id", "file", "step", "column", "problem")}
+                                    | {"answer": match})
+        storage.save_import(target[0], progress)
+    if progress["open"]:
+        return paused(target, progress, [])
+    need_key()
+    return importing(target, progress)
 
 
 def incoming(path: Path, ref: str | None) -> None:
@@ -133,9 +223,13 @@ def message(text: str, ref: str | None) -> None:
 def parser() -> argparse.ArgumentParser:
     cli = argparse.ArgumentParser(prog="orbitrows", description="Reconcile a store's CSV export with supplier files.")
     commands = cli.add_subparsers(dest="command", required=True)
-    s = commands.add_parser("store", help="create a store from its CSV files; prints its id")
+    s = commands.add_parser("store", help="create a store from its CSV files; prints its id, or its questions")
     s.add_argument("files", nargs="+", type=Path, metavar="csv")
     s.add_argument("-n", "--name", help="a name for the store (optional)")
+    a = commands.add_parser("answer", help="answer a question of an import waiting for answers; then it resumes")
+    a.add_argument("question", nargs="?", help="the question's id, from the questions JSON")
+    a.add_argument("answer", nargs="?", help="one of its options' answers, or yes/no")
+    a.add_argument("-s", "--store", help="store id or name (default: the latest store waiting for answers)")
     i = commands.add_parser("incoming", help="add a supplier file to a store")
     i.add_argument("file", type=Path, metavar="csv")
     m = commands.add_parser("message", help="send a request about the store's data")
@@ -150,7 +244,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         match args.command:
             case "store":
-                store(args.files, args.name)
+                return store(args.files, args.name)
+            case "answer":
+                return answer(args.question, args.answer, args.store)
             case "incoming":
                 incoming(args.file, args.store)
             case "message":
