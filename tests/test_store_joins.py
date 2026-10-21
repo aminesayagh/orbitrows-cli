@@ -5,7 +5,7 @@ import pytest
 
 from orbitrows.pipeline.store.joins import candidates, classify, repeats
 from orbitrows.services.csv.reader import read_table
-from orbitrows.services.model.client import Model
+from orbitrows.services.model.client import Model, Recorded, settle
 
 CASES = Path(__file__).parent / "fixtures" / "cases"
 EXPECTED = json.loads((CASES / "joins_expected.json").read_text())
@@ -73,7 +73,8 @@ async def test_link_to_a_confirmed_record_is_deduced():
 async def test_no_deduction_when_the_record_is_not_confirmed():
     groups, warnings, _ = await run(YES | {"k1_has_k4": 0.6, "k4_joined": 0.5})
     assert groups == {"sku": ["name"]} and {"column": "customer_id", "problem": "describes order_id? uncertain: kept on the row",
-                                            "probability": 0.6} in warnings
+                                            "probability": 0.6} in [{k: v for k, v in w.items() if k != "question"}
+                                                                    for w in warnings]
 
 
 async def test_no_deduction_with_too_few_repeats():
@@ -85,7 +86,32 @@ async def test_no_deduction_with_too_few_repeats():
 async def test_an_unconfirmed_record_receives_nothing():
     groups, warnings, _ = await run(YES | {"k1_joined": 0.5})
     assert "order_id" not in groups and groups["customer_id"] == ["customer_name"]
-    assert {"column": "order_id", "problem": "joined record uncertain: not split", "probability": 0.5} in warnings
+    assert [w | {"question": None} for w in warnings] == [
+        {"column": "order_id", "problem": "joined record uncertain: not split", "probability": 0.5, "question": None}]
+
+
+@pytest.mark.parametrize("answer", ["yes", "no"])
+async def test_an_unsure_record_is_a_yes_no_question(answer):
+    calls, table, saved = {}, {"name": "t", "header": HEADER, "rows": []}, {"roles": {"columns": ROLES},
+                                                                           "profile": THICK}
+    got = await classify(Recorded(Stub(YES | {"k1_joined": 0.5}), calls), table, saved)
+    [w] = got["warnings"]
+    assert w["question"] == {"type": "yes_no", "call": w["question"]["call"], "key": "k1_joined"}
+    settle(calls, w["question"]["call"], "k1_joined", answer)
+    got = await classify(Recorded(replay := Stub({}), calls), table, saved)
+    assert ("order_id" in {g["key"] for g in got["groups"]}) == (answer == "yes")
+    assert got["warnings"] == [] and replay.asked == {}           # replayed, no call
+
+
+async def test_an_unsure_column_is_a_yes_no_question():
+    calls, table, saved = {}, {"name": "t", "header": HEADER, "rows": []}, {"roles": {"columns": ROLES},
+                                                                           "profile": THICK}
+    got = await classify(Recorded(Stub(YES | {"k7_has_k8": 0.6}), calls), table, saved)
+    [w] = got["warnings"]
+    assert w["question"] == {"type": "yes_no", "call": w["question"]["call"], "key": "k7_has_k8"}
+    settle(calls, w["question"]["call"], "k7_has_k8", "yes")
+    got = await classify(Recorded(Stub({}), calls), table, saved)
+    assert {"key": "sku", "columns": ["name"]} in got["groups"] and got["warnings"] == []
 
 
 async def test_no_candidate_means_no_question():

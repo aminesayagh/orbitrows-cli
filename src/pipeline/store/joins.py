@@ -14,6 +14,7 @@ Detection only: the groups are written to the result, no data is changed (storag
     Jev    per candidate key: does it stand for a record of another kind repeated on the rows (a joined export)?
            per determined column: does it describe that record, or a fact of this row (the price paid on a line)?
     code   below 0.8 nothing moves (a wrong split restructures the table; a missed one only loses tidiness), flagged
+           with a yes/no question for the user
     later  groups without an exported key, near-dependencies on dirty data (notice.md #8, #9)
 """
 from orbitrows.services.model.client import SURE, ask, yes_no
@@ -106,7 +107,8 @@ async def classify(jev, table: dict, saved: dict) -> dict:
         if p >= SURE:
             members[a] = []
         elif p > LOW:
-            warnings.append({"column": a, "problem": "joined record uncertain: not split", "probability": round(p, 2)})
+            warnings.append({"column": a, "problem": "joined record uncertain: not split", "probability": round(p, 2),
+                             "question": {"type": "yes_no", "call": ans.call, "key": f"{kid[a]}_joined"}})
     for a, cols in cand.items():
         if a not in members:
             continue
@@ -118,7 +120,9 @@ async def classify(jev, table: dict, saved: dict) -> dict:
             if pb >= SURE:
                 members[a].append(b)
             elif pb > LOW:
-                warnings.append({"column": b, "problem": f"describes {a}? uncertain: kept on the row", "probability": round(pb, 2)})
+                warnings.append({"column": b, "problem": f"describes {a}? uncertain: kept on the row",
+                                 "probability": round(pb, 2),
+                                 "question": {"type": "yes_no", "call": ans.call, "key": f"{kid[a]}_has_{kid[b]}"}})
     placed = {b for cols in members.values() for b in cols}
     groups = [{"key": a, "columns": cols} for a, cols in members.items() if cols]
     return {"groups": groups, "warnings": warnings} | ({"remaining": [h for h in header if h not in placed]} if groups else {})

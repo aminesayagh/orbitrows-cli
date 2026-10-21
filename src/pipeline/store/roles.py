@@ -8,9 +8,10 @@ which classified a matched store/incoming pair; here one column of one table.
     code   kind → role with the fixed table KIND_ROLE (dedicated_key · descriptive_base · qualifier · none); code
            translates Jev's answer, it does not classify
     Jev 2  level of every dedicated_key: individual_record · product_family
-    code   below 0.8, the likeliest answer is kept and flagged (same rule as the context step)
+    code   below 0.8, the likeliest answer is kept and flagged (same rule as the context step), with a choice question
+           for the user
 """
-from orbitrows.services.model.client import ask, choice, sure
+from orbitrows.services.model.client import ask, choice, options, sure
 from .context import ACTIVITY, SAMPLE
 
 KINDS = {
@@ -56,12 +57,15 @@ LEVEL_RULES = [
 
 
 def _pick(answers, key, h, what, warnings):
-    """The sure answer, else the likeliest one, flagged."""
+    """The sure answer, else the likeliest one, flagged (a question for the user when the model answered)."""
     if c := sure(answers, key):
         return c, False
     top, probs = answers.get(key, (None, {}))
-    warnings.append({"column": h, "problem": f"{what} uncertain", "answer": top,
-                     "probability": round(probs.get(top, 0), 2) if top else None})
+    w = {"column": h, "problem": f"{what} uncertain", "answer": top,
+         "probability": round(probs.get(top, 0), 2) if top else None}
+    if top:                                                   # a model answer below SURE: the user picks
+        w["question"] = {"type": "choice", "call": answers.call, "key": key, "options": options(probs)}
+    warnings.append(w)
     return top, True
 
 

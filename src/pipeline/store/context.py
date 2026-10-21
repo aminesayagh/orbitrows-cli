@@ -6,6 +6,7 @@
     code   dedicated_context, both on an INTEGER/REAL column → not a context column, warned
     Jev 2  dedicated_context, both, uncertain → category, and which columns it describes (uncertain: linked, flagged);
            a header unit read from one letter ("(L)": litres or a size?) → does the header declare it?
+    user   an answer below 0.8 (role, category, link, header letter) is also a question for the user
     code   header_context, both → the unit declared in the header (dictionary); none readable → no source, warned
     code   source_context of every value column: the row's context column, else the header
 
@@ -15,6 +16,7 @@
 import re
 
 from orbitrows.services.model.client import ask, choice, sure, yes_no, SURE
+from orbitrows.services.model.client import options as shown     # `options` is a local name in classify()
 from orbitrows.units.dictionary import declared, per_unit
 from orbitrows.units.header import resolve_header
 
@@ -86,6 +88,7 @@ async def classify(jev, table: dict, schema: dict, profile: dict) -> dict:
     `schema` is the types step's section, `profile` the profile of the table (pipeline/store/profile.py)."""
     header, rows = table["header"], table["rows"]
     ids = {f"k{i}": h for i, h in enumerate(header, 1)}
+    kid = {h: k for k, h in ids.items()}
     types = {c["header"]: c["sql_type"] for c in schema["create_table"]["definition"]["columns"]}
     state = {"file": table["name"], "columns": ids,
              "rows": [{k: (r[i] if i < len(r) else "") for i, k in enumerate(ids)} for r in rows[:SAMPLE]],
@@ -105,8 +108,11 @@ async def classify(jev, table: dict, schema: dict, profile: dict) -> dict:
         roles[h] = c if c and c != "uncertain" else "uncertain"
         if roles[h] == "uncertain":
             top = a1.get(k, (None, {}))
-            warnings.append({"column": h, "problem": "context option uncertain", "answer": top[0],
-                             "probability": round(top[1].get(top[0], 0), 2) if top[0] else None})
+            w = {"column": h, "problem": "context option uncertain", "answer": top[0],
+                 "probability": round(top[1].get(top[0], 0), 2) if top[0] else None}
+            if top[0] and top[1].get(top[0], 0) < SURE:       # a model answer below SURE: the user picks the role
+                w["question"] = {"type": "choice", "call": a1.call, "key": k, "options": shown(top[1])}
+            warnings.append(w)
     # uncertain: the likeliest role is still used, flagged (diagram: "uncertain -> still linked, flagged")
     likely = {h: roles[h] if roles[h] != "uncertain" else (a1.get(k, (None,))[0] or "none") for k, h in ids.items()}
     for h in header:                                          # numbers cannot name a unit: not a context column
@@ -140,15 +146,22 @@ async def classify(jev, table: dict, schema: dict, profile: dict) -> dict:
     for k in letters:                                         # a letter Jev does not confirm declares nothing
         if (p := a2.get(f"{k}_letter", 0)) < SURE:
             unconfirmed.add(ids[k])
-            warnings.append({"column": ids[k], "problem": f"header letter read as {own.pop(ids[k])['unit']} not "
-                             "confirmed: no header unit", "probability": round(p, 2)})
+            w = {"column": ids[k], "problem": f"header letter read as {own.pop(ids[k])['unit']} not "
+                 "confirmed: no header unit", "probability": round(p, 2)}
+            if p > 1 - SURE:                                  # unsure, not a sure no: the user says if it is the unit
+                w["question"] = {"type": "yes_no", "call": a2.call, "key": f"{k}_letter"}
+            warnings.append(w)
 
     context_columns, source = {}, {}
     for k in linking:
         h = ids[k]
         kind = sure(a2, f"{k}_category") or "unknown"
         if kind == "unknown":
-            warnings.append({"column": h, "problem": "context category unsure", "answer": a2.get(f"{k}_category", (None,))[0]})
+            top, probs = a2.get(f"{k}_category", (None, {}))
+            w = {"column": h, "problem": "context category unsure", "answer": top}
+            if top and probs.get(top, 0) < SURE:              # a model answer below SURE: the user picks the category
+                w["question"] = {"type": "choice", "call": a2.call, "key": f"{k}_category", "options": shown(probs)}
+            warnings.append(w)
         links = {ids[t]: round(a2.get(f"{k}_describes_{t}", 0), 2) for t in candidates}
         # a header that names value columns ("description_language", "Unité poids") describes those columns only
         named = [ids[t] for t in candidates if _words(ids[t]) and _words(ids[t]) <= _words(h)]
@@ -156,9 +169,10 @@ async def classify(jev, table: dict, schema: dict, profile: dict) -> dict:
             links = {t: p if t in named else 0.0 for t, p in links.items()}
         describes = [t for t, p in links.items() if p >= 0.5 or t in named]
         for t, p in links.items():
-            if 0.2 < p < SURE:
+            if 0.2 < p < SURE:                                # 1.0 (yes) and 0.0 (no) from the user are both sure
                 warnings.append({"column": h, "problem": f"does it describe {t}?", "probability": p,
-                                 "linked": p >= 0.5})
+                                 "linked": p >= 0.5, "question": {"type": "yes_no", "call": a2.call,
+                                                                  "key": f"{k}_describes_{kid[t]}"}})
         if not describes:
             warnings.append({"column": h, "problem": "context column describes no column: the merchant decides"})
         entry = {"context": roles[h] if roles[h] != "uncertain" else a1[k][0], "kind": kind, "describes": describes}

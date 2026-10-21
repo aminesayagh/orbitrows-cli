@@ -6,12 +6,13 @@ tables on the key"). Jev sees every table of the case at once: headers, sample r
            its values refer to, or none (two files describing the same records are not linked)
     code   evidence: each table's profile (empty, distinct, repeats over the whole file); for each candidate
            reference, the share of the column's values found in the other table's primary key
-    code   below 0.8, the likeliest answer is kept and flagged; the create_table nodes get primary_key and
-           foreign_keys; check_references(): a reference targets a primary key of the same SQLite type
+    code   below 0.8, the likeliest answer is kept and flagged, with a choice question for the user (the columns by
+           header); the create_table nodes get primary_key and foreign_keys; check_references(): a reference
+           targets a primary key of the same SQLite type
     later  composite primary keys (notice.md #6)
 """
 from orbitrows.sql.ddl import CreateTable, ForeignKey, TableColumns, check_references
-from orbitrows.services.model.client import ask, choice, sure
+from orbitrows.services.model.client import ask, choice, options, sure
 from .context import SAMPLE
 from .profile import overlap, values
 
@@ -39,12 +40,16 @@ FK_RULES = [
 NONE = "none"
 
 
-def _pick(answers, key, where, what, warnings):
+def _pick(answers, key, where, what, warnings, labels):
+    """The sure answer, else the likeliest one, flagged; `labels` names the column letters for the user's question."""
     if c := sure(answers, key):
         return c
     top, probs = answers.get(key, (None, {}))
-    warnings.append({"column": where, "problem": f"{what} uncertain", "answer": top,
-                     "probability": round(probs.get(top, 0), 2) if top else None})
+    w = {"column": where, "problem": f"{what} uncertain", "answer": top,
+         "probability": round(probs.get(top, 0), 2) if top else None}
+    if top:                                                   # a model answer below SURE: the user picks
+        w["question"] = {"type": "choice", "call": answers.call, "key": key, "options": options(probs, labels)}
+    warnings.append(w)
     return top
 
 
@@ -66,6 +71,8 @@ async def classify(jev, tables: list) -> dict:
             "profile": {"rows": len(table["rows"]), "columns": {k: saved["profile"]["columns"][h] for k, h in ids.items()}},
             "roles": {k: roles[k] for k in ids if roles[k]}}
     warnings = {t: [] for t in letters}
+    headers = {k: h for k, (t, h) in header_of.items()}          # a question shows columns by header, not by letter
+    targets_of = {k: f"{h} ({state['tables'][t]['file']})" for k, (t, h) in header_of.items()}   # in another table
 
     def label(k):
         t, h = header_of[k]
@@ -82,7 +89,7 @@ async def classify(jev, tables: list) -> dict:
         else:
             warnings[t].append({"column": None, "problem": "no dedicated_key column: no primary key"})
     a1 = await ask(jev, state, q1)
-    pk = {t: _pick(a1, t, None, "primary key", warnings[t]) for t in q1}
+    pk = {t: _pick(a1, t, None, "primary key", warnings[t], headers) for t in q1}
     pk = {t: k for t, k in pk.items() if k and k != NONE}
     for t in q1:
         if t not in pk:
@@ -104,7 +111,7 @@ async def classify(jev, tables: list) -> dict:
     fks = {t: [] for t in letters}
     for k in q2:
         t, h = header_of[k]
-        target = _pick(a2, k, h, "reference", warnings[t])
+        target = _pick(a2, k, h, "reference", warnings[t], targets_of)
         if target and target != NONE:
             fks[t].append((k, target))
 

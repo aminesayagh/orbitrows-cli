@@ -5,7 +5,7 @@ import pytest
 
 from orbitrows.pipeline.store.keys import NONE, classify
 from orbitrows.services.csv.reader import read_table
-from orbitrows.services.model.client import Model
+from orbitrows.services.model.client import Model, Recorded, settle
 from orbitrows.sql.ddl import create_table
 
 CASES = Path(__file__).parent / "fixtures" / "cases"
@@ -76,20 +76,35 @@ async def test_none_answer_makes_no_reference():
     assert got["orders.csv"]["create_table"]["definition"]["foreign_keys"] == [] and got["orders.csv"]["warnings"] == []
 
 
-async def test_uncertain_primary_key_is_kept_and_flagged():
-    jev = Stub({"a": sure("a1"), "b": sure("b1", 0.6)}, {"b2": sure(NONE)})
-    got = await classify(jev, [customers(), orders()])
+async def test_uncertain_primary_key_is_kept_flagged_and_asked_by_header():
+    calls = {}
+    jev = Stub({"a": sure("a1"), "b": ("b1", {"b1": 0.6, "b2": 0.3, NONE: 0.1})}, {"b2": sure(NONE)})
+    got = await classify(Recorded(jev, calls), [customers(), orders()])
     assert got["orders.csv"]["create_table"]["definition"]["primary_key"] == ["c_order_id"]
-    assert got["orders.csv"]["warnings"] == [{"column": None, "problem": "primary key uncertain", "answer": "b1",
-                                               "probability": 0.6}]
+    [w] = got["orders.csv"]["warnings"]
+    q = w.pop("question")
+    assert w == {"column": None, "problem": "primary key uncertain", "answer": "b1", "probability": 0.6}
+    assert q == {"type": "choice", "call": q["call"], "key": "b",
+                 "options": [{"answer": "order_id", "value": "b1", "probability": 0.6},      # letters shown as headers
+                             {"answer": "customer_id", "value": "b2", "probability": 0.3},
+                             {"answer": NONE, "value": NONE, "probability": 0.1}]}
+    settle(calls, q["call"], "b", "b2")                        # the user: customer_id
+    replay = Stub({"b1": sure(NONE)})                          # the primary keys are replayed; order_id is now asked
+    got = await classify(Recorded(replay, calls), [customers(), orders()])
+    assert got["orders.csv"]["create_table"]["definition"]["primary_key"] == ["c_customer_id"]
+    assert got["orders.csv"]["warnings"] == [] and [set(q) for q in replay.asked] == [{"b1"}]
 
 
 async def test_uncertain_reference_is_kept_and_flagged():
-    jev = Stub({"a": sure("a1"), "b": sure("b1")}, {"b2": sure("a1", 0.5)})
+    jev = Stub({"a": sure("a1"), "b": sure("b1")}, {"b2": ("a1", {"a1": 0.5, NONE: 0.5})})
     got = await classify(jev, [customers(), orders()])
     assert got["orders.csv"]["create_table"]["definition"]["foreign_keys"][0]["columns"] == ["c_customer_id"]
-    assert got["orders.csv"]["warnings"] == [{"column": "customer_id", "problem": "reference uncertain", "answer": "a1",
-                                               "probability": 0.5}]
+    [w] = got["orders.csv"]["warnings"]
+    assert w | {"question": None} == {"column": "customer_id", "problem": "reference uncertain", "answer": "a1",
+                                      "probability": 0.5, "question": None}
+    assert w["question"]["key"] == "b2" and w["question"]["options"] == [
+        {"answer": "customer_id (customers)", "value": "a1", "probability": 0.5},   # a column of another table
+        {"answer": NONE, "value": NONE, "probability": 0.5}]
 
 
 async def test_no_single_column_primary_key_warns():

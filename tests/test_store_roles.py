@@ -6,7 +6,7 @@ import pytest
 from orbitrows.pipeline.store.profile import profile
 from orbitrows.pipeline.store.roles import KIND_ROLE, classify
 from orbitrows.services.csv.reader import read_table
-from orbitrows.services.model.client import Model
+from orbitrows.services.model.client import Model, Recorded, settle
 
 CASES = Path(__file__).parent / "fixtures" / "cases"
 TABLES = [(f.parent.name, name, saved) for f in sorted(CASES.glob("*/result.json"))
@@ -73,11 +73,20 @@ async def test_kind_gives_the_role_and_a_context_column_is_not_asked():
     assert out["warnings"] == []
 
 
-async def test_uncertain_kind_keeps_the_likeliest_role_flagged():
+async def test_uncertain_kind_keeps_the_likeliest_role_flagged_and_asks_the_user():
+    calls = {}
     jev = Stub({"k1": ("attribute", {"attribute": 0.6, "name": 0.4}), "k2": sure("name")})
-    out = await classify(jev, TABLE, CONTEXT, SCHEMA, profile(TABLE))
+    out = await classify(Recorded(jev, calls), TABLE, CONTEXT, SCHEMA, profile(TABLE))
     assert out["columns"]["sku"] == {"role": "qualifier", "kind": "attribute", "flagged": True}
-    assert out["warnings"] == [{"column": "sku", "problem": "kind uncertain", "answer": "attribute", "probability": 0.6}]
+    [w] = out["warnings"]
+    q = w.pop("question")
+    assert w == {"column": "sku", "problem": "kind uncertain", "answer": "attribute", "probability": 0.6}
+    assert q == {"type": "choice", "call": q["call"], "key": "k1",
+                 "options": [{"answer": "attribute", "value": "attribute", "probability": 0.6},
+                             {"answer": "name", "value": "name", "probability": 0.4}]}
+    settle(calls, q["call"], "k1", "name")                     # the user: it is a name
+    out = await classify(Recorded(Stub(), calls), TABLE, CONTEXT, SCHEMA, profile(TABLE))   # replayed, no call
+    assert out["columns"]["sku"] == {"role": "descriptive_base", "kind": "name"} and out["warnings"] == []
 
 
 async def test_uncertain_level_keeps_the_likeliest_flagged():
