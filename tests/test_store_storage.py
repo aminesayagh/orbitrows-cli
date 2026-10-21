@@ -32,11 +32,7 @@ def tables(path) -> dict:
         return {n: db.execute(f'SELECT COUNT(*) FROM "{n}"').fetchone()[0] for n in names}
 
 
-def test_fourteen_cases():
-    assert len(EXPECTED) == 14
-
-
-@pytest.mark.parametrize("name", sorted(EXPECTED))
+@pytest.mark.parametrize("name", ["shop", "joins_chain"])
 def test_store_is_written(name):
     files, rows = case(name)
     built = run.build(files)

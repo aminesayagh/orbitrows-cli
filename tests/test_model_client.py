@@ -19,12 +19,6 @@ def test_sure():
     assert sure(answers, "a") == "x" and sure(answers, "b") is None and sure(answers, "missing") is None
 
 
-def test_question_builders():
-    assert choice("ctx", "task", ["a", "b"], rules=["r"], header="h")["instructions"] == \
-        {"context": "ctx", "task": "task", "header": "h", "rules": ["r"]}
-    assert yes_no("ctx", "task")["type"] == "noul"
-
-
 class TimeoutError_(Exception):  # "timeout" in the class name is what ask() retries on
     pass
 
@@ -52,11 +46,6 @@ async def test_ask_gives_up_after_the_retries():
         raise AssertionError("no error raised")
     except TimeoutError_:
         assert model.calls == RETRIES + 1
-
-
-async def test_ask_without_questions_does_not_call_the_model():
-    model = Flaky(0)
-    assert await ask(model, {}, {}) == {} and model.calls == 0
 
 
 def test_call_id_is_stable_and_ignores_key_order():

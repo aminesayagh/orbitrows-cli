@@ -7,6 +7,7 @@ from orbitrows.pipeline.store import run, schema
 from orbitrows.services.model.client import Model, Recorded, options, settle
 
 CASES = Path(__file__).parent / "fixtures" / "cases"
+pytestmark = pytest.mark.usefixtures("no_gliner")
 SECTIONS = {"read", "schema", "profile", "context", "roles", "keys", "joins"}
 
 

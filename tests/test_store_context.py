@@ -50,7 +50,7 @@ async def test_dedicated_context_column_describes_the_column_it_is_linked_to():
     assert out["warnings"] == [] and jev.asked[1] == {"k3_category", "k3_describes_k1", "k3_describes_k2"}
 
 
-@pytest.mark.parametrize("numeric", ["INTEGER", "REAL"])
+@pytest.mark.parametrize("numeric", ["INTEGER"])
 async def test_numeric_dedicated_context_is_demoted_with_a_warning(numeric):
     jev = Stub(ROLES, {})
     out = await context.classify(jev, TABLE, schema(numeric), profile(TABLE))

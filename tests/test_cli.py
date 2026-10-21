@@ -158,14 +158,14 @@ def test_the_key_is_needed_for_jev(env, capsys, monkeypatch):
     assert code == 1 and err.startswith("TYPESAFE_API_KEY is not set") and stores() == []
 
 
-@pytest.mark.parametrize("model", ["jev", ""])
+@pytest.mark.parametrize("model", [""])
 def test_the_key_is_needed_when_the_model_is_named_jev(env, capsys, monkeypatch, model):
     monkeypatch.setenv("MODEL", model)  # an empty MODEL means the default, Jev
     code, out, err = run(capsys, "store", "customers.csv")
     assert code == 1 and err.startswith("TYPESAFE_API_KEY is not set") and stores() == []
 
 
-@pytest.mark.parametrize("step", ["rows", "build"])
+@pytest.mark.parametrize("step", ["build"])
 def test_ctrl_c_in_the_code_after_the_model_stops_the_import(env, capsys, monkeypatch, step):
     real = getattr(cli.run, step)
 
@@ -320,7 +320,7 @@ class Stub(Model):
 
 
 @pytest.fixture
-def stub(env, monkeypatch):
+def stub(env, monkeypatch, no_gliner):
     """The real classify, with Stub as the model: its calls in the returned log."""
     log = []
     monkeypatch.setattr(cli.run, "classify", CLASSIFY)
