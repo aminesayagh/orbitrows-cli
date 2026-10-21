@@ -1,4 +1,5 @@
 import json
+import shutil
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -92,6 +93,21 @@ def test_a_value_lost_on_the_way_refuses_the_store():
         storage.write("st_test", st, rows)
     assert lost.value.diffs == [{"file": "export.csv", "row": 1, "header": "customer_name", "uploaded": "Alice M.",
                                  "rebuilt": "Alice Martin", "kind": "value"}]
+    assert sorted(p.name for p in storage.folder("st_test").iterdir()) == []
+
+
+def test_a_cell_beyond_the_header_refuses_the_store(tmp_path):
+    for f in (CASES / "shop").glob("*.csv"):
+        shutil.copy(f, tmp_path / f.name)
+    lines = (tmp_path / "customers.csv").read_text().splitlines()
+    lines[1] += ",LOST CELL"                                  # row 1 has one cell more than the header
+    (tmp_path / "customers.csv").write_text("\n".join(lines) + "\n")
+    files = json.loads((CASES / "shop" / "result.json").read_text())["tables"]
+    rows = run.rows([tmp_path / f for f in files], files)
+    with pytest.raises(storage.Lost) as lost:
+        storage.write("st_test", run.build(files, rows)["store"], rows)
+    assert lost.value.diffs == [{"file": "customers.csv", "row": 0, "header": None, "uploaded": "LOST CELL",
+                                 "rebuilt": "", "kind": "value"}]
     assert sorted(p.name for p in storage.folder("st_test").iterdir()) == []
 
 

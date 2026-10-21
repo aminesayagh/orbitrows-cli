@@ -15,6 +15,7 @@ Store files only; the output is the AST (no SQL text kept, no rows loaded).
 import json
 import re
 import sqlite3
+from decimal import Decimal
 
 from .types import EXPORTED
 from orbitrows.sql.ddl import CreateTable, ForeignKey, NewColumn, NewTable, TableColumns, check_references, ddl, sql_name
@@ -129,7 +130,8 @@ def _text(v) -> str:
 def _same_number(a: str, b: str) -> bool:
     """a is written as a database exports a number and holds the same value (12.50 → 12.5); "007" → 7 is not."""
     try:
-        return EXPORTED["REAL"].fullmatch(a) is not None and float(a) == float(b)
+        return (EXPORTED["REAL"].fullmatch(a) is not None and float(a) == float(b)
+                and Decimal(a) == Decimal(repr(float(a))))     # a is exactly that float: no digit was lost
     except ValueError:
         return False
 
@@ -214,6 +216,10 @@ def check(db, store: dict, rows: dict) -> list[dict]:
                 if up != back:
                     diffs.append({"file": ex["file"], "row": n, "header": c["header"], "uploaded": up, "rebuilt": back,
                                   "kind": "number_format" if _same_number(up, back) else "value"})
+            for cell in w[len(ex["columns"]):]:               # beyond the header: no column keeps it
+                if cell:
+                    diffs.append({"file": ex["file"], "row": n, "header": None, "uploaded": cell, "rebuilt": "",
+                                  "kind": "value"})
     for table, rowid, parent, _ in db.execute("PRAGMA foreign_key_check"):     # SQLite checks every reference
         diffs.append({"table": table, "rowid": rowid, "problem": f"references a missing {parent} record", "kind": "value"})
     return diffs

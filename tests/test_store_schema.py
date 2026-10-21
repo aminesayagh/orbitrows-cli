@@ -91,6 +91,12 @@ def test_a_real_cell_written_with_a_trailing_zero_is_a_number_format():
     assert got[0]["kind"] == "number_format"
 
 
+def test_lost_float_precision_is_a_value_difference():
+    for lost in ("12345678901234567890", "3.14159265358979323846"):   # stored as 1.2345678901234567e+19, 3.141592653589793
+        got = round_trip(STORE, {"export.csv": [["1", "7", "Ana", "A-1", "Mug", "2", lost, ""]]})
+        assert got[0]["kind"] == "value" and got[0]["uploaded"] == lost, got
+
+
 def test_a_leading_zero_is_a_value_difference():
     lead = round_trip(STORE, {"export.csv": [["1", "7", "Ana", "A-1", "Mug", "2", "012.50", ""]]})
     assert lead[0]["kind"] == "value" and lead[0]["uploaded"] == "012.50", lead

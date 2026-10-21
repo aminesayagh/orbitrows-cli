@@ -115,8 +115,13 @@ def test_a_store_that_loses_data_is_refused(env, capsys):
     lines = (env / "export.csv").read_text().splitlines()
     lines[2] = lines[2].replace("Alice Martin", "Alice M.")  # customer 1's name now disagrees with row 1's
     (env / "export.csv").write_text("\n".join(lines) + "\n")
-    code, out, err = run(capsys, "store", "export.csv")
+    SAVED["export.csv"]["roles"]["warnings"].append({"column": "product", "problem": "role uncertain", "probability": 0.5})
+    try:
+        code, out, err = run(capsys, "store", "export.csv")
+    finally:
+        SAVED["export.csv"]["roles"]["warnings"].pop()
     assert code == 1 and "would lose data" in err
+    assert "Warning: export.csv · roles · product: role uncertain (50%)" in out.splitlines()   # shown on a refusal too
     assert 'export.csv, row 2, customer_name: "Alice M." would come back as "Alice Martin"' in err
     [(store_id, _, status)] = stores()
     assert status == registry.FAILED and not (storage.folder(store_id) / "session.db").exists()

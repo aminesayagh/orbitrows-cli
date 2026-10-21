@@ -92,6 +92,8 @@ async def store(paths: list[Path], name: str | None) -> None:
             saved = await run.classify(model, paths, step=step)
         rows = run.rows(paths, saved)
         built = run.build(saved, rows)
+        for w in built["warnings"]:                           # before writing, so a refusal shows them too
+            print(warning(w))
         if diffs := [d for d in built["diffs"] if d["kind"] == "value"]:
             raise Refusal(lost(diffs))
         try:
@@ -104,8 +106,6 @@ async def store(paths: list[Path], name: str | None) -> None:
     registry.set_status(store_id, registry.READY)
     for t in tables:
         print(f"{t['table']}: {t['rows']} rows · {t['columns']} columns, from {t['file']}")
-    for w in built["warnings"]:
-        print(warning(w))
     print(f"Store {label((store_id, name))}")
 
 
