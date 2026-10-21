@@ -1,9 +1,8 @@
-from orbitrows.services.model.client import RETRIES, Jev, Model, ask, choice, connect, sure, yes_no
+from orbitrows.services.model.client import MODELS, RETRIES, Jev, Model, ask, choice, connect, sure, yes_no
 
 
-def test_connect_default_and_by_name(monkeypatch):
-    monkeypatch.delenv("MODEL", raising=False)
-    assert type(connect()) is Jev and type(connect("jev")) is Jev
+def test_jev_is_the_default_model():
+    assert MODELS["jev"] is Jev  # registered, never instantiated: no real Jev call in tests
 
 
 def test_connect_a_class_kept_elsewhere():
