@@ -11,7 +11,7 @@ which classified a matched store/incoming pair; here one column of one table.
     code   below 0.8, the likeliest answer is kept and flagged (same rule as the context step), with a choice question
            for the user
 """
-from orbitrows.services.model.client import ask, choice, options, sure
+from orbitrows.services.model.client import ask, choice, pick
 from .context import ACTIVITY, SAMPLE
 
 KINDS = {
@@ -56,19 +56,6 @@ LEVEL_RULES = [
 ]
 
 
-def _pick(answers, key, h, what, warnings):
-    """The sure answer, else the likeliest one, flagged (a question for the user when the model answered)."""
-    if c := sure(answers, key):
-        return c, False
-    top, probs = answers.get(key, (None, {}))
-    w = {"column": h, "problem": f"{what} uncertain", "answer": top,
-         "probability": round(probs.get(top, 0), 2) if top else None}
-    if top:                                                   # a model answer below SURE: the user picks
-        w["question"] = {"type": "choice", "call": answers.call, "key": key, "options": options(probs)}
-    warnings.append(w)
-    return top, True
-
-
 async def classify(jev, table: dict, context: dict, schema: dict, profile: dict) -> dict:
     """{"columns": {header: {"role", "kind", "level"?, "flagged"?}}, "warnings": [...]}; context columns get no role.
     `profile` is the profile of the table (pipeline/store/profile.py)."""
@@ -88,7 +75,7 @@ async def classify(jev, table: dict, context: dict, schema: dict, profile: dict)
                                 for k in asked})
     columns, warnings = {}, []
     for k in asked:
-        kind, flagged = _pick(a1, k, ids[k], "kind", warnings)
+        kind, flagged = pick(a1, k, ids[k], "kind", warnings)
         columns[ids[k]] = {"role": KIND_ROLE.get(kind), "kind": kind} | ({"flagged": True} if flagged else {})
 
     keys = [k for k in asked if columns[ids[k]]["role"] == "dedicated_key"]
@@ -96,7 +83,7 @@ async def classify(jev, table: dict, context: dict, schema: dict, profile: dict)
                                           "distinguish.", LEVELS, LEVEL_RULES, column=k, evidence=EVIDENCE)
                                 for k in keys})
     for k in keys:
-        level, flagged = _pick(a2, k, ids[k], "level", warnings)
+        level, flagged = pick(a2, k, ids[k], "level", warnings)
         columns[ids[k]]["level"] = level
         if flagged:
             columns[ids[k]]["flagged"] = True

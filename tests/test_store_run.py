@@ -118,3 +118,20 @@ def test_build_reports_the_schema_problems():
     built = run.build(saved)
     assert {"file": "orders.csv", "step": "schema", "table_id": "t_orders",
             "problem": "TYPE_MISMATCH c_customer_id TEXT → t_customers.c_customer_id INTEGER"} in built["warnings"]
+
+
+async def test_a_pause_holds_the_questions_of_one_call_per_step(tmp_path):
+    path, calls = tmp_path / "t.csv", {}
+    path.write_text("sku,price,currency\nA1,9.90,EUR\nB2,12.00,USD\n")
+    given = {"header": 0.95, "k3_type": ("TEXT", {"TEXT": 0.95}),
+             "k3": ("dedicated_context", {"dedicated_context": 0.55, "none": 0.45}),          # call 1: the roles
+             "k3_category": ("currency", {"currency": 0.5, "other": 0.4})}                   # call 2: depends on k3
+    with pytest.raises(run.Paused) as paused:
+        await run.classify(Recorded(Unsure(given), calls), [path])
+    [q] = paused.value.questions                                # not the category: k3's answer may make it moot
+    assert paused.value.phase == "context" and q["question"]["key"] == "k3"
+    settle(calls, q["question"]["call"], "k3", "dedicated_context")
+    with pytest.raises(run.Paused) as again:                    # the replay asks the category, recorded: no call
+        await run.classify(Recorded(stub := Unsure(given), calls), [path])
+    [q] = again.value.questions
+    assert again.value.phase == "context" and q["question"]["key"] == "k3_category" and stub.calls == 0

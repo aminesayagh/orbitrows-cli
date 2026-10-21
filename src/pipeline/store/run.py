@@ -6,11 +6,14 @@
 
 A model answer below SURE is a question for the user: classify stops after the first phase that has one (Paused); once
 the user has answered (client.settle), the import runs again from the start, replaying the recorded answers
-(client.Recorded). Every other warning is a notice: shown, and the import goes on.
+(client.Recorded). Every other warning is a notice: shown, and the import goes on. A step's later call can depend on
+its earlier answers (the roles decide which columns are linked), so a pause holds the questions of one call per file
+and step (per step for keys, one call over all the files): the first call that has any.
 """
 import hashlib
 
 from orbitrows.services.csv.reader import read_table
+from orbitrows.services.model.client import Model, call_id
 
 from . import context, header, joins, keys, profile, roles, schema, types
 
@@ -29,17 +32,35 @@ class Paused(Exception):
         self.phase, self.questions, self.notices = phase, questions, notices
 
 
+class _Ordered(Model):
+    """`inner`, with the call_id of every call in `order`, in the order asked."""
+
+    def __init__(self, inner: Model):
+        self.inner, self.name, self.order = inner, inner.name, []
+
+    async def answer(self, state, questions):
+        self.order.append(call_id(state, questions))
+        return await self.inner.answer(state, questions)
+
+
 async def classify(jev, paths: list, step=lambda text: None) -> dict[str, dict]:
     """{"<file name>": {"read", "schema", "profile", "context", "roles", "keys", "joins"}} for the store files.
     The rows are not kept: read them again with read_table(path, has_header=saved[file]["read"]["has_header"]).
     Raises Paused after the first phase whose warnings carry a question."""
-    saved, tables, notices = {}, {}, []
+    saved, tables, notices, jev = {}, {}, [], _Ordered(jev)
 
     def pause(phase):
         found = [w for f, s in saved.items() for w in _warnings(f, s, SECTION.get(phase, phase))]
         notices.extend(w for w in found if "question" not in w)
+        group = (lambda w: w["step"]) if phase == "keys" else (lambda w: (w["file"], w["step"]))
+        first = {}                                            # group → its first call with a question; later calls of
+        for w in found:                                       # the group are asked again after the replay
+            if "question" in w:
+                g, c = group(w), w["question"]["call"]
+                first[g] = min(first.get(g, c), c, key=jev.order.index)
         questions = [w | {"id": "q_" + hashlib.sha256((w["question"]["call"] + w["question"]["key"]).encode())
-                          .hexdigest()[:8]} for w in found if "question" in w]
+                          .hexdigest()[:8]}
+                     for w in found if "question" in w and w["question"]["call"] == first[group(w)]]
         if questions:
             raise Paused(phase, questions, notices)
 

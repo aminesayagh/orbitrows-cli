@@ -123,4 +123,5 @@ def test_options():
                                                           {"answer": "b", "value": "b", "probability": 0.04}]  # two
     assert options({"uncertain": 0.7, "a": 0.2, "b": 0.1}, labels={"a": "price"})[0] == \
         {"answer": "price", "value": "a", "probability": 0.2}
-    assert FLOOR == 0.10 and [o["value"] for o in options({"a": 0.1, "b": 0.0999})] == ["a", "b"]
+    probs = {"a": 0.5, "b": 0.3, "c": 0.1, "d": 0.0999}                      # "c" is kept by the floor rule alone
+    assert FLOOR == 0.10 and [o["value"] for o in options(probs)] == ["a", "b", "c"]

@@ -75,6 +75,17 @@ async def test_uncertain_role_keeps_the_likeliest_flagged_and_asks_the_user():
     assert out["context_columns"] == {} and out["warnings"] == []
 
 
+async def test_an_uncertain_numeric_role_offers_no_role_that_is_demoted():
+    two = ROLES | {"k3": ("dedicated_context", {"dedicated_context": 0.55, "none": 0.45})}
+    out = await context.classify(Stub(two, {}), TABLE, schema("INTEGER"), profile(TABLE))
+    assert [w["problem"] for w in out["warnings"]] == ["context option uncertain",
+                                                       "dedicated_context but typed INTEGER: none kept"]
+    assert all("question" not in w for w in out["warnings"])  # "none" is the only answer left: a notice
+    three = ROLES | {"k3": ("both", {"both": 0.4, "header_context": 0.35, "none": 0.25})}
+    out = await context.classify(Stub(three, {}), TABLE, schema("REAL"), profile(TABLE))
+    assert [o["value"] for o in out["warnings"][0]["question"]["options"]] == ["header_context", "none"]
+
+
 async def test_a_sure_uncertain_role_is_a_notice():
     roles = ROLES | {"k3": sure("uncertain", 0.9)}
     out = await context.classify(Stub(roles, {}), TABLE, schema(), profile(TABLE))

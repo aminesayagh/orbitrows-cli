@@ -15,8 +15,7 @@
 """
 import re
 
-from orbitrows.services.model.client import ask, choice, sure, yes_no, SURE
-from orbitrows.services.model.client import options as shown     # `options` is a local name in classify()
+from orbitrows.services.model.client import ask, choice, options, sure, yes_no, SURE
 from orbitrows.units.dictionary import declared, per_unit
 from orbitrows.units.header import resolve_header
 
@@ -110,8 +109,10 @@ async def classify(jev, table: dict, schema: dict, profile: dict) -> dict:
             top = a1.get(k, (None, {}))
             w = {"column": h, "problem": "context option uncertain", "answer": top[0],
                  "probability": round(top[1].get(top[0], 0), 2) if top[0] else None}
-            if top[0] and top[1].get(top[0], 0) < SURE:       # a model answer below SURE: the user picks the role
-                w["question"] = {"type": "choice", "call": a1.call, "key": k, "options": shown(top[1])}
+            # a number cannot name a unit: dedicated_context and both are demoted below, so the user is not offered them
+            probs = {o: p for o, p in top[1].items() if not (types.get(h) in NUMERIC and o in CONTEXT_ONLY)}
+            if top[0] and top[1].get(top[0], 0) < SURE and len(options(probs)) > 1:   # below SURE: the user picks
+                w["question"] = {"type": "choice", "call": a1.call, "key": k, "options": options(probs)}
             warnings.append(w)
     # uncertain: the likeliest role is still used, flagged (diagram: "uncertain -> still linked, flagged")
     likely = {h: roles[h] if roles[h] != "uncertain" else (a1.get(k, (None,))[0] or "none") for k, h in ids.items()}
@@ -160,7 +161,7 @@ async def classify(jev, table: dict, schema: dict, profile: dict) -> dict:
             top, probs = a2.get(f"{k}_category", (None, {}))
             w = {"column": h, "problem": "context category unsure", "answer": top}
             if top and probs.get(top, 0) < SURE:              # a model answer below SURE: the user picks the category
-                w["question"] = {"type": "choice", "call": a2.call, "key": f"{k}_category", "options": shown(probs)}
+                w["question"] = {"type": "choice", "call": a2.call, "key": f"{k}_category", "options": options(probs)}
             warnings.append(w)
         links = {ids[t]: round(a2.get(f"{k}_describes_{t}", 0), 2) for t in candidates}
         # a header that names value columns ("description_language", "Unité poids") describes those columns only
@@ -187,20 +188,20 @@ async def classify(jev, table: dict, schema: dict, profile: dict) -> dict:
     for h in header:                                          # the source of each value column: column > header
         if h in context_columns:
             continue
-        options = list(source.get(h, []))
+        found = list(source.get(h, []))
         if likely.get(h) in ("header_context", "both"):
             if u := own.get(h):
-                options.append({"kind": u["kind"], "from": "header", "unit": u["unit"]}
+                found.append({"kind": u["kind"], "from": "header", "unit": u["unit"]}
                                | ({"flagged": True} if roles[h] == "uncertain" else {}))
             elif h not in unconfirmed:
                 warnings.append({"column": h, "problem": "the header declares a unit the readers cannot name: no source"})
-        if not options:
+        if not found:
             continue
-        source[h] = options[0]
-        units = {o.get("unit") for o in options if o.get("unit")}
+        source[h] = found[0]
+        units = {o.get("unit") for o in found if o.get("unit")}
         if len(units) > 1:
-            warnings.append({"column": h, "problem": f"sources disagree: {sorted(units)}; {options[0]['from']} wins"})
-        if len([o for o in options if o["from"] == "column"]) > 1:
+            warnings.append({"column": h, "problem": f"sources disagree: {sorted(units)}; {found[0]['from']} wins"})
+        if len([o for o in found if o["from"] == "column"]) > 1:
             warnings.append({"column": h, "problem": "described by several context columns"})
     return {"table": table["name"], "context_columns": context_columns,
             "source_context": {h: v for h, v in source.items() if isinstance(v, dict)},
