@@ -22,6 +22,7 @@ from itertools import combinations
 from text_to_num import text2num
 
 from . import SURE
+from .asking import question
 from orbitrows.sql.sql import program
 from orbitrows.services.model.client import ask, choice
 from .conditions import tables_of
@@ -145,12 +146,12 @@ def _col(key):
 def build(requests, section, params, answers) -> dict:
     out, warnings = {}, []
 
-    def pick(rid, name):
+    def pick(rid, name, labels=None):
         c, probs = answers.get(f"{rid}|{name}", (None, {}))
         if c is not None and probs.get(c, 1) < SURE:
             out[rid]["flagged"] = True
             warnings.append({"request": rid, "problem": f"{name} uncertain", "answer": c,
-                             "probability": round(probs.get(c, 0), 2)})
+                             "probability": round(probs.get(c, 0), 2)} | question(answers, f"{rid}|{name}", labels))
         return c
 
     for r in requests:
@@ -175,8 +176,8 @@ def build(requests, section, params, answers) -> dict:
             if col:
                 out[rid]["order_by"] = [{"expression": _col(col), "direction": d or "asc"}]
         if g.get("limited"):
-            n = pick(rid, "limit")
             nums = limits(r["text"], params.get(rid, []))
+            n = pick(rid, "limit", {f"n{i}": t for i, (t, _) in enumerate(nums)})
             value = 1 if n == "one" else nums[int(n[1:])][1] if n and n[1:].isdigit() and int(n[1:]) < len(nums) else None
             if value is None:
                 out[rid]["flagged"] = True

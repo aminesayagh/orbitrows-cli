@@ -47,6 +47,7 @@ def meant(db, schema, text: str) -> list[dict]:
     found = [f for fs in meanings(spans, store) for f in fs]
     return sorted(found, key=lambda f: -f.get("similarity", 0))
 from . import SURE
+from .asking import question
 from orbitrows.services.model.client import ask, choice, yes_no
 from .parts import columns_of, main_table
 
@@ -163,7 +164,8 @@ def build(requests, schema, sources, values, answers) -> dict:
         p = answers.get(key, 0.0)
         if 1 - SURE < p < SURE:
             out[rid]["flagged"] = True
-            warnings.append({"request": rid, "problem": f"{what} uncertain", "probability": round(p, 2)})
+            warnings.append({"request": rid, "problem": f"{what} uncertain", "probability": round(p, 2)}
+                            | question(answers, key))
         return p >= 0.5
 
     for r in requests:
@@ -384,7 +386,8 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                 if needed and c not in (None, "none") and p < SURE:
                     out[rid]["flagged"] = True
                     warnings.append({"request": rid, "problem": f"{name} of {key} uncertain", "answer": c,
-                                     "probability": round(probs.get(c, 0), 2)})
+                                     "probability": round(probs.get(c, 0), 2)}
+                                    | question(answers, f"{rid}|{key}|{name}", {k: x[0] for k, x in cands.items()}))
                 return c
             op = pick("op")
             for c in proved:
@@ -414,7 +417,8 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
             negated = p >= 0.5
             if 1 - SURE < p < SURE:
                 out[rid]["flagged"] = True
-                warnings.append({"request": rid, "problem": f"negation of {key} uncertain", "probability": round(p, 2)})
+                warnings.append({"request": rid, "problem": f"negation of {key} uncertain", "probability": round(p, 2)}
+                                | question(answers, f"{rid}|{key}|not"))
             if cond is None:
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": f"condition on {key}: a part is missing", "operator": op,

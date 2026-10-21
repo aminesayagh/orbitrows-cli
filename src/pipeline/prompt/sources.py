@@ -25,6 +25,7 @@ definition is built). Table ids stay the same after a rename. Step 1's reference
 in r1) and step 3's stored values ("Casa Living" → suppliers.name) are shown to Jev with each request. Examples in the rules must not be test prompts (cases/).
 """
 from . import SURE
+from .asking import question
 from orbitrows.services.model.client import ask, choice, yes_no
 
 CONTEXT = ("A merchant wrote a prompt to edit or read their store database (its tables and columns are in `tables`). "
@@ -169,11 +170,13 @@ def build(requests: list[dict], answers: dict, schema: list[dict], values: list[
     def pick(rid, key, problem):
         c, probs = answers.get(key, (None, {}))
         p = probs.get(c, 0)
-        if c == "unclear" or c is None:
-            warnings.append({"request": rid, "problem": f"{problem}: unclear"})
+        if c == "unclear" or c is None:                       # "unclear" asks the merchant: a question, not an option
+            warnings.append({"request": rid, "problem": f"{problem}: unclear"}
+                            | question(answers, key, skip=["unclear"]))
         elif p < SURE:
             out[rid]["flagged"] = True
-            warnings.append({"request": rid, "problem": f"{problem} uncertain", "answer": c, "probability": round(p, 2)})
+            warnings.append({"request": rid, "problem": f"{problem} uncertain", "answer": c, "probability": round(p, 2)}
+                            | question(answers, key))
         return c
 
     for r in requests:
@@ -189,7 +192,8 @@ def build(requests: list[dict], answers: dict, schema: list[dict], values: list[
                 warnings[:] = [w for w in warnings if not (w["request"] == rid and w["problem"].startswith("table"))]
             if 1 - SURE < p < SURE:
                 out[rid]["flagged"] = True
-                warnings.append({"request": rid, "problem": "same rows uncertain", "probability": round(p, 2)})
+                warnings.append({"request": rid, "problem": "same rows uncertain", "probability": round(p, 2)}
+                                | question(answers, f"{rid}_same"))
         if st == "insert":
             out[rid]["query_from"] = node(pick(rid, f"{rid}_rows", "rows from"))
         if st == "create_table":
@@ -209,7 +213,7 @@ def build(requests: list[dict], answers: dict, schema: list[dict], values: list[
                                          "table": tid, "values": [v["text"] for v in found if v.get("flagged")]})
                 if 1 - SURE < p < SURE and tid != main and not found:
                     warnings.append({"request": rid, "problem": "uses table uncertain", "table": tid,
-                                     "probability": round(p, 2)})
+                                     "probability": round(p, 2)} | question(answers, f"{rid}_uses_{tid}"))
             src = out[rid].get("from") or {}
             if src.get("type") == "request_result":           # what the earlier rows came from is in them already
                 earlier = out.get(src["request_id"], {})            # a select's table, or an update's / delete's

@@ -43,6 +43,22 @@ class _Ordered(Model):
         return await self.inner.answer(state, questions)
 
 
+def first_questions(found: list, group, order: list) -> list:
+    """The warnings of `found` with a question, each with a stable "id", keeping per group only those of its first
+    call (in `order`, _Ordered's) that has any: later calls of the group are asked again after the replay."""
+    first = {}                                                # group → its first call with a question
+    for w in found:
+        if "question" in w:
+            g, c = group(w), w["question"]["call"]
+            first[g] = min(first.get(g, c), c, key=order.index)
+    out = {}                                                  # by id: two warnings may ask the same question
+    for w in found:
+        if "question" in w and w["question"]["call"] == first[group(w)]:
+            i = "q_" + hashlib.sha256((w["question"]["call"] + w["question"]["key"]).encode()).hexdigest()[:8]
+            out.setdefault(i, w | {"id": i})
+    return list(out.values())
+
+
 async def classify(jev, paths: list, step=lambda text: None) -> dict[str, dict]:
     """{"<file name>": {"read", "schema", "profile", "context", "roles", "keys", "joins"}} for the store files.
     The rows are not kept: read them again with read_table(path, has_header=saved[file]["read"]["has_header"]).
@@ -53,15 +69,7 @@ async def classify(jev, paths: list, step=lambda text: None) -> dict[str, dict]:
         found = [w for f, s in saved.items() for w in _warnings(f, s, SECTION.get(phase, phase))]
         notices.extend(w for w in found if "question" not in w)
         group = (lambda w: w["step"]) if phase == "keys" else (lambda w: (w["file"], w["step"]))
-        first = {}                                            # group → its first call with a question; later calls of
-        for w in found:                                       # the group are asked again after the replay
-            if "question" in w:
-                g, c = group(w), w["question"]["call"]
-                first[g] = min(first.get(g, c), c, key=jev.order.index)
-        questions = [w | {"id": "q_" + hashlib.sha256((w["question"]["call"] + w["question"]["key"]).encode())
-                          .hexdigest()[:8]}
-                     for w in found if "question" in w and w["question"]["call"] == first[group(w)]]
-        if questions:
+        if questions := first_questions(found, group, jev.order):
             raise Paused(phase, questions, notices)
 
     for path in paths:

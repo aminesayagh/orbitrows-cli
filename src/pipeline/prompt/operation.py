@@ -13,6 +13,7 @@ Section "operation" of cases/<id>.json: {"requests": {"r1": {"statement", "repor
 "warnings": [...], "jev": {...}}. The examples in the descriptions and rules must not be test prompts (cases/).
 """
 from . import SURE
+from .asking import question
 from orbitrows.services.model.client import ask, choice, yes_no
 
 CONTEXT = ("A merchant wrote a prompt to edit or read their store database (its tables and columns are in `tables`). "
@@ -97,10 +98,11 @@ def build(requests: list[dict], answers: dict) -> dict:
         if probs.get(st, 0) < SURE:
             node["flagged"] = True
             warnings.append({"request": rid, "problem": "statement uncertain", "answer": st,
-                             "probability": round(probs.get(st, 0), 2)})
+                             "probability": round(probs.get(st, 0), 2)} | question(answers, f"{rid}_statement"))
         if 1 - SURE < answers.get(f"{rid}_back", 0.0) < SURE:
             warnings.append({"request": rid, "problem": "reports back uncertain",
-                             "probability": round(answers.get(f"{rid}_back", 0.0), 2)})
+                             "probability": round(answers.get(f"{rid}_back", 0.0), 2)}
+                            | question(answers, f"{rid}_back"))
         several = answers.get(f"{rid}_several", 0.0)
         if several >= 0.5:                                    # step 1 cuts it again (request_graph.recut); if it
             node["several_actions"] = round(several, 2)       # can't, the merchant is asked: never one action dropped
