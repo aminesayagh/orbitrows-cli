@@ -76,3 +76,12 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 - [ ] **A notice can describe an answer the user then changes.** A held-back call's notices are still shown (for example "dedicated_context but typed INTEGER: none kept" before the role question is answered). Cosmetic: notices never block.
 - [ ] **A kill right after `COMMIT` in `storage.write`** leaves a complete `session.db`: the next retry fails creating its tables and deletes it, and the one after succeeds. Recovery takes two `answer` runs.
 - [ ] **Some CLI tests load the real GLiNER2** (the end-to-end resume tests run the real classify). No paid call, but slow and a 1.2 GB download on a fresh machine. Stub the extractor there.
+
+## Messages and the session (review leftovers, all low)
+
+- [ ] **A transaction SQLite rolls back by itself** (disk full, I/O error) isn't noticed: the next change opens a fresh one while the session still lists the lost changes. Check `in_transaction` after each request and end the session with an error.
+- [ ] **A crash between COMMIT and removing the journal** reports saved changes as lost; resending them applies them twice. Compare the journal with `_history` before reporting.
+- [ ] **Two options with the same label** (two numbers both written "10", two identical mentions) collapse into one answer.
+- [ ] **A failed run of a waiting message** (Jev down, a crash) drops its answers: the message is sent again and its model calls are paid again. The import keeps its answers in that case.
+- [ ] **The final JSON lists every assembly notice,** which may be noisy for the LLM relaying it.
+- [ ] **`undo`, `exit` and refusals aren't JSON:** `undo`/`exit` print plain text, refusals go to stderr only.
