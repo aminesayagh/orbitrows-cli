@@ -11,6 +11,7 @@ dependencies = [
     "babel>=2.18.0",
     "gliner2[local]>=2.0.0",
     "pint>=0.26.1",
+    "pydantic>=2.13.5",
     "torch>=2.14.0",
     "typesafe-sdk>=0.7.1",
 ]

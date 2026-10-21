@@ -516,6 +516,7 @@ dependencies = [
     { name = "babel" },
     { name = "gliner2", extra = ["local"] },
     { name = "pint" },
+    { name = "pydantic" },
     { name = "torch", version = "2.14.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
     { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
     { name = "typesafe-sdk" },
@@ -532,6 +533,7 @@ requires-dist = [
     { name = "babel", specifier = ">=2.18.0" },
     { name = "gliner2", extras = ["local"], specifier = ">=2.0.0" },
     { name = "pint", specifier = ">=0.26.1" },
+    { name = "pydantic", specifier = ">=2.13.5" },
     { name = "torch", specifier = ">=2.14.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "typesafe-sdk", specifier = ">=0.7.1" },
 ]
