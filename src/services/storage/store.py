@@ -1,8 +1,8 @@
 """A store on disk (CLI plan §3.2, §3.4, §4.1): `stores/<id>/` under the registry's home.
 
     files/        the uploaded CSV files, unchanged
-    session.db    the store's tables with their rows (one per table of the import's schema) and the classification
-                  tables below; written in one transaction, kept only when every file rebuilds from it
+    session.db    the store's tables with their rows (one per table of the import's schema), the classification
+                  tables below and the history, whose first row is the import; written in one transaction, kept only when every file rebuilds from it
     original.db   a copy of session.db right after the import (sqlite3 backup API)
 """
 import json
@@ -14,15 +14,16 @@ from pathlib import Path
 from orbitrows.pipeline.store import roles
 from orbitrows.pipeline.store.schema import check, load, nodes, q, table_at
 from orbitrows.services.storage import registry
+from orbitrows.sql.ddl import ddl
 
 # the stored integer is the index (user decision 2026-10-21); the PoC's order, which is roles.py's
 ROLES = tuple(dict.fromkeys(roles.KIND_ROLE.values()))
 KINDS = tuple(roles.KINDS)
 LEVELS = tuple(roles.LEVELS)
 
-# The plan's store_tables, column_context, store_columns and export, with a leading _: a store table is named after its
+# The plan's store_tables, column_context, store_columns, export and history, with a leading _: a store table is named after its
 # file (export.csv → export) and sql_name() never starts a name with _, so the two can never collide.
-# ponytail: no `history` table yet (requests don't run), so no created_by/edited_by either; they come with it
+# ponytail: no created_by/edited_by yet: empty means the import, and only the import writes for now
 SCHEMA = f"""
 CREATE TABLE _store_tables (
     id          INTEGER PRIMARY KEY,
@@ -57,6 +58,16 @@ CREATE TABLE _export (
     has_header    INTEGER NOT NULL CHECK (has_header IN (0, 1)),
     root_table_id INTEGER NOT NULL REFERENCES _store_tables(id),
     spec_json     TEXT NOT NULL                        -- the file's columns: header, table_id, column_id, via (ids above)
+) STRICT;
+CREATE TABLE _history (
+    id                    INTEGER PRIMARY KEY,         -- the order of the changes, 1 is the import
+    created_at            TEXT NOT NULL,               -- ISO 8601, UTC
+    name                  TEXT NOT NULL,
+    prompt                TEXT,                        -- the client's sentence, NULL for the import
+    json_ast              TEXT NOT NULL CHECK (json_valid(json_ast)),
+    sql                   TEXT NOT NULL CHECK (json_valid(sql)),  -- the statements run, as a JSON array
+    reclassification_json TEXT CHECK (json_valid(reclassification_json)),
+    classification_done   INTEGER NOT NULL CHECK (classification_done IN (0, 1))
 ) STRICT;
 """
 
@@ -107,6 +118,9 @@ def _classify(db, store: dict) -> None:
           _index(ROLES, m["role"]), _index(KINDS, m["kind"]), _index(LEVELS, m["level"]), unit_ids.get(id(m)),
           column_ids.get((m["context_table_id"], m["context_column_id"])), m["extra_json"]) for m in store["metadata"]])
     tables = nodes(store)
+    db.execute("INSERT INTO _history (created_at, name, json_ast, sql, classification_done) VALUES (?, ?, ?, ?, 1)",
+               (now, "Import", json.dumps(store["tables"], ensure_ascii=False),
+                json.dumps([ddl(t, tables) for t in tables.values()], ensure_ascii=False)))   # what load() ran
     for ex in store["export"]:                                # via: the reference columns, each in the table it leaves
         spec = [{"header": c["header"], "table_id": table_ids[c["table_id"]],
                  "column_id": column_ids[c["table_id"], c["column_id"]],

@@ -11,7 +11,7 @@ from orbitrows.services.storage import store as storage
 
 CASES = Path(__file__).parent / "fixtures" / "cases"
 EXPECTED = json.loads((CASES / "store_schema_expected.json").read_text())
-OWN = {"_store_tables", "_column_context", "_store_columns", "_export"}
+OWN = {"_store_tables", "_column_context", "_store_columns", "_export", "_history"}
 
 
 @pytest.fixture(autouse=True)
@@ -81,6 +81,14 @@ def test_store_is_written(name):
         assert root in table_ids and has_header == int(files[file]["read"]["has_header"])
         assert [c["header"] for c in spec] == files[file]["read"]["header"]
         assert all(c["table_id"] in table_ids and c["column_id"] in ids and set(c["via"]) <= ids for c in spec)
+
+    [(hid, name, prompt, ast, sql, done)] = db.execute(
+        "SELECT id, name, prompt, json_ast, sql, classification_done FROM _history").fetchall()
+    assert (hid, name, prompt, done) == (1, "Import", None, 1) and json.loads(ast) == st["tables"]
+    sql = json.loads(sql)
+    assert len(sql) == len(defs) and all(s.startswith("CREATE TABLE") for s in sql)
+    created = {n for n, in db.execute("SELECT sql FROM sqlite_master WHERE type = 'table'")}
+    assert set(sql) <= created                                # exactly the statements that made the tables
     db.close()
     assert tables(folder / "original.db") == loaded
 

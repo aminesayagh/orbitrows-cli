@@ -100,11 +100,6 @@ def test_store_is_written_to_disk(env, capsys):
     assert (folder / "original.db").is_file()
     with closing(sqlite3.connect(folder / "session.db")) as db:
         assert db.execute("SELECT COUNT(*) FROM orders").fetchone() == (8,)
-    with closing(registry.connect()) as db:
-        [ast] = db.execute("SELECT schema_ast FROM store WHERE id = ?", (store_id,)).fetchone()
-    tables = json.loads(ast)
-    assert {t["type"] for t in tables} == {"create_table"}
-    assert {t["definition"]["sql_name"] for t in tables} >= {"customers", "orders", "order_lines", "products"}
     for line in ["orders: 8 rows · 4 columns, from orders.csv", "products: 6 rows · 5 columns, from products.csv"]:
         assert line in out
 
@@ -177,18 +172,16 @@ def test_ctrl_c_in_the_code_after_the_model_stops_the_import(env, capsys, monkey
 
 
 def test_a_failure_setting_the_status_marks_the_store_failed(env, capsys, monkeypatch):
-    def broken(store_id, tables):
-        raise OSError("disk full")
+    real = registry.set_status
 
-    monkeypatch.setattr(cli.registry, "ready", broken)
+    def broken(store_id, status):
+        if status == registry.READY:
+            raise OSError("disk full")
+        real(store_id, status)
+
+    monkeypatch.setattr(cli.registry, "set_status", broken)
     code, out, err = run(capsys, "store", "customers.csv")
     assert code == 1 and [s for _, _, s in stores()] == [registry.FAILED]
-
-
-def test_a_ready_store_needs_its_schema_ast(env):
-    store_id = registry.create()
-    with pytest.raises(sqlite3.IntegrityError):
-        registry.set_status(store_id, registry.READY)
 
 
 def test_same_name_needs_the_id(env, capsys):

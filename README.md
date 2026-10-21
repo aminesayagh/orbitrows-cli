@@ -32,10 +32,10 @@ orbitrows message "raise all prices by 5%" --store st_7f3a91c2
 
 `--store` takes a store's id or name; without it, the latest ready store is used. Progress goes to stderr and results to stdout; a refusal exits with 1.
 
-Each store is a row in the registry, `~/.local/share/pilotstore/stores.db` (`$XDG_DATA_HOME` moves it): its id (`st_` + 8 hex), its optional name, its status (`0` importing, `1` ready, `-1` failed), and `schema_ast`: the `create_table` ASTs of its tables as JSON, required once the store is ready. Each store also has its own folder, `stores/<id>/` next to the registry:
+Each store is a row in the registry, `~/.local/share/pilotstore/stores.db` (`$XDG_DATA_HOME` moves it): its id (`st_` + 8 hex), its optional name, and its status (`0` importing, `1` ready, `-1` failed). Each store also has its own folder, `stores/<id>/` next to the registry:
 
 - `files/`: the uploaded CSV files, unchanged;
-- `session.db`: the store's tables with their rows, plus the classification tables (`_store_tables`, `_store_columns`, `_column_context`, `_export`). It's written in one transaction, and only if every file can be rebuilt from it;
+- `session.db`: the store's tables with their rows, plus the classification tables (`_store_tables`, `_store_columns`, `_column_context`, `_export`) and `_history`, the log of changes: its first row is the import, with the tables' `create_table` ASTs (`json_ast`) and the `CREATE TABLE` statements run (`sql`). It's written in one transaction, and only if every file can be rebuilt from it;
 - `original.db`: a copy of `session.db` taken right after the import.
 
 `foreign_keys` and `synchronous` are per-connection settings in SQLite: every connection that writes `session.db` must set them again.

@@ -109,7 +109,7 @@ def store(paths: list[Path], name: str | None) -> None:
             raise Refusal(lost(e.diffs)) from None
         for t in written:
             print(f"{t['table']}: {t['rows']} rows · {t['columns']} columns, from {t['file']}")
-        registry.ready(store_id, built["store"]["tables"])    # last: an interrupted import is never left ready
+        registry.set_status(store_id, registry.READY)         # last: an interrupted import is never left ready
     except BaseException:  # Jev failing, Ctrl+C, a crash, data lost: the store is marked failed, never left importing
         registry.set_status(store_id, registry.FAILED)
         raise

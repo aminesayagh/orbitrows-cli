@@ -1,6 +1,5 @@
 """The registry (`stores.db`): the list of imported stores, nothing else (CLI plan §3.3)."""
 
-import json
 import os
 import secrets
 import sqlite3
@@ -17,9 +16,7 @@ CREATE TABLE IF NOT EXISTS store (
     name          TEXT,                       -- optional (store --name)
     created_at    TEXT NOT NULL,              -- ISO 8601, UTC
     last_saved_at TEXT,                       -- empty until the first save
-    status        INTEGER NOT NULL CHECK (status IN (-1, 0, 1)),  -- -1 failed, 0 importing, 1 ready
-    schema_ast    TEXT CHECK (json_valid(schema_ast)),             -- the create_table ASTs, a JSON array
-    CHECK (status != 1 OR schema_ast IS NOT NULL)                  -- required once the store is ready
+    status        INTEGER NOT NULL CHECK (status IN (-1, 0, 1))  -- -1 failed, 0 importing, 1 ready
 ) STRICT
 """
 
@@ -57,13 +54,6 @@ def find(ref: str | None = None) -> list[tuple[str, str | None]]:
                               (READY, ref, ref)).fetchall()
         return db.execute("SELECT id, name FROM store WHERE status = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
                           (READY,)).fetchall()
-
-
-def ready(store_id: str, tables: list[dict]) -> None:
-    """The import is done: its create_table ASTs are saved and the store is ready, in one statement."""
-    with closing(connect()) as db, db:
-        db.execute("UPDATE store SET status = ?, schema_ast = ? WHERE id = ?",
-                   (READY, json.dumps(tables, ensure_ascii=False), store_id))
 
 
 def set_status(store_id: str, status: Literal[-1, 0, 1]) -> None:
