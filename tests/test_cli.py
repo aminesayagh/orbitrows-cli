@@ -90,9 +90,10 @@ def test_store_incoming_message(env, capsys, monkeypatch):
 
     sent = []                                                 # the session server is tests/test_session.py's
     monkeypatch.setattr(cli.session, "ask", lambda store_id, request, launch: sent.append((store_id, request))
-                        or {"ok": True, "ran": [], "notice": "the prompt pipeline is not wired yet"})
+                        or {"ok": True, "ran": [], "notices": []})
     code, out, err = run(capsys, "message", "raise", "prices", "by", "5%", "-s", "Orbitrow shop")
-    assert code == 0 and sent == [(second, {"op": "message", "text": "raise prices by 5%"})] and "not wired" in err
+    assert code == 0 and sent == [(second, {"op": "message", "text": "raise prices by 5%"})]
+    assert json.loads(out) == {"store": second, "name": "Orbitrow shop", "applied": [], "notices": []}
     code, out, err = run(capsys, "message", "hi", "--store", "nope")
     assert code == 1 and "No ready store named nope" in err
     assert len(stores()) == 2  # incoming and message never create a store

@@ -17,14 +17,14 @@ from typesafe_sdk import TypeSafeError
 from orbitrows.pipeline.store import run
 from orbitrows.services.cli.crash import report
 from orbitrows.services.csv.reader import read_table
-from orbitrows.services.model.client import Recorded, connect, settle
+from orbitrows.services.model.client import Recorded, answers, connect, settle
 from orbitrows.services.session import client as session
 from orbitrows.services.storage import registry
 from orbitrows.services.storage import store as storage
 from orbitrows.sql.ddl import sql_name
 
 SHOWN = 5                                                     # differences listed when a store would lose data
-PAUSED = 3                                                    # exit code: the import waits for the user's answers
+PAUSED = 3                                                    # exit code: the import or message waits for answers
 NOTICE = ("file", "step", "column", "problem", "probability")  # a notice's fields in the questions JSON
 
 
@@ -194,7 +194,10 @@ def store(paths: list[Path], name: str | None) -> int:
 
 
 def answer(question: str | None, given: str | None, ref: str | None) -> int:
-    """Records the user's answer to an open question; once none is open, the import runs again (a retry too)."""
+    """Records the user's answer to an open question; once none is open, the import runs again (a retry too). A
+    message's question (m_…) is its session's."""
+    if question and question.startswith("m_"):
+        return answered(question, given, ref)
     store_id = resolve(ref, registry.WAITING)[0]
     with storage.locked(store_id):                            # to the end: a parallel answer waits, so none is lost
         return record(resolve(store_id, registry.WAITING), question, given)   # again: the one it waited for may be done
@@ -210,8 +213,7 @@ def record(target: tuple[str, str | None], question: str | None, given: str | No
                           else f"Store {label(target)} has no open question. Retry its import: orbitrows answer -s "
                                f"{target[0]}")
         ask = q["question"]
-        valid = ({str(o["answer"]): o["value"] for o in ask["options"]} if ask["type"] == "choice"
-                 else {"yes": "yes", "no": "no"})
+        valid = answers(ask)
         match = next((a for a in valid if a.casefold() == given.casefold()), None)
         if match is None:
             raise Refusal(f"{given} isn't an answer to {question}. Answers: {', '.join(valid)}")
@@ -251,23 +253,39 @@ def ask(target: tuple[str, str | None], request: dict, launch: bool = True) -> d
     return reply
 
 
-def message(text: str, ref: str | None) -> None:
-    """Applied in the store's session (started if needed): not saved until exit, undo reverts it. A SELECT's rows are
-    printed tab-separated under their columns."""
-    target = resolve(ref)
-    reply = ask(target, {"op": "message", "text": text})
-    for ran in reply["ran"]:
-        if "rows" in ran:
-            print("\t".join(ran["columns"]))
-            for row in ran["rows"]:
-                print("\t".join("" if v is None else str(v) for v in row))
-        else:
-            print(f"{ran['changed']} rows changed: {ran['sql']}")
-    if reply.get("notice"):
-        print(f"Notice: {reply['notice']}", file=sys.stderr)
+def message(text: str, ref: str | None) -> int:
+    """Run by the prompt pipeline in the store's session (started if needed, after the key is checked): applied, not
+    saved until exit, undo reverts it; or paused on questions for the user."""
+    target, request = resolve(ref), {"op": "message", "text": text}
+    if (reply := ask(target, request, launch=False)) is None:
+        need_key()                                            # the server runs the model with this process's env
+        reply = ask(target, request)
+    return replied(target, reply)
+
+
+def answered(question: str, given: str | None, ref: str | None) -> int:
+    """answer for a message's question: sent to the session of --store, else of the latest ready store that has one."""
+    if ref:
+        target = resolve(ref)
+    elif not (target := next((s for s in registry.find() if (storage.folder(s[0]) / "session.sock").exists()), None)):
+        raise Refusal("No store has an open session, so no message is waiting for answers.")
+    if not (reply := ask(target, {"op": "answer", "id": question, "answer": given}, launch=False)):
+        raise Refusal(f"Store {label(target)} has no open session, so no message is waiting for answers.")
+    return replied(target, reply)
+
+
+def replied(target: tuple[str, str | None], reply: dict) -> int:
+    """The session's reply to a message or an answer as one JSON object on stdout: its open questions (exit 3), or
+    what was applied (a query's rows, a change's row count)."""
+    head = {"store": target[0], "name": target[1]}
+    if "questions" in reply:
+        print(json.dumps(head | {k: reply[k] for k in ("step", "questions", "notices")}, ensure_ascii=False))
+        return PAUSED
+    print(json.dumps(head | {"applied": reply["ran"], "notices": reply["notices"]}, ensure_ascii=False, default=str))
     if "n" in reply:
         print(f"Change {reply['n']} made in store {label(target)}: saved by orbitrows exit, reverted by orbitrows "
               "undo.", file=sys.stderr)
+    return 0
 
 
 def undo(ref: str | None) -> None:
@@ -290,10 +308,11 @@ def parser() -> argparse.ArgumentParser:
     s = commands.add_parser("store", help="create a store from its CSV files; prints its id, or its questions")
     s.add_argument("files", nargs="+", type=Path, metavar="csv")
     s.add_argument("-n", "--name", help="a name for the store (optional)")
-    a = commands.add_parser("answer", help="answer a question of an import waiting for answers; then it resumes")
+    a = commands.add_parser("answer", help="answer a question of an import or a message; then it resumes")
     a.add_argument("question", nargs="?", help="the question's id, from the questions JSON")
     a.add_argument("answer", nargs="?", help="one of its options' answers, or yes/no")
-    a.add_argument("-s", "--store", help="store id or name (default: the latest store waiting for answers)")
+    a.add_argument("-s", "--store", help="store id or name (default: the latest store waiting for answers; for a "
+                                         "message's question, m_…, the latest ready store with an open session)")
     i = commands.add_parser("incoming", help="add a supplier file to a store")
     i.add_argument("file", type=Path, metavar="csv")
     m = commands.add_parser("message", help="send a request about the store's data")
@@ -317,7 +336,7 @@ def main(argv: list[str] | None = None) -> int:
             case "incoming":
                 incoming(args.file, args.store)
             case "message":
-                message(" ".join(args.text), args.store)
+                return message(" ".join(args.text), args.store)
             case "undo":
                 undo(args.store)
             case "exit":

@@ -2,6 +2,6 @@
 request per statement (split on ;). No model."""
 
 
-def handle(db, text: str) -> dict:
+def handle(db, text: str, calls: dict) -> dict:
     return {"program": [{"request": f"r{i}", "ast": {"stub": i}, "sql": [sql.strip()]}
                         for i, sql in enumerate(text.split(";"), 1)]}

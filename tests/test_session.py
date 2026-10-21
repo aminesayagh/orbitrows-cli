@@ -1,8 +1,11 @@
-"""A store's session: real server processes, with tests/session_stub.py as their handler (no model)."""
+"""A store's session: real server processes, with tests/session_stub.py as their handler (no model); the prompt
+pipeline's handler in an in-process Session, the pipeline stubbed."""
 
+import json
 import os
 import shutil
 import signal
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -14,8 +17,12 @@ from types import SimpleNamespace
 
 import pytest
 
+from orbitrows.pipeline.prompt import pipeline
+from orbitrows.pipeline.store.run import Paused
 from orbitrows.services.cli import main as cli
+from orbitrows.services.model import client as model
 from orbitrows.services.session import client as session
+from orbitrows.services.session import server as sessions
 from orbitrows.services.storage import registry
 from orbitrows.services.storage import store as storage
 
@@ -31,6 +38,7 @@ def served(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(home))
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     monkeypatch.setenv("ORBITROWS_HANDLER", "session_stub:handle")
+    monkeypatch.setenv("MODEL", "orbitrows.services.model.client:Model")   # no key needed: never Jev
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join(filter(None, [str(Path(__file__).parent),
                                                                    os.environ.get("PYTHONPATH")])))
     monkeypatch.delenv("ORBITROWS_IDLE", raising=False)
@@ -107,19 +115,26 @@ def server(store, *args: str, idle: str | None = None) -> subprocess.Popen:
     return proc
 
 
+def seen(out: str) -> list[float]:
+    """The prices a SELECT message printed: what the session sees."""
+    return [p for [p] in json.loads(out)["applied"][0]["rows"]]
+
+
 def change(store, sql: str = "UPDATE products SET price = 1") -> None:
     assert session.ask(store.id, {"op": "message", "text": sql}, launch=False)["n"]
 
 
 def test_a_change_is_kept_until_exit_and_undo_reverts_it(served, capsys):
     code, out, err = run(capsys, "message", DOUBLE)
-    assert code == 0 and out == f"2 rows changed: {DOUBLE}\n" and "Change 1 made" in err, err
-    assert run(capsys, "message", SELECT)[1] == "price\n20.0\n40.0\n"   # the server sees it
+    assert code == 0 and "Change 1 made" in err, err
+    assert json.loads(out) == {"store": served.id, "name": "shop", "notices": [],
+                               "applied": [{"request": "r1", "sql": DOUBLE, "changed": 2}]}
+    assert seen(run(capsys, "message", SELECT)[1]) == [20.0, 40.0]   # the server sees it
     assert prices(served) == [10.0, 20.0]                     # not committed
 
     code, out, err = run(capsys, "undo")                      # the SELECT was no change: the UPDATE is undone
     assert code == 0 and out == f"Undone: change 1 ({DOUBLE}).\n"
-    assert run(capsys, "message", SELECT)[1] == "price\n10.0\n20.0\n"
+    assert seen(run(capsys, "message", SELECT)[1]) == [10.0, 20.0]
     code, out, err = run(capsys, "undo")
     assert code == 1 and "Nothing to undo" in err
 
@@ -139,7 +154,7 @@ def test_a_change_is_kept_until_exit_and_undo_reverts_it(served, capsys):
 def test_a_statement_sqlite_refuses_keeps_nothing(served, capsys):
     code, out, err = run(capsys, "message", "UPDATE products SET price = 1; UPDATE nope SET x = 1")
     assert code == 1 and err == "SQLite refused UPDATE nope SET x = 1: no such table: nope. Nothing was changed.\n"
-    assert run(capsys, "message", SELECT)[1] == "price\n10.0\n20.0\n"   # the first statement was rolled back too
+    assert seen(run(capsys, "message", SELECT)[1]) == [10.0, 20.0]   # the first statement was rolled back too
     assert "Nothing to undo" in run(capsys, "undo")[2]
 
 
@@ -151,7 +166,7 @@ def test_a_crash_loses_the_session_and_the_next_one_says_what(served, capsys):
     os.kill(first, signal.SIGKILL)
     assert ended(first)
     code, out, err = run(capsys, "message", SELECT)           # a new server, on the stale socket
-    assert code == 0 and out == "price\n10.0\n20.0\n"
+    assert code == 0 and seen(out) == [10.0, 20.0]
     assert "these changes were lost" in err and "  UPDATE products SET price = 0\n" in err and "= 5" not in err, err
     assert pid(served) != first and prices(served) == [10.0, 20.0]
     assert len(list(served.folder.glob("journal-lost-*.jsonl"))) == 1
@@ -190,3 +205,75 @@ def test_without_an_owner_nothing_is_saved_on_its_own(served):
     change(served)
     time.sleep(2.5)
     assert proc.poll() is None and prices(served) == [10.0, 20.0]
+
+
+NOTICE = {"step": "values", "request": "r1", "problem": "price read as a number"}
+EVERY = {"step": "assembly", "request": "r1", "problem": "changes every record of products", "rows": 2}
+
+
+async def doubling(prompt, jev, db, step=lambda text: None):
+    """pipeline.run, stubbed: "broken" fails to build; else one yes/no call, a question until answered yes, then
+    DOUBLE as the program."""
+    if prompt == "broken":
+        error = {"request": "r1", "stage": "sqlite", "error": "no such column: x"}
+        return {"assembly": {"program": [], "questions": [{"step": "assembly"} | error], "errors": [error]}}
+    a = await model.ask(jev, {"prompt": prompt}, {"double": model.yes_no("prices", "double them?")})
+    if a["double"] < model.SURE:
+        raise Paused("operation", [{"step": "operation", "request": "r1", "problem": "double them?", "id": "q_1a2b3c4d",
+                                    "question": {"type": "yes_no", "call": a.call, "key": "double"}}], [NOTICE])
+    return {"assembly": {"program": [{"request": "r1", "ast": {"type": "update"}, "sql": [DOUBLE], "rows": 2}],
+                         "questions": [NOTICE, EVERY], "errors": []}}
+
+
+@pytest.fixture
+def piped(served, monkeypatch):
+    """The default handler (the prompt pipeline, stubbed as doubling) in an in-process Session the CLI reaches through
+    a socket pair; the model a stub answering 0.5, its calls in .calls."""
+    calls = []
+
+    class Unsure(model.Model):
+        async def answer(self, state, questions):
+            calls.append(model.call_id(state, questions))
+            return {k: 0.5 for k in questions}, (None, None)
+
+    monkeypatch.delenv("ORBITROWS_HANDLER")
+    monkeypatch.setattr(pipeline, "run", doubling)
+    monkeypatch.setattr(model, "connect", Unsure)
+    s = sessions.Session(served.id, sessions.handler())
+
+    def ask(store_id, request, launch=True):
+        a, b = socket.socketpair()
+        with a, b:
+            a.sendall((json.dumps(request) + "\n").encode())
+            s.serve(b)
+            return json.loads(a.makefile("rb").readline())
+
+    monkeypatch.setattr(session, "ask", ask)
+    yield SimpleNamespace(session=s, calls=calls)
+    s.end()                                                   # its socket removed
+    s.db.close()
+
+
+def test_a_message_waits_for_its_answers_then_is_applied(piped, served, capsys):
+    code, out, err = run(capsys, "message", "double", "the prices")
+    assert code == 3, err
+    assert json.loads(out) == {"store": served.id, "name": "shop", "step": "operation", "notices": [NOTICE],
+                               "questions": [{"id": "m_1a2b3c4d", "request": "r1", "step": "operation",
+                                              "problem": "double them?", "type": "yes_no"}]}
+    code, out, err = run(capsys, "answer", "m_1a2b3c4d", "maybe")
+    assert code == 1 and "Answers: yes, no" in err
+    code, out, err = run(capsys, "answer", "m_1a2b3c4d", "YES")   # the store: the latest with a session
+    assert code == 0, err
+    assert json.loads(out) == {"store": served.id, "name": "shop", "notices": [EVERY],   # NOTICE was told already
+                               "applied": [{"request": "r1", "sql": DOUBLE, "changed": 2}]}
+    db = piped.session.db
+    assert db.execute(SELECT).fetchall() == [(20.0,), (40.0,)] and prices(served) == [10.0, 20.0]
+    assert db.execute("SELECT prompt, sql FROM _history").fetchall() == [("double the prices", json.dumps([DOUBLE]))]
+    assert len(piped.calls) == 1                              # the replay asked the model nothing
+    assert "No message is waiting" in run(capsys, "answer", "m_1a2b3c4d", "yes", "-s", "shop")[2]
+
+
+def test_a_program_with_errors_changes_nothing(piped, capsys):
+    code, out, err = run(capsys, "message", "broken")
+    assert code == 1 and out == "" and "r1 (sqlite): no such column: x" in err
+    assert piped.session.db.execute(SELECT).fetchall() == [(10.0,), (20.0,)] and not piped.session.changes

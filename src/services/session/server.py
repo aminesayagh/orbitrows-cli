@@ -4,6 +4,9 @@ back to it), and the whole session is committed when it ends: `orbitrows exit`, 
 the terminal's session leader), ORBITROWS_IDLE seconds without a request, SIGTERM or SIGHUP. A crash loses the
 session: the journal says what was lost.
 
+A message runs the prompt pipeline (prompt()). One that pauses on questions waits in memory (one at a time, a new
+message replaces it) until each is answered (op "answer", ids m_…), then runs again, its model answers replayed.
+
     session.sock   the Unix socket: one JSON request line in, one JSON reply line out, one client at a time
     journal.jsonl  each change applied ({"n", "prompt", "sql", "at"}) or undone ({"undo": n}), fsynced; removed by a
                    successful COMMIT. A next server finding it kept it as journal-lost-<time>.jsonl and says so
@@ -11,6 +14,7 @@ session: the journal says what was lost.
     session.log    the server's output
 """
 import argparse
+import asyncio
 import fcntl
 import importlib
 import json
@@ -35,18 +39,40 @@ def folder(store_id: str):
     return registry.home() / "stores" / store_id              # storage.folder, without its pipeline imports
 
 
-def placeholder(db, text: str) -> dict:
-    """The handler until the prompt pipeline is wired: no change."""
-    return {"program": [], "notice": "the prompt pipeline is not wired yet"}
+def prompt(db, text: str, calls: dict) -> dict:
+    """The prompt pipeline on the session's connection (so on its uncommitted changes), each model answer kept in
+    `calls` and replayed from there when the message runs again after its questions are answered. → {"program",
+    "errors", "notices"}, or {"paused": {"step", "questions", "notices"}}. Its progress goes to the log."""
+    from orbitrows.pipeline.prompt import pipeline            # here: ~0.6 s of imports a stub handler doesn't need
+    from orbitrows.pipeline.store.run import Paused
+    from orbitrows.services.model.client import Recorded, connect
+
+    async def run():
+        async with Recorded(connect(), calls) as model:      # the model's client opens on its first call not recorded
+            return await pipeline.run(text, model, db, log)
+    try:
+        a = asyncio.run(run())["assembly"]
+    except Paused as p:
+        return {"paused": {"step": p.phase, "questions": p.questions, "notices": p.notices}}
+    return {"program": a["program"], "errors": a["errors"],   # assembly's questions list its errors too: told apart
+            "notices": [q for q in a["questions"] if "question" not in q and "error" not in q]}
 
 
 def handler():
-    """ORBITROWS_HANDLER (`module:function`), else the placeholder: handler(db, text) -> {"program": [{"request",
-    "ast", "sql": [statements]}], …}; the other keys of its result are passed on in the reply."""
+    """ORBITROWS_HANDLER (`module:function`, a test's), else prompt(): handler(db, text, calls) -> {"program":
+    [{"request", "ast", "sql": [statements]}], "errors"?, "notices"?} or {"paused": …}, as prompt()'s."""
     if not (spec := os.environ.get("ORBITROWS_HANDLER")):
-        return placeholder
+        return prompt
     module, _, name = spec.partition(":")
     return getattr(importlib.import_module(module), name)
+
+
+def shown(q: dict) -> dict:
+    """A question as the user sees it: its options' answers and probabilities, not the call its answer settles."""
+    ask = q["question"]
+    return ({k: q[k] for k in ("id", "request", "step", "problem") if k in q} | {"type": ask["type"]}
+            | ({"options": [{"answer": o["answer"], "probability": o["probability"]} for o in ask["options"]]}
+               if ask["type"] == "choice" else {}))           # a yes/no is answered yes or no
 
 
 def alive(pid: int) -> bool:
@@ -73,6 +99,8 @@ class Session:
         self.handle = handle
         self.failed = None                                    # why the COMMIT failed, once ended
         self.changes = []                                     # [(n, prompt)], each one's savepoint open, oldest first
+        self.pending = None                                   # the message waiting for answers: {"prompt", "calls",
+                                                              # "open", "answered", "step", "shown"}, in memory only
         self.count = 0                                        # the last change's n
         self.db = sqlite3.connect(f"file:{self.dir / 'session.db'}?mode=rw", uri=True, isolation_level=None)
         for pragma in ("foreign_keys = ON", "synchronous = FULL", "journal_mode = DELETE"):   # per connection
@@ -120,32 +148,83 @@ class Session:
         return {"ok": False, "error": f"{error}. Nothing was changed."}
 
     def message(self, text: str) -> dict:
-        """The handler's program run in savepoint c<n>, its _history row and its journal line. A program that changes
-        no row and no schema (SELECTs, an UPDATE matching nothing) is no change: rolled back, nothing to undo.
-        → what ran, with the SELECTs' rows."""
+        """A new message, pending until it runs to the end: one at a time, so it replaces one waiting for answers."""
+        notices = [{"step": "message", "problem": f"The message waiting for answers ({self.pending['prompt']}) "
+                                                  "was replaced by this one: its questions are dropped."}
+                   ] if self.pending else []
+        self.pending = {"prompt": text, "calls": {}, "open": [], "answered": [], "step": None, "shown": []}
+        return self.resume(notices)
+
+    def answer(self, question: str, given: str | None) -> dict:
+        """The user's answer to an open question of the pending message, recorded as the model's certain answer;
+        once none is open, the message runs again (its recorded calls replayed, not asked again)."""
+        from orbitrows.services.model.client import answers, settle
+        p = self.pending or {"open": []}
+        q = next((q for q in p["open"] if q["id"] == question), None)
+        if q is None or given is None:
+            ids = ", ".join(q["id"] for q in p["open"])
+            return {"ok": False, "error": f"Give an open question's id and its answer. Open questions: {ids}" if ids
+                    else "No message is waiting for answers. Send it again: orbitrows message …"}
+        valid = answers(q["question"])
+        if (match := next((a for a in valid if a.casefold() == given.casefold()), None)) is None:
+            return {"ok": False, "error": f"{given} isn't an answer to {question}. Answers: {', '.join(valid)}"}
+        settle(p["calls"], q["question"]["call"], q["question"]["key"], valid[match])
+        p["open"].remove(q)
+        p["answered"].append(shown(q) | {"answer": match})
+        if p["open"]:
+            return {"ok": True, "step": p["step"], "questions": [shown(q) for q in p["open"]], "notices": []}
+        return self.resume([])
+
+    def resume(self, notices: list) -> dict:
+        """The pending message run by the handler: paused on its questions (kept, ids m_…), refused on its errors,
+        else its program applied. Notices already told for this message aren't told again."""
+        p = self.pending
         self.db.execute("SAVEPOINT handler")                  # whatever the handler leaves is never kept
         try:
-            result = self.handle(self.db, text)
+            result = self.handle(self.db, p["prompt"], p["calls"])
+        except BaseException:
+            self.pending = None                               # ponytail: a failed run drops its answers; sent again
+            raise
         finally:
             self.db.execute("ROLLBACK TO handler")
             self.db.execute("RELEASE handler")
-        program = result.get("program") or []
-        reply = {k: v for k, v in result.items() if k != "program"} | {"ok": True, "ran": []}
+        paused = result.get("paused")
+        for n in (paused or result).get("notices") or []:
+            if (key := json.dumps(n, sort_keys=True, ensure_ascii=False, default=str)) not in p["shown"]:
+                p["shown"].append(key)
+                notices.append(n)
+        if paused:
+            p["step"] = paused["step"]
+            p["open"] = [q | {"id": "m_" + q["id"].removeprefix("q_")} for q in paused["questions"]]
+            return {"ok": True, "step": p["step"], "questions": [shown(q) for q in p["open"]], "notices": notices}
+        self.pending = None
+        if errors := result.get("errors"):
+            return {"ok": False, "error": "\n  ".join(["The request couldn't be built, so nothing was changed:"] + [
+                f"{e.get('request')} ({e.get('stage')}): {e.get('error')}" for e in errors])}
+        return self.apply(p["prompt"], result.get("program") or [], notices)
+
+    def apply(self, text: str, program: list, notices: list) -> dict:
+        """The program run in savepoint c<n>, its _history row and its journal line. A program that changes no row
+        and no schema (SELECTs, an UPDATE matching nothing) is no change: rolled back, nothing to undo.
+        → what ran, with the SELECTs' rows."""
+        reply = {"ok": True, "ran": [], "notices": notices}
         if not program:
             return reply
-        statements = [s for p in program for s in ([p["sql"]] if isinstance(p["sql"], str) else p["sql"])]
+        by = [(p["request"], s) for p in program for s in ([p["sql"]] if isinstance(p["sql"], str) else p["sql"])]
+        statements = [s for _, s in by]
         n, before, ddl = self.count + 1, self.db.total_changes, False
         self.db.execute(f"SAVEPOINT c{n}")
-        for sql in statements:
+        for request, sql in by:
             try:
                 cursor = self.db.execute(sql)
                 rows = cursor.fetchall()
             except sqlite3.Error as e:
                 return self.cancel(n, f"SQLite refused {sql}: {e}")
+            ran = {"request": request, "sql": sql}
             if cursor.description:                            # a SELECT, or a change's RETURNING
-                reply["ran"].append({"sql": sql, "columns": [d[0] for d in cursor.description], "rows": rows})
+                reply["ran"].append(ran | {"columns": [d[0] for d in cursor.description], "rows": rows})
             else:                                             # rowcount is -1 for DDL
-                reply["ran"].append({"sql": sql, "changed": max(cursor.rowcount, 0)})
+                reply["ran"].append(ran | {"changed": max(cursor.rowcount, 0)})
             ddl = ddl or (not cursor.description and cursor.rowcount == -1)   # CREATE, ALTER… change no row
         if not ddl and self.db.total_changes == before:
             self.drop(n)
@@ -196,6 +275,8 @@ class Session:
             match request.get("op"):
                 case "message":
                     reply = self.message(str(request["text"]))
+                case "answer":
+                    reply = self.answer(str(request["id"]), request.get("answer"))
                 case "undo":
                     reply = self.undo()
                 case "status":
