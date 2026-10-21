@@ -10,6 +10,7 @@ Store files only; the output is the AST (no SQL text kept, no rows loaded).
           context; the export map: how to rebuild each uploaded file, column by column, along the references
     code  validation: Pydantic + SQLite STRICT per table, check_references across the store
     proof round_trip(): load the rows into an in-memory SQLite along the schema, rebuild every file, compare cell by cell
+          (load() then check(); the store writer, services/storage/store.py, runs both on the store's session.db)
 """
 import json
 import re
@@ -139,10 +140,24 @@ def round_trip(store: dict, rows: dict) -> list[dict]:
     A cell rebuilt as the same number written otherwise (a REAL column: 12.50 → 12.5) is kind "number_format";
     any other difference is kind "value"."""
     db = sqlite3.connect(":memory:")
-    defs = {t["definition"]["table_id"]: NewTable(**t["definition"]) for t in store["tables"]}
+    return load(db, store, rows) + check(db, store, rows)
+
+
+def nodes(store: dict) -> dict:
+    return {t["definition"]["table_id"]: NewTable(**t["definition"]) for t in store["tables"]}
+
+
+def q(name: str) -> str:
+    return f'"{name}"'
+
+
+def load(db, store: dict, rows: dict) -> list[dict]:
+    """Creates the store's tables in db and inserts the rows of every file along the export map: the root table gets
+    one record per row (an added id is the row number, from 1), a group table one per key (INSERT OR IGNORE; a row
+    without a key adds none); an empty cell is NULL. A row SQLite refuses is a "value" diff, as in round_trip."""
+    defs = nodes(store)
     for d in defs.values():
         db.execute(ddl(d, defs))
-    q = lambda n: f'"{n}"'
     diffs = []
     for ex in store["export"]:
         pos = {c["header"]: i for i, c in reversed(list(enumerate(ex["columns"])))}
@@ -164,6 +179,15 @@ def round_trip(store: dict, rows: dict) -> list[dict]:
                     db.execute(sql, list(vals.values()))
                 except sqlite3.Error as e:
                     diffs.append({"file": ex["file"], "row": n, "problem": f"{d.sql_name}: {e}", "kind": "value"})
+    return diffs
+
+
+def check(db, store: dict, rows: dict) -> list[dict]:
+    """Rebuilds every file from the tables `load` filled in db, compares it cell by cell with its rows, and lists the
+    differences and the references SQLite cannot resolve (round_trip's kinds)."""
+    defs = nodes(store)
+    diffs = []
+    for ex in store["export"]:
         # rebuild: the root, then one LEFT JOIN per reference path
         root = defs[ex["root"]]
         alias, joins = {(): "r0"}, []
@@ -172,8 +196,8 @@ def round_trip(store: dict, rows: dict) -> list[dict]:
             for i in range(1, len(path) + 1):
                 if path[:i] in alias:
                     continue
-                parent = defs[_table_at(defs, ex["root"], path[:i - 1])]
-                target = defs[_table_at(defs, ex["root"], path[:i])]
+                parent = defs[table_at(defs, ex["root"], path[:i - 1])]
+                target = defs[table_at(defs, ex["root"], path[:i])]
                 a = alias[path[:i]] = f"r{len(alias)}"
                 col = {x.column_id: x.sql_name for x in parent.columns}[path[i - 1]]
                 pk = {x.column_id: x.sql_name for x in target.columns}[target.primary_key[0]]
@@ -195,7 +219,7 @@ def round_trip(store: dict, rows: dict) -> list[dict]:
     return diffs
 
 
-def _table_at(defs, root, path) -> str:
+def table_at(defs, root, path) -> str:
     """The table reached from the root by following the reference columns in path."""
     t = root
     for k in path:
