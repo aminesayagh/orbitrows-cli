@@ -143,6 +143,14 @@ class Session:
         self.db.execute(f"ROLLBACK TO c{n}")
         self.db.execute(f"RELEASE c{n}")
 
+    @staticmethod
+    def forget() -> None:
+        """The pipeline's caches of the store's values (searched by the next message) were built from the data as it
+        was: a change or an undo makes them stale, so the next message rebuilds them."""
+        from orbitrows.pipeline.prompt import linker, values  # here: heavy imports a stub handler doesn't need
+        linker._CACHE.clear()
+        values._POOL.clear()
+
     def cancel(self, n: int, error: str) -> dict:
         self.drop(n)
         return {"ok": False, "error": f"{error}. Nothing was changed."}
@@ -164,7 +172,8 @@ class Session:
         if q is None or given is None:
             ids = ", ".join(q["id"] for q in p["open"])
             return {"ok": False, "error": f"Give an open question's id and its answer. Open questions: {ids}" if ids
-                    else "No message is waiting for answers. Send it again: orbitrows message …"}
+                    else "No message is waiting for answers. Send it again: orbitrows message … "
+                    "If it belongs to another store, add -s <store>."}
         valid = answers(q["question"])
         if (match := next((a for a in valid if a.casefold() == given.casefold()), None)) is None:
             return {"ok": False, "error": f"{given} isn't an answer to {question}. Answers: {', '.join(valid)}"}
@@ -214,6 +223,14 @@ class Session:
         statements = [s for _, s in by]
         n, before, ddl = self.count + 1, self.db.total_changes, False
         self.db.execute(f"SAVEPOINT c{n}")
+        try:
+            return self.run(n, text, program, by, statements, before, ddl, reply)
+        except BaseException:                                 # not a SQLite or journal error: c{n} must not stay applied
+            self.drop(n)
+            raise
+
+    def run(self, n: int, text: str, program: list, by: list, statements: list, before: int, ddl: bool,
+            reply: dict) -> dict:
         for request, sql in by:
             try:
                 cursor = self.db.execute(sql)
@@ -240,24 +257,31 @@ class Session:
             return self.cancel(n, f"The change couldn't be recorded: {e}")
         self.count = n
         self.changes.append((n, text))
+        self.forget()
         return reply | {"n": n}
 
     def undo(self) -> dict:
         if not self.changes:
             return {"ok": False, "error": "Nothing to undo: no change since the session started."}
+        if self.pending:
+            return {"ok": False, "error": "A message is waiting for answers: answer it or send another message first."}
         n, prompt = self.changes[-1]
         self.write({"undo": n, "at": registry.now()})         # first: a crash now loses the change anyway
         self.db.execute(f"ROLLBACK TO c{n}")
         self.db.execute(f"RELEASE c{n}")
         self.changes.pop()
+        self.forget()
         return {"ok": True, "undone": n, "prompt": prompt}
 
     def end(self) -> str | None:
-        """No more clients, then COMMIT and quick_check; the journal removed once saved. → the error, or None."""
-        self.listener.close()
-        self.socket.unlink(missing_ok=True)
+        """COMMIT, then no more clients, and quick_check; the journal removed once saved. A COMMIT that fails (SQLITE_BUSY)
+        leaves the transaction open and the server serving. → the error, or None."""
         try:
             self.db.execute("COMMIT")
+        except (sqlite3.Error, OSError) as e:
+            return f"{type(e).__name__}: {e}"
+        self.close()
+        try:
             if (ok := self.db.execute("PRAGMA quick_check").fetchone()[0]) != "ok":
                 self.failed = f"session.db quick_check: {ok}"
             else:
@@ -265,6 +289,10 @@ class Session:
         except (sqlite3.Error, OSError) as e:
             self.failed = f"{type(e).__name__}: {e}"
         return self.failed
+
+    def close(self) -> None:
+        self.listener.close()
+        self.socket.unlink(missing_ok=True)
 
     def serve(self, client: socket.socket) -> str | None:
         """One request, one reply. → "exit" once the session ended on it."""
@@ -282,9 +310,12 @@ class Session:
                 case "status":
                     reply = {"ok": True, "pid": os.getpid(), "changes": len(self.changes)}
                 case "exit":
-                    ended, error = "exit", self.end()
-                    reply = {"ok": False, "error": f"The session couldn't be saved: {error}"} if error else \
-                        {"ok": True, "saved": True}
+                    dropped = self.pending and self.pending["prompt"]
+                    error = self.end()
+                    ended = "exit" if not error or self.failed else None   # a failed COMMIT: still serving
+                    reply = {"ok": False, "error": f"The session couldn't be saved: {error}"
+                             + ("" if ended else ". It is still open: try orbitrows exit again.")} if error else \
+                        {"ok": True, "saved": True} | ({"dropped": dropped} if dropped else {})
                 case op:
                     reply = {"ok": False, "error": f"Unknown request: {op}"}
         except Exception as e:                                # a bad request or a failing handler: the session goes on
@@ -334,7 +365,9 @@ def main(argv: list[str] | None = None) -> int:
             or (time.monotonic() - last > idle and "idle")
     error = session.failed if reason == "exit" else session.end()   # exit ended it already
     if error:
+        session.close()
         log(f"ended ({reason}), NOT saved: {error}; the journal is kept")
         return 1
-    log(f"ended ({reason}), saved")
+    log(f"ended ({reason}), saved" + (f"; the message waiting for answers ({session.pending['prompt']}) was dropped"
+                                       if session.pending else ""))
     return 0

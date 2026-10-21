@@ -298,8 +298,10 @@ def undo(ref: str | None) -> None:
 def leave(ref: str | None) -> None:
     """exit: the session's changes are committed, then its server stops."""
     target = resolve(ref)
-    print("Saved." if ask(target, {"op": "exit"}, launch=False) else
-          f"Nothing to save: store {label(target)} has no open session.")
+    if not (reply := ask(target, {"op": "exit"}, launch=False)):
+        print(f"Nothing to save: store {label(target)} has no open session.")
+        return
+    print("Saved." + (f" The message waiting for answers ({reply['dropped']}) was dropped." if "dropped" in reply else ""))
 
 
 def parser() -> argparse.ArgumentParser:

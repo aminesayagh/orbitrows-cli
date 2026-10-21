@@ -158,6 +158,17 @@ def test_a_statement_sqlite_refuses_keeps_nothing(served, capsys):
     assert "Nothing to undo" in run(capsys, "undo")[2]
 
 
+def test_a_change_failing_after_its_statements_ran_keeps_nothing(served, monkeypatch):
+    monkeypatch.setenv("ORBITROWS_HANDLER", "session_stub:handle_bytes")   # its ast can't be journaled as JSON
+    reply = session.ask(served.id, {"op": "message", "text": DOUBLE})
+    assert not reply["ok"] and "bytes" in reply["error"]
+    pid(served)
+    rows = session.ask(served.id, {"op": "message", "text": SELECT}, launch=False)["ran"][0]["rows"]
+    assert rows == [[10.0], [20.0]]                           # the UPDATE is not visible in the session
+    assert session.ask(served.id, {"op": "status"}, launch=False)["changes"] == 0
+    assert not (served.folder / "journal.jsonl").exists() or not (served.folder / "journal.jsonl").read_text()
+
+
 def test_a_crash_loses_the_session_and_the_next_one_says_what(served, capsys):
     assert run(capsys, "message", "UPDATE products SET price = 0")[0] == 0
     assert run(capsys, "message", "UPDATE products SET price = 5")[0] == 0
