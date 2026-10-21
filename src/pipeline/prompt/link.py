@@ -134,12 +134,12 @@ def input_questions(requests: list[dict]) -> dict:
 
 
 async def ask_jev(jev, prompt: str, requests: list[dict], references: list[dict] | None = None):
-    """(link answers, input answers): per request {"choice", "probabilities"} for the link, and
-    {"r1": (choice, probabilities), …} for what it takes from the request it waits for."""
+    """(link answers, input answers, call): per request {"choice", "probabilities"} for the link, and
+    {"r1": (choice, probabilities), …} for what it takes from the request it waits for; the call, for a question."""
     state, questions = jev_request(prompt, requests, references)
     a = await ask(jev, state, questions | input_questions(requests))
     return ([{"choice": a[q][0], "probabilities": a[q][1]} for q in questions],
-            {q.removesuffix("_input"): a[q] for q in a if q.endswith("_input")})
+            {q.removesuffix("_input"): a[q] for q in a if q.endswith("_input")}, a.call)
 
 
 def build(requests: list[dict], answers: list[dict], link_min: float = LINK_MIN) -> dict:
@@ -196,16 +196,17 @@ def build(requests: list[dict], answers: list[dict], link_min: float = LINK_MIN)
 
 
 async def link(jev, prompt: str, requests: list[dict], references: list[dict] | None = None) -> dict:
-    """The links of one prompt. One request: no call. If Jev fails: every link is a warning."""
+    """The links of one prompt. One request: no call. If Jev fails: every link is a warning. "call": the call's id,
+    for a question to the user (None when there was no call)."""
     if len(requests) < 2:
         tree = [{"request": 1, "then": []}] if requests else []
         return {"tree": tree, "links": expression(tree), "waits_for": [None] * len(requests), "warnings": [],
-                "answers": [], "inputs": {}}
+                "answers": [], "inputs": {}, "call": None}
     try:
-        answers, inputs = await ask_jev(jev, prompt, requests, references)
+        answers, inputs, call = await ask_jev(jev, prompt, requests, references)
     except Exception as e:                                   # API error, timeout: nothing is guessed
-        answers, inputs = [{"choice": None, "probabilities": {}, "error": repr(e)} for _ in requests], {}
-    return {**build(requests, answers), "answers": answers, "inputs": inputs}
+        answers, inputs, call = [{"choice": None, "probabilities": {}, "error": repr(e)} for _ in requests], {}, None
+    return {**build(requests, answers), "answers": answers, "inputs": inputs, "call": call}
 
 
 def expression(tree: list[dict]) -> str:

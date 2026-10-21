@@ -19,8 +19,9 @@ Section "requests" of cases/<id>.json:
 """
 import re
 
-from orbitrows.services.model.client import SURE, ask, choice, yes_no
+from orbitrows.services.model.client import SURE, Answers, ask, choice, yes_no
 from . import check_cuts, coref, link
+from .asking import question
 
 KIND = {"rows": "rows", "structure": "schema_effect", "table_state": "table_state"}
 
@@ -44,6 +45,9 @@ def build_graph(requests: list[dict], linked: dict, references: list[dict]) -> d
     """The section from the split requests, link.link()'s result and the references (coref.by_request)."""
     rid = lambda n: f"r{n}" if n else None
     out, warnings = [], []
+    asked = Answers({f"r{i}": (x["choice"], x["probabilities"]) for i, x in enumerate(linked["answers"], 1)}
+                    | {f"{k}_input": v for k, v in linked["inputs"].items()})   # link.link's call, for its questions
+    asked.call, texts = linked.get("call"), {f"r{i}": r["text"] for i, r in enumerate(requests, 1)}
     for i, (r, w) in enumerate(zip(requests, linked["waits_for"]), 1):
         node = {"id": rid(i), **{k: r[k] for k in ("text", "start", "end", "marker", "joined_by")}, "waits_for": rid(w)}
         if w is None:
@@ -54,18 +58,20 @@ def build_graph(requests: list[dict], linked: dict, references: list[dict]) -> d
             if probs.get(choice, 0) < SURE:
                 node["flagged"] = True
                 warnings.append({"request": rid(i), "problem": "input uncertain", "answer": node["input"],
-                                 "probability": round(probs.get(choice, 0), 2)})
+                                 "probability": round(probs.get(choice, 0), 2)} | question(asked, f"{rid(i)}_input"))
         out.append(node)
     for x in linked["warnings"]:                              # request numbers → ids
         warnings.append({k: (rid(v) if k == "request" else [rid(n) for n in v] if k == "requests" else v)
-                         for k, v in x.items()})
+                         for k, v in x.items()} | (question(asked, rid(x["request"]), texts)
+                                                   if x["problem"] == "uncertain link" else {}))
     return {"requests": out, "order": [rid(n) for n in execution_order(linked["waits_for"])],
             "links": re.sub(r"\d+", lambda m: f"r{m.group()}", linked["links"]),
             "references": [{k: (rid(v) if k in ("request", "target_request") else v) for k, v in x.items()
                             if k in ("text", "start", "end", "kind", "target", "request", "target_request", "score")}
                            for x in references if x["kind"] != "ambiguous"],
             "warnings": [{"problem": "unresolved reference", "text": x["text"], "request": rid(x["request"]),
-                          "probability": x["score"]} for x in references if x["kind"] == "ambiguous"] + warnings}
+                          "probability": x["score"]} | {k: x[k] for k in ("question",) if k in x}
+                         for x in references if x["kind"] == "ambiguous"] + warnings}
 
 
 async def run(jev, prompt: str, mentions: list[dict], model, store: str = coref.STORE) -> dict:
@@ -158,13 +164,14 @@ async def relate(jev, prompt: str, graph: dict, first: str, other: str) -> dict:
         graph["order"].insert(graph["order"].index(first) + 1, other)
     if 1 - SURE < rows < SURE:
         graph["warnings"].append({"request": other, "problem": "whether it works on the rows of the other part: "
-                                                               "uncertain", "probability": round(rows, 2)})
+                                                               "uncertain", "probability": round(rows, 2)}
+                                 | question(ans, "rows"))
     p = ans.get("describes", 0.0)
     if p >= 0.5:
         graph.setdefault("inherits", {})[first] = other
     if 1 - SURE < p < SURE:
         graph["warnings"].append({"request": first, "problem": "what 'them' / 'those' refers to: uncertain",
-                                  "probability": round(p, 2)})
+                                  "probability": round(p, 2)} | question(ans, "describes"))
     return ans
 
 
@@ -202,7 +209,7 @@ async def recut(jev, prompt: str, graph: dict, rid: str, model) -> dict | None:
     out["recut"] = {"request": rid, "at": x, "probability": round(probs.get(pick, 0), 2), "options": opts}
     if probs.get(pick, 0) < SURE:
         out["warnings"].append({"request": rid, "problem": "where the request was cut in two: uncertain",
-                                "probability": round(probs.get(pick, 0), 2)})
+                                "probability": round(probs.get(pick, 0), 2)} | question(ans, "cut", opts))
     new_ids = [f"r{i + 1}", f"r{i + 2}"]                      # the two parts of the cut request
     waiting = [r for r in out["requests"] if r["id"] in new_ids and r["waits_for"] in new_ids]
     first, other = (waiting[0]["waits_for"], waiting[0]["id"]) if waiting else (new_ids[0], new_ids[1])

@@ -29,6 +29,7 @@ import re
 from rapidfuzz import fuzz
 
 from . import SURE
+from .asking import question
 from orbitrows.services.model.client import ask, choice, yes_no
 
 LABELS = {                                                    # one call each (split.py: long label sets return nothing)
@@ -261,7 +262,7 @@ def build(ps: list[dict], a1: dict, candidates: dict, a2: dict) -> dict:
         if rp.get(role, 0) < SURE:
             v["flagged"] = True
             warnings.append({"value": p["id"], "problem": "role uncertain", "answer": role,
-                             "probability": round(rp.get(role, 0), 2)})
+                             "probability": round(rp.get(role, 0), 2)} | question(a1, f"{key}_role"))
         if role == "lookup":
             named, np_ = a1.get(f"{p['id']}_named", ("not_said", {}))
             if "from_phrase" not in p and given(a1, p["id"]):   # the merchant's column: not searched
@@ -269,7 +270,7 @@ def build(ps: list[dict], a1: dict, candidates: dict, a2: dict) -> dict:
                 if np_.get(named, 0) < SURE:
                     v["flagged"] = True
                     warnings.append({"value": p["id"], "problem": "column uncertain", "answer": named,
-                                     "probability": round(np_.get(named, 0), 2)})
+                                     "probability": round(np_.get(named, 0), 2)} | question(a1, f"{p['id']}_named"))
             else:
                 found = candidates.get(p["id"], [])
                 if not found:
@@ -283,7 +284,8 @@ def build(ps: list[dict], a1: dict, candidates: dict, a2: dict) -> dict:
                         if cp.get(c, 0) < SURE:
                             v["flagged"] = True
                             warnings.append({"value": p["id"], "problem": "column choice uncertain", "answer": c,
-                                             "probability": round(cp.get(c, 0), 2)})
+                                             "probability": round(cp.get(c, 0), 2)}
+                                            | question(a2, f"{p['id']}_pick", PICK_LABELS))
                     if pick and pick.get("widened_from"):
                         v["flagged"] = True
                         warnings.append({"value": p["id"], "problem": f"not found in {pick['widened_from']}; found in "
@@ -304,6 +306,9 @@ def build(ps: list[dict], a1: dict, candidates: dict, a2: dict) -> dict:
             continue
         out.append(v)
     return {"values": out, "warnings": warnings}
+
+
+PICK_LABELS = {"none": "none of these", "text": "the words as written"}   # call 2's options, for the user
 
 
 def keepable(found: list[dict]) -> bool:

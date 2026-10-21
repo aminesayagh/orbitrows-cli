@@ -33,6 +33,7 @@ from text_to_num import alpha2digit
 
 from orbitrows.sql.sql import check, program
 from . import SURE
+from .asking import question
 from orbitrows.services.model.client import ask, choice, yes_no
 
 CONTEXT = ("A merchant wrote a prompt to edit or read their store database (tables and columns in `tables`). It was "
@@ -364,12 +365,13 @@ def guard(value, kind, bound_col, bound_num, nullable):
 def build(db, requests, schema, sources, values, a1, a2, numeric_by_formula=False) -> dict:
     out, warnings = {}, []
 
-    def pick(rid, key, problem, default=None):
+    def pick(rid, key, problem, default=None, labels=None):
+        """labels: the user's names for opaque options (a number's id, a text's x0), in its question."""
         c, probs = a2.get(key, a1.get(key, (default, {})))
         if c is not None and c != "none" and probs.get(c, 1) < SURE:
             out[rid]["flagged"] = True
             warnings.append({"request": rid, "problem": f"{problem} uncertain", "answer": c,
-                             "probability": round(probs.get(c, 0), 2)})
+                             "probability": round(probs.get(c, 0), 2)} | question(a2 if key in a2 else a1, key, labels))
         return None if c == "none" else c
 
     def unsure_yes(rid, key, what, low=1 - SURE):
@@ -377,13 +379,15 @@ def build(db, requests, schema, sources, values, a1, a2, numeric_by_formula=Fals
         p = a1.get(key, 0.0)
         if low < p < SURE:
             out[rid]["flagged"] = True
-            warnings.append({"request": rid, "problem": f"{what} uncertain", "probability": round(p, 2)})
+            warnings.append({"request": rid, "problem": f"{what} uncertain", "probability": round(p, 2)}
+                            | question(a1, key))
         return p >= 0.5
 
     for r in requests:
         rid, st, main = r["id"], r["statement"], main_table(requests, sources, r["id"])
         out[rid] = {}
         nums = {n["id"]: n for n in numbers(r["text"])}
+        said_nums = {i: n["text"] for i, n in nums.items()}            # a question names a number by its words
         if st in ("update", "select", "insert", "alter_table") and not main:
             warnings.append({"request": rid, "problem": "no stored table: built with the new table's definition, later"})
             continue
@@ -399,10 +403,11 @@ def build(db, requests, schema, sources, values, a1, a2, numeric_by_formula=Fals
                 how = pick(rid, f"{rid}_{key}_how", f"how {key}")
                 uses_number = how in NUMBER_HOWS or (how == "set_value" and typ != "TEXT")
                 uses_text = typ == "TEXT" and how in ("set_value", "prefix", "suffix", "replace")
-                num = nums.get(pick(rid, f"{rid}_{key}_number", f"number of {key}") or "") if uses_number else None
+                num = nums.get(pick(rid, f"{rid}_{key}_number", f"number of {key}", labels=said_nums) or "") if uses_number else None
                 oc = pick(rid, f"{rid}_{key}_column", f"column of {key}") if how in ("column", "column_percent") else None
                 tx = texts(db, schema, r, values, tuple(key.split("."))) if uses_text else []
-                xi = pick(rid, f"{rid}_{key}_text", f"text of {key}") if uses_text else None
+                said_tx = {f"x{i}": t for i, t in enumerate(tx)}
+                xi = pick(rid, f"{rid}_{key}_text", f"text of {key}", labels=said_tx) if uses_text else None
                 text = tx[int(xi[1:])] if xi else None
                 if how == "set_value":
                     operand = _lit(text) if typ == "TEXT" else _lit(num["value"]) if num else None
@@ -412,7 +417,7 @@ def build(db, requests, schema, sources, values, a1, a2, numeric_by_formula=Fals
                     operand = _lit(text) if text else None
                 target = _col(*key.split("."))
                 if how == "replace":
-                    old = pick(rid, f"{rid}_{key}_old", f"replaced text of {key}")
+                    old = pick(rid, f"{rid}_{key}_old", f"replaced text of {key}", labels=said_tx)
                     value = old and text and _fn("replace", target, _lit(tx[int(old[1:])]), _lit(text))
                 else:
                     value = expression(how, target, operand, oc and _col(*oc.split(".")), num, typ)
@@ -424,7 +429,7 @@ def build(db, requests, schema, sources, values, a1, a2, numeric_by_formula=Fals
                     # a number written once plays one part: the change's number is never also the limit's
                     raw = a2.get(f"{rid}_{key}_bound_number", (None,))[0]
                     reused = num is not None and raw == num["id"]
-                    bn = nums.get(pick(rid, f"{rid}_{key}_bound_number", f"limit number of {key}") or "") \
+                    bn = nums.get(pick(rid, f"{rid}_{key}_bound_number", f"limit number of {key}", labels=said_nums) or "") \
                         if limited and not reused else None
                     value = guard(value, kind and kind.rsplit("_", 1)[0], bc and _col(*bc.split(".")), bn and bn["value"],
                                   bc is not None and coltype(schema, bc)[1])
@@ -470,7 +475,8 @@ def build(db, requests, schema, sources, values, a1, a2, numeric_by_formula=Fals
                 if not unsure_yes(rid, f"{rid}_gives_{key}", f"gives {key}"):
                     continue
                 typ, _ = coltype(schema, key)
-                c = pick(rid, f"{rid}_{key}_value", f"value of {key}")
+                c = pick(rid, f"{rid}_{key}_value", f"value of {key}", labels=said_nums if typ != "TEXT" else {
+                    f"x{i}": t for i, t in enumerate(texts(db, schema, r, values, tuple(key.split("."))))})
                 if c is None:
                     warnings.append({"request": rid, "problem": f"value of {key} not found"})
                     continue

@@ -22,6 +22,7 @@ import subprocess
 from pathlib import Path
 
 from orbitrows.services.model.client import ask
+from .asking import question
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]                                       # the CLI folder: .venv-corpipe lives there
@@ -159,8 +160,12 @@ async def ask_jev(jev, prompt: str, ms: list[dict], store: str = STORE) -> dict:
 def decide(ms: list[dict], answers: dict) -> list[dict]:
     """Jev's answers → references. The role answer only drops a mention that is clearly not a reference (>= JEV_MIN);
     otherwise the target answer decides, with the same check: weak, missing or "ask" → unresolved (kind "ambiguous":
-    a warning); confident → a link. Noun-phrase references ("the speakers") get a weak role but a sure target. Answers saved before the role question (one question per mention) still work."""
-    if any(q.endswith("_role") for q in answers):
+    a warning); confident → a link. Noun-phrase references ("the speakers") get a weak role but a sure target. Answers saved before the role question (one question per mention) still work.
+    An unresolved reference carries the question on its target for the user (asking.py), labelled with the mentions."""
+    asked, labels = answers, {f"m{j}": o["text"] for j, o in enumerate(ms)} | {
+        "created": "new rows or columns the prompt creates"}
+    roles = any(q.endswith("_role") for q in answers)
+    if roles:
         merged = {}
         for i in range(len(ms)):
             role, p_role = answers.get(f"m{i}_role", (None, {}))
@@ -180,7 +185,8 @@ def decide(ms: list[dict], answers: dict) -> list[dict]:
         p = probs.get(choice, 0.0)
         base = {"start": m["start"], "end": m["end"], "text": m["text"], "score": round(p, 3)}
         if p < JEV_MIN or choice == "ambiguous" or choice is None:
-            refs.append({**base, "kind": "ambiguous", "target": ""})
+            refs.append({**base, "kind": "ambiguous", "target": ""}
+                        | question(asked, f"{q}_target" if roles else q, labels, skip=["ambiguous"]))
         elif choice == "created":
             refs.append({**base, "kind": "created", "target": ""})
         elif choice != "self":

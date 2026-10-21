@@ -5,11 +5,11 @@ from pathlib import Path
 import pytest
 
 from fixtures.orbitrow.load import baseline
-from orbitrows.pipeline.prompt import (conditions, coref, formula, grouping, operation, parts, pipeline, request_graph,
-                                       sources, values)
+from orbitrows.pipeline.prompt import (conditions, coref, formula, grouping, link, operation, parts, pipeline,
+                                       request_graph, sources, values)
 from orbitrows.pipeline.prompt.asking import question
 from orbitrows.pipeline.store.run import Paused
-from orbitrows.services.model.client import Model, Recorded, ask, settle, yes_no
+from orbitrows.services.model.client import Answers, Model, Recorded, ask, settle, yes_no
 
 CASE = Path(__file__).parent / "fixtures" / "prompt_cases" / "A01.json"
 
@@ -113,3 +113,28 @@ async def test_a_settled_answer_replays_as_certain():
     settle(calls, w["question"]["call"], "r1_statement", "select")
     again = await operation.run(Recorded(inner, calls), "show the red caps", reqs, [])
     assert inner.asked == 1 and again["requests"]["r1"]["statement"] == "select" and again["warnings"] == []
+
+
+def test_step_1_carries_its_calls_to_the_questions_and_a_settled_answer_ends_them():
+    """coref and link answer in their own calls, far from build_graph's warnings: the questions name those calls."""
+    ms = [{"start": 0, "end": 4, "text": "them", "cluster": "1"}, {"start": 9, "end": 13, "text": "mugs", "cluster": "1"}]
+    reqs = [{"text": "show them", "start": 0, "end": 4, "marker": None, "joined_by": None},
+            {"text": "the mugs", "start": 5, "end": 13, "marker": None, "joined_by": None}]
+
+    def graph(target, link_r1, input_r2):
+        a = Answers({"m0_role": ("reference", {"reference": 0.9}), "m0_target": target,
+                     "m1_role": ("not_reference", {"not_reference": 0.95}), "m1_target": ("created", {"created": 0.5})})
+        a.call = "coref"
+        answers = [{"choice": link_r1[0], "probabilities": link_r1[1]}, {"choice": "r1", "probabilities": {"r1": 0.9}}]
+        linked = link.build(reqs, answers) | {"answers": answers, "inputs": {"r2": input_r2}, "call": "link"}
+        return request_graph.build_graph(reqs, linked, coref.by_request(coref.decide(ms, a), reqs))
+
+    unsure = graph(("m1", {"m1": 0.5, "ambiguous": 0.4}), ("none", {"none": 0.5, "r2": 0.5}),
+                   ("rows", {"rows": 0.6, "table_state": 0.4}))
+    assert {(w["problem"], w["question"]["call"], w["question"]["key"]) for w in unsure["warnings"]} == {
+        ("unresolved reference", "coref", "m0_target"), ("uncertain link", "link", "r1"),
+        ("input uncertain", "link", "r2_input")}
+    assert [o["answer"] for w in unsure["warnings"] if w["problem"] == "unresolved reference"
+            for o in w["question"]["options"]] == ["mugs"]   # named by its words; "ambiguous" is not offered
+    settled = graph(("m1", {"m1": 1.0}), ("none", {"none": 1.0}), ("rows", {"rows": 1.0}))
+    assert settled["warnings"] == []

@@ -8,6 +8,7 @@ branch leaves step 6's WHERE (it lives in the CASE); an unclear one, or a map pa
 step 5's template value stays.
 """
 from . import SURE
+from .asking import question
 from .conditions import column_info, fits
 from .grouping import readable
 from .operations_jev import extract
@@ -91,6 +92,12 @@ def positive(cond):
     return cond
 
 
+def asked(doubt) -> bool:
+    """A weak answer of pass 1 or 2 is a question for the user; a doubt flagged at any probability ("the change starts
+    from …: to confirm", "not one of the existing values") is a notice: the user's answer would not lift it."""
+    return doubt.get("status") != "flagged" or doubt.get("problem") == "answer kept but uncertain"
+
+
 def to_dml(n):
     """Pass 2's tree → the AST's nodes (a case becomes branches + else)."""
     if not isinstance(n, dict):
@@ -166,16 +173,20 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
             out[key] = {"records": p1["records"], "pass1_ambiguities": p1["ambiguities"], "map": p2.get("map"),
                         "status": p2["status"], "questions": p2.get("questions", []), "flagged": p2.get("flagged", [])}
             mine, my_branches = [], []                      # applied only if this formula is used (or nothing
-            doubts = [x for x in p1["ambiguities"] + p2.get("flagged", [])     # stands behind it)
-                      if x.get("status") == "flagged" or x.get("probability", 1) < SURE]
-            if doubts:                                      # one line: which answers are weak
+            doubts = [(x, calls) for xs, calls in ((p1["ambiguities"], p1["answers"]),   # stands behind it), each
+                                                   (p2.get("flagged", []), p2.get("answers", {})))   # with its call
+                      for x in xs if x.get("status") == "flagged" or x.get("probability", 1) < SURE]
+            for x, calls in doubts:                         # one warning per weak answer: its own question
                 mine.append({"request": rid, "problem": f"formula of {target}: uncertain answers ("
-                             + ", ".join(f"{x.get('question') or x.get('occurrence')}={x.get('answer')}"
-                                         f" {x.get('probability')}" for x in doubts) + ")"})
+                             + ", ".join(f"{d.get('question') or d.get('occurrence')}={d.get('answer')}"
+                                         f" {d.get('probability')}" for d in [x]) + ")"}
+                            | (question(calls, x.get("question") or f"{x.get('occurrence')}_kind", skip=["merchant"])
+                               if asked(x) else {}))
             for x in p1["records"]:
                 if x["role"] == "unresolved_condition":
                     mine.append({"request": rid, "problem": f"does '{x['text']}' choose the records, or a "
-                                                            f"different formula for them?"})
+                                                            f"different formula for them?"}
+                                | question(p1["answers"], f"{x['left']['pred']}_role", skip=["unresolved_condition"]))
                 if x["role"] == "branch_condition":
                     my_branches.append(next(p["node"] for p in preds if p["id"] == x["left"]["pred"]))
             out[key]["kind"] = kind
@@ -185,7 +196,8 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
             warnings += mine
             branches += my_branches
             if p2["status"] != "ok":
-                warnings += [{"request": rid, "problem": f"formula of {target}: {q['problem']}"} for q in p2["questions"]]
+                warnings += [{"request": rid, "problem": f"formula of {target}: {q['problem']}"}
+                             | {k: q[k] for k in ("question",) if k in q} for q in p2["questions"]]
                 if a.get("pending"):                        # no template value behind it: not built, asked
                     part["assignments"].remove(a)
                     warnings.append({"request": rid, "problem": f"the change of {target} is not built until the "

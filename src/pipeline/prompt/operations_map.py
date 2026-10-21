@@ -12,6 +12,7 @@ SQLite text over `t_table.c_column` ids, for tests.
 """
 from orbitrows.services.model.client import ask, choice
 from . import SURE
+from .asking import question
 
 MIN = 0.5
 VALUE = ("calculation", "rounding", "bound", "guard", "branch")
@@ -315,7 +316,8 @@ async def resolve(jev, text: str, upstream: dict, records: list[dict]) -> dict:
             continue
         pick = ans.get(key, (None, {}))[0]
         out_q.append({"problem": f"which value {r['id']} ('{r['text']}') uses ({slot})", "answer": pick,
-                      "probability": round(probs.get(pick, 0), 2)})
+                      "probability": round(probs.get(pick, 0), 2)}     # the user's answer, settled, is taken above
+                     | question(ans, key, {x["id"]: label(x) for x in recs}, skip=["merchant"]))
     guards = [r for r in recs if r["role"] == "guard"]
     for a, b in zip(guards, guards[1:]):                    # two limits on the same value: chain them (clamps commute
         if links.get((a["id"], "left")) and links.get((a["id"], "left")) == links.get((b["id"], "left")):   # unless
