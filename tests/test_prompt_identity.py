@@ -31,13 +31,14 @@ def poc_repo() -> Path | None:
 
 
 def tuned(text: str) -> Counter:
-    """The module's texts and decimal numbers, docstrings and the __main__ block left out."""
+    """The module's texts (with a letter: punctuation alone is formatting) and decimal numbers, docstrings and the
+    __main__ block left out."""
     tree = ast.parse(text)
     tree.body = [n for n in tree.body if not (isinstance(n, ast.If) and "__main__" in ast.unparse(n.test))]
     docs = {id(n.body[0].value) for n in ast.walk(tree) if isinstance(n, (ast.Module, ast.FunctionDef,
             ast.AsyncFunctionDef, ast.ClassDef)) and n.body and isinstance(n.body[0], ast.Expr)}
     return Counter(n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and id(n) not in docs
-                   and (isinstance(n.value, str) and n.value.strip() or isinstance(n.value, float)))
+                   and (isinstance(n.value, str) and any(c.isalpha() for c in n.value) or isinstance(n.value, float)))
 
 
 @pytest.mark.skipif(poc_repo() is None, reason=f"the PoC repository (../poc with commit {COMMIT}) is not available")
