@@ -47,9 +47,14 @@ def rows(paths: list, saved: dict) -> dict[str, list]:
 
 
 def build(saved: dict) -> dict:
-    """{"store": schema.assemble's output, "warnings": [{"file", "step", "column"?,
-    "problem", …}]}: every step's warnings, then the schema's problems."""
+    """{"store": schema.assemble's output, each metadata row with its column's "profile", "warnings": [{"file", "step",
+    "column"?, "problem", …}]}: every step's warnings, then the schema's problems."""
     store = schema.assemble(saved)
+    for m in store["metadata"]:
+        m["profile"] = None                                   # an added id is no column of a file
+        if m["source_header"] is not None:
+            p = saved[m["source_file"]]["profile"]
+            m["profile"] = p["columns"][m["source_header"]] | ({"profiled": p["profiled"]} if "profiled" in p else {})
     warnings = []
     for f, s in saved.items():
         if w := s["read"].get("warning"):

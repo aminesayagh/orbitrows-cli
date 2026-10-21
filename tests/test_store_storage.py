@@ -82,6 +82,11 @@ def test_store_is_written(name):
         assert [c["header"] for c in spec] == files[file]["read"]["header"]
         assert all(c["table_id"] in table_ids and c["column_id"] in ids and set(c["via"]) <= ids for c in spec)
 
+    for (header, profile), m in zip(db.execute("SELECT source_header, profile_json FROM _store_columns ORDER BY id"),
+                                    st["metadata"]):            # each column's own profile; none for an added id
+        want = None if header is None else files[m["source_file"]]["profile"]["columns"][header]
+        assert (profile and json.loads(profile)) == want, header
+
     [(hid, name, prompt, ast, sql, done)] = db.execute(
         "SELECT id, name, prompt, json_ast, sql, classification_done FROM _history").fetchall()
     assert (hid, name, prompt, done) == (1, "Import", None, 1) and json.loads(ast) == st["tables"]

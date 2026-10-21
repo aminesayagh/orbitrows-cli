@@ -51,6 +51,7 @@ CREATE TABLE _store_columns (
     context_column_id INTEGER REFERENCES _store_columns(id),
     state             TEXT NOT NULL DEFAULT 'current' CHECK (state IN ('current', 'stale')),
     extra_json        TEXT,
+    profile_json      TEXT CHECK (json_valid(profile_json)),  -- the import's profile: empty, distinct, max_repeat, values…
     UNIQUE (table_id, sql_name)
 ) STRICT;
 CREATE TABLE _export (
@@ -112,11 +113,12 @@ def _classify(db, store: dict) -> None:
     columns = {(t_id, c["column_id"]): c for t_id, d in defs.items() for c in d["columns"]}
     db.executemany(
         "INSERT INTO _store_columns (id, table_id, sql_name, sql_type, source_header, position, role, kind, level, "
-        "unit_id, context_column_id, extra_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "unit_id, context_column_id, extra_json, profile_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [(column_ids[m["table_id"], m["column_id"]], table_ids[m["table_id"]],
           (c := columns[m["table_id"], m["column_id"]])["sql_name"], c["sql_type"], m["source_header"], m["position"],
           _index(ROLES, m["role"]), _index(KINDS, m["kind"]), _index(LEVELS, m["level"]), unit_ids.get(id(m)),
-          column_ids.get((m["context_table_id"], m["context_column_id"])), m["extra_json"]) for m in store["metadata"]])
+          column_ids.get((m["context_table_id"], m["context_column_id"])), m["extra_json"],
+          None if m.get("profile") is None else json.dumps(m["profile"], ensure_ascii=False)) for m in store["metadata"]])
     tables = nodes(store)
     db.execute("INSERT INTO _history (created_at, name, json_ast, sql, classification_done) VALUES (?, ?, ?, ?, 1)",
                (now, "Import", json.dumps(store["tables"], ensure_ascii=False),
