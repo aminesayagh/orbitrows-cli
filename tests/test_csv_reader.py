@@ -1,4 +1,14 @@
+import sqlite3
+from contextlib import closing
+from pathlib import Path
+
+import pytest
+
+from orbitrows.pipeline.store import run
 from orbitrows.services.csv.reader import first_rows, read_table
+from orbitrows.services.storage import store as storage
+from orbitrows.services.storage.export import export
+from test_store_run import Unsure
 
 FLAT = "tests/fixtures/cases/flat/orders_flat.csv"
 
@@ -23,10 +33,46 @@ def test_semicolon_and_windows_1252(tmp_path):
     assert t["encoding"] == "cp1252" and t["delimiter"] == ";" and t["rows"][0] == ["Café", "3"]
 
 
-def test_blank_rows_are_skipped(tmp_path):
+TEXT = ("TEXT", {"TEXT": 0.9})
+
+
+async def through_the_store(tmp_path, monkeypatch, raw, name="t.csv"):
+    """The file imported (classify → build → write) and exported back: (the exported bytes, the upload's table)."""
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
+    path = tmp_path / name
+    path.write_bytes(raw)
+    saved = await run.classify(Unsure({"header": 0.95, "k1_type": TEXT, "k2_type": TEXT,
+                                           "k1_nullable": 0.9, "k2_nullable": 0.9}), [path])
+    storage.copy_files("st_rt", [path])
+    storage.write("st_rt", run.build(saved)["store"], run.rows([path], saved))
+    with closing(sqlite3.connect(storage.folder("st_rt") / "session.db")) as db:
+        [written] = export(db, storage.folder("st_rt"), tmp_path / "out")
+    return Path(written["path"]).read_bytes()
+
+
+@pytest.mark.usefixtures("no_gliner")
+async def test_a_line_break_inside_a_cell_survives_the_export(tmp_path, monkeypatch):
+    raw = b'id,note\r\n1,"one\r\ntwo"\r\n2,x\r\n'
     f = tmp_path / "t.csv"
-    f.write_text("a,b\n\n1,2\n , \n")
-    assert read_table(f, has_header=True)["rows"] == [["1", "2"]]
+    f.write_bytes(raw)
+    assert read_table(f, has_header=True)["rows"] == [["1", "one\r\ntwo"], ["2", "x"]]
+    assert await through_the_store(tmp_path, monkeypatch, raw) == raw
+
+
+@pytest.mark.usefixtures("no_gliner")
+async def test_a_blank_row_between_records_is_kept_and_exported_but_a_trailing_one_is_not(tmp_path, monkeypatch):
+    out = await through_the_store(tmp_path, monkeypatch, b"id,note\n1,a\n\n2,x\n\n")
+    assert out == b"id,note\n1,a\n,\n2,x\n"
+
+
+@pytest.mark.usefixtures("no_gliner")
+async def test_utf_16_is_read_and_written_back_and_an_unknown_encoding_is_refused(tmp_path, monkeypatch):
+    raw = "nom,prix\nCafé,3\nThé,4\n".encode("utf-16")                 # BOM, native byte order
+    assert await through_the_store(tmp_path, monkeypatch, raw) == raw
+    bad = tmp_path / "bad.csv"
+    bad.write_bytes(b"a,b\n\x81,2\n")                                  # 0x81 is undefined in Windows-1252
+    with pytest.raises(ValueError, match="Unknown text encoding"):
+        read_table(bad)
 
 
 def test_first_rows():

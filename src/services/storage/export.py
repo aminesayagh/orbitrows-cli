@@ -33,7 +33,7 @@ def export(db, store: Path, out: Path, force: bool = False) -> list[dict]:
         rows = rebuild(db, tables[root], [([columns[k] for k in c["via"]], columns[c["column_id"]]) for c in spec])
         upload = store / "files" / file
         read = read_table(upload, bool(has_header))
-        ending = "\r\n" if b"\r\n" in upload.read_bytes() else "\n"
+        ending = "\r\n" if "\r\n" in upload.read_bytes().decode(read["encoding"]) else "\n"
         fd, tmp = tempfile.mkstemp(dir=out, prefix=f".{file}.", suffix=".tmp")
         try:
             with open(fd, "w", encoding=read["encoding"], newline="") as f:
