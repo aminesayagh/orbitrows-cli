@@ -134,3 +134,19 @@ def test_the_stored_integers_are_fixed():
     assert storage.KINDS == ("record_reference", "model_reference", "name", "attribute", "contact_or_address",
                              "value_or_text")
     assert storage.LEVELS == ("individual_record", "product_family")
+
+
+def test_an_integer_key_not_in_file_order_comes_back_in_file_order(tmp_path):
+    from orbitrows.pipeline.prompt.pipeline import store_of
+    from orbitrows.pipeline.store.schema import assemble
+    from orbitrows.services.storage.export import export
+    from test_store_schema import sections
+    (tmp_path / "t.csv").write_text(text := "id,name\n35,a\n3,b\n12,c\n")   # SQLite stores an INTEGER key's rows by key
+    st = assemble({"t.csv": sections("t", [("id", "INTEGER"), ("name", "TEXT")], pk="id")})
+    storage.write("st_test", st, {"t.csv": [["35", "a"], ["3", "b"], ["12", "c"]]})   # the round trip passes
+    storage.copy_files("st_test", [tmp_path / "t.csv"])
+    with closing(sqlite3.connect(storage.folder("st_test") / "session.db")) as db:
+        export(db, storage.folder("st_test"), tmp_path / "out")
+        assert [n for n, in db.execute("SELECT sql_name FROM _store_columns")] == ["id", "name"]
+        assert [c["sql_name"] for c in store_of(db)[0]["definition"]["columns"]] == ["id", "name"]
+    assert (tmp_path / "out" / "t.csv").read_text() == text

@@ -17,9 +17,8 @@ from contextlib import closing, contextmanager
 from pathlib import Path
 
 from orbitrows.pipeline.store import roles
-from orbitrows.pipeline.store.schema import check, load, nodes, q, table_at
+from orbitrows.pipeline.store.schema import check, creates, load, nodes, q, table_at
 from orbitrows.services.storage import registry
-from orbitrows.sql.ddl import ddl
 
 # the stored integer is the index (user decision 2026-10-21); the PoC's order, which is roles.py's
 ROLES = tuple(dict.fromkeys(roles.KIND_ROLE.values()))
@@ -136,7 +135,7 @@ def _classify(db, store: dict) -> None:
     tables = nodes(store)
     db.execute("INSERT INTO _history (created_at, name, json_ast, sql, classification_done) VALUES (?, ?, ?, ?, 1)",
                (now, "Import", json.dumps(store["tables"], ensure_ascii=False),
-                json.dumps([ddl(t, tables) for t in tables.values()], ensure_ascii=False)))   # what load() ran
+                json.dumps(creates(store), ensure_ascii=False)))   # what load() ran
     db.executemany("INSERT INTO _store_tables VALUES (?, ?, ?, ?, 1)",
                    [(n, defs[t_id]["sql_name"], files.get(t_id), now) for t_id, n in table_ids.items()])
     units = [m for m in store["metadata"] if m["unit_kind"] is not None]

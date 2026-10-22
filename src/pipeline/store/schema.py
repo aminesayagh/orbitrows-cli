@@ -150,13 +150,26 @@ def q(name: str) -> str:
     return f'"{name}"'
 
 
+ROW = "_row"   # a file's root table: the row's position in its file, from 1 (an INTEGER key reorders the rowid)
+
+
+def creates(store: dict) -> list[str]:
+    """The CREATE TABLE of each store table (ddl()); a file's root table also gets ROW, a hidden column, last
+    (maintenance only: never in the store's AST, _store_columns, the export map nor the prompts)."""
+    defs, roots = nodes(store), {ex["root"] for ex in store["export"]}
+    row = NewColumn(column_id=ROW, sql_name=ROW, header=None, sql_type="INTEGER", nullable=True)
+    return [ddl(d.model_copy(update={"columns": d.columns + [row]}) if t_id in roots else d, defs)
+            for t_id, d in defs.items()]
+
+
 def load(db, store: dict, rows: dict) -> list[dict]:
     """Creates the store's tables in db and inserts the rows of every file along the export map: the root table gets
-    one record per row (an added id is the row number, from 1), a group table one per key (INSERT OR IGNORE; a row
-    without a key adds none); an empty cell is NULL. A row SQLite refuses is a "value" diff, as in round_trip."""
+    one record per row (an added id is the row number, from 1; ROW its position, from 1), a group table one per key
+    (INSERT OR IGNORE; a row without a key adds none); an empty cell is NULL. A row SQLite refuses is a "value" diff,
+    as in round_trip."""
     defs = nodes(store)
-    for d in defs.values():
-        db.execute(ddl(d, defs))
+    for sql in creates(store):
+        db.execute(sql)
     diffs = []
     for ex in store["export"]:
         # a column's cells by its column_id (one per column of a file; a group key's copy keeps its column_id)
@@ -167,10 +180,12 @@ def load(db, store: dict, rows: dict) -> list[dict]:
             cell = lambda i: (row[i] if i < len(row) else "") or None
             for t_id, cols in sorted(by_table.items(), key=lambda x: x[0] != ex["root"]):
                 d = defs[t_id]
-                names = {c.column_id: c.sql_name for c in d.columns}
+                names = {c.column_id: c.sql_name for c in d.columns} | {ROW: ROW}
                 vals = {cid: cell(i) for cid, i in cols}
-                if t_id == ex["root"] and d.primary_key[0] not in vals:   # the added id: the row number
-                    vals[d.primary_key[0]] = n + 1
+                if t_id == ex["root"]:
+                    vals[ROW] = n + 1
+                    if d.primary_key[0] not in vals:          # the added id: the row number
+                        vals[d.primary_key[0]] = n + 1
                 elif t_id != ex["root"] and vals[d.primary_key[0]] is None:
                     continue                                  # no key on this row: no group record
                 sql = (f'INSERT {"" if t_id == ex["root"] else "OR IGNORE "}INTO {q(d.sql_name)} '
@@ -213,7 +228,8 @@ def check(db, store: dict, rows: dict) -> list[dict]:
 def rebuild(db, root: str, columns: list[tuple[list[str], str]]) -> list[tuple]:
     """A file's rows rebuilt from the tables in db, as check() proves them and the export writes them: the root table,
     one LEFT JOIN per reference path (each step a reference column of the table it leaves, joined to the table and
-    column its foreign key names in SQLite), one value per column, in the root's rowid order.
+    column its foreign key names in SQLite), one value per column, in the file's order (ROW), then
+    the rows a message added (no ROW) in rowid order.
     columns: [(via: the reference columns' names, from the root on; the column's name)], in the file's order."""
     alias, table, joins = {(): "r0"}, {(): root}, []
     for via, _ in columns:
@@ -228,7 +244,9 @@ def rebuild(db, root: str, columns: list[tuple[list[str], str]]) -> list[tuple]:
             table[path[:i]] = target
             joins.append(f'LEFT JOIN {q(target)} {a} ON {a}.{q(pk)} = {alias[here]}.{q(col)}')
     select = [f"{alias[tuple(via)]}.{q(name)}" for via, name in columns]
-    return db.execute(f'SELECT {", ".join(select)} FROM {q(root)} r0 {" ".join(joins)} ORDER BY r0.rowid').fetchall()
+    kept = any(c[1] == ROW for c in db.execute(f"PRAGMA table_info({q(root)})"))      # a store written before ROW: none
+    order = f"r0.{q(ROW)} IS NULL, r0.{q(ROW)}, r0.rowid" if kept else "r0.rowid"
+    return db.execute(f'SELECT {", ".join(select)} FROM {q(root)} r0 {" ".join(joins)} ORDER BY {order}').fetchall()
 
 
 def table_at(defs, root, path) -> str:

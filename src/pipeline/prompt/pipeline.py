@@ -17,9 +17,12 @@ from . import assemble, conditions, coref, formula, grouping, operation, parts, 
 
 
 def store_of(db) -> list[dict]:
-    """The store's create_table nodes, as the PoC's Orbitrow schema(); `_` tables are the CLI's (classification,
-    history), not the merchant's."""
-    return [n.model_dump() for n in schema_from_sqlite(db) if not n.definition.sql_name.startswith("_")]
+    """The store's create_table nodes, as the PoC's Orbitrow schema(); `_` tables and columns are the CLI's
+    (classification, history; a file's row order), not the merchant's."""
+    nodes = [n for n in schema_from_sqlite(db) if not n.definition.sql_name.startswith("_")]
+    for n in nodes:
+        n.definition.columns = [c for c in n.definition.columns if not c.sql_name.startswith("_")]
+    return [n.model_dump() for n in nodes]
 
 
 async def run(prompt: str, model, db, step=lambda text: None) -> dict:
