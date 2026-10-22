@@ -242,7 +242,8 @@ def test_without_an_owner_nothing_is_saved_on_its_own(served):
 
 
 NOTICE = {"step": "values", "request": "r1", "problem": "price read as a number"}
-EVERY = {"step": "assembly", "request": "r1", "problem": "changes every record of products", "rows": 2}
+EVERY = {"step": "assembly", "request": "r1", "problem": "changes every record of products", "rows": 2,
+         "scope": "all_rows"}
 
 
 async def doubling(prompt, jev, db, step=lambda text: None):

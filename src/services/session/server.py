@@ -64,8 +64,7 @@ def prompt(db, text: str, calls: dict) -> dict:
     return {"program": a["program"], "errors": a["errors"],   # assembly's questions list its errors too: told apart
             "notices": [q for q in a["questions"] if "question" not in q and "error" not in q],
             # every row changed while the rows' step was unsure or failed: the user confirms first (user, 2026-10-21)
-            "confirm": [q for q in a["questions"] if q.get("step") == "assembly" and q.get("request") in unsure
-                        and q.get("problem", "").startswith("changes every record")]}
+            "confirm": [q for q in a["questions"] if q.get("scope") == "all_rows" and q.get("request") in unsure]}
 
 
 def handler():

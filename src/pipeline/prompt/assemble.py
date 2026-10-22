@@ -449,7 +449,7 @@ def assemble(db, schema, requests, operation, sources, parts, conditions, groupi
                              (": each condition matches records, but not together" if alone else "")})
         if a["type"] in ("update", "delete") and a["scope"]["type"] == "all_rows":
             warnings.append({"request": it["request"], "problem": f"changes every record of {store_name.get(it['main'])}",
-                             "rows": it.get("rows")})
+                             "rows": it.get("rows"), "scope": "all_rows"})   # read by the session: asked first
     questions = [{"step": s, **w} for s, ws in steps_warnings for w in ws] + \
         [{"step": "assembly", **w} for w in warnings] + [{"step": "assembly", **e} for e in errors]
     return {"program": [{k: v for k, v in it.items() if k != "main"} for it in items],
