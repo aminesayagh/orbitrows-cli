@@ -19,6 +19,8 @@ MAX_ROWS = 10_000  # ponytail: evenly spread sample; a streaming reader + SQLite
 
 def _rows(table):
     rows = table["rows"]
+    if not rows:
+        return []
     step = -(-len(rows) // MAX_ROWS)                          # ceil: 200k rows → every 20th row
     return rows[::step]
 

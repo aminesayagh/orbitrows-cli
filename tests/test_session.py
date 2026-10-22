@@ -327,3 +327,10 @@ def test_every_row_changed_while_unsure_is_confirmed_first(piped, capsys):
     run(capsys, "message", "lower", "all")
     assert run(capsys, "answer", "m_all_r1", "yes")[0] == 0
     assert piped.session.db.execute(SELECT).fetchall() == [(20.0,), (40.0,)]
+
+
+def test_a_select_sends_back_at_most_rows_rows(piped, monkeypatch):
+    monkeypatch.setattr(sessions, "ROWS", 2)
+    count = "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 5) SELECT i FROM n"
+    ran = piped.session.apply("count", [{"request": "r1", "sql": [count]}], [])["ran"][0]
+    assert ran["rows"] == [(1,), (2,)] and ran["more"] is True

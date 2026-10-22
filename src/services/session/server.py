@@ -34,6 +34,7 @@ IDLE = 1800                                                   # seconds without 
 TICK = 1                                                      # seconds between checks of the owner, idle time, signals
 READ = 30                                                     # seconds a client has to send its request line
 WAIT = 10                                                     # seconds a new server waits for the last one to end
+ROWS = 1000                                                   # rows of a statement sent back; "more" says there were others
 NAME = 60                                                     # characters of the prompt kept as the change's name
 # a statement that changes the tables' structure: its first keyword, after blanks and comments (one statement each:
 # sqlite3 runs no more); refused for now (user, 2026-10-21)
@@ -262,12 +263,13 @@ class Session:
         for request, sql in by:
             try:
                 cursor = self.db.execute(sql)
-                rows = cursor.fetchall()
+                rows = cursor.fetchmany(ROWS + 1)
             except sqlite3.Error as e:
                 return self.cancel(n, f"SQLite refused {sql}: {e}")
             ran = {"request": request, "sql": sql}
             if cursor.description:                            # a SELECT, or a change's RETURNING
-                reply["ran"].append(ran | {"columns": [d[0] for d in cursor.description], "rows": rows})
+                reply["ran"].append(ran | {"columns": [d[0] for d in cursor.description],
+                                           "rows": rows[:ROWS]} | ({"more": True} if len(rows) > ROWS else {}))
             else:                                             # rowcount is -1 for DDL
                 reply["ran"].append(ran | {"changed": max(cursor.rowcount, 0)})
             ddl = ddl or (not cursor.description and cursor.rowcount == -1)   # CREATE, ALTER… change no row

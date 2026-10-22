@@ -49,11 +49,14 @@ def read(path: Path) -> dict:
     if not path.is_file():
         raise Refusal(f"File not found: {path}")
     try:
-        return read_table(path)
+        table = read_table(path)
     except (ValueError, csv.Error, OSError) as e:
         raise Refusal(f"Cannot read {path.name}: {e}") from None
     except IndexError:                                        # not one non-empty row
         raise Refusal(f"Cannot read {path.name}: empty file") from None
+    if not table["rows"]:
+        raise Refusal(f"Cannot read {path.name}: no data rows")
+    return table
 
 
 def asked(store_id: str) -> bool:

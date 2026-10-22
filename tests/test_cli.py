@@ -63,6 +63,12 @@ def stores() -> list[tuple]:
         return db.execute("SELECT id, name, status FROM store ORDER BY created_at, rowid").fetchall()
 
 
+def test_a_file_without_data_rows_refuses_the_store(env, capsys):
+    (env / "header.csv").write_text("a,b\n")
+    code, out, err = run(capsys, "store", "customers.csv", "header.csv")
+    assert code == 1 and "Cannot read header.csv: no data rows" in err and stores() == []
+
+
 def test_store_incoming_message(env, capsys, monkeypatch):
     code, out, err = run(capsys, "message", "hi")
     assert code == 1 and "No store yet" in err

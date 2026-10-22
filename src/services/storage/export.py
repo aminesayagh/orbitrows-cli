@@ -5,6 +5,8 @@ delimiter and line ending, the header row only if it had one; NULL is an empty c
 (12.50 comes back 12.5)."""
 import csv
 import json
+import os
+import tempfile
 from pathlib import Path
 
 from orbitrows.pipeline.store.schema import _text, rebuild
@@ -32,14 +34,18 @@ def export(db, store: Path, out: Path, force: bool = False) -> list[dict]:
         upload = store / "files" / file
         read = read_table(upload, bool(has_header))
         ending = "\r\n" if b"\r\n" in upload.read_bytes() else "\n"
+        fd, tmp = tempfile.mkstemp(dir=out, prefix=f".{file}.", suffix=".tmp")
         try:
-            with open(out / file, "w", encoding=read["encoding"], newline="") as f:
+            with open(fd, "w", encoding=read["encoding"], newline="") as f:
                 w = csv.writer(f, delimiter=read["delimiter"], lineterminator=ending)
                 if has_header:
                     w.writerow(c["header"] for c in spec)
                 w.writerows([_text(v) for v in row] for row in rows)
-        except UnicodeEncodeError as e:
-            (out / file).unlink(missing_ok=True)              # never a half-written file
+            os.replace(tmp, out / file)                       # never a half-written file under the final name
+        except BaseException as e:
+            Path(tmp).unlink(missing_ok=True)
+            if not isinstance(e, UnicodeEncodeError):
+                raise
             before = f" (written before it: {', '.join(x['file'] for x in written)})" if written else ""
             raise Unwritable(f"{file} is {read['encoding']}, which can't hold {e.object[e.start:e.end]!r}: it wasn't "
                              f"written{before}.") from None
