@@ -110,10 +110,24 @@ async def test_an_unsure_link_is_a_yes_no_question(answer, describes):
 async def test_a_column_the_header_names_is_linked_without_a_question():
     table = {"name": "t", "header": ["sku", "price", "price currency"], "rows": [["A1", "9.90", "EUR"]]}
     types = {"sku": "TEXT", "price": "REAL", "price currency": "TEXT"}
-    links = LINKS | {"k3_describes_k2": 0.5}                    # unsure, but the header names price: no answer could change it
+    links = LINKS | {"k3_describes_k2": 0.5}                    # unsure, the header names price and nothing disagrees
     out = await context.classify(Stub(ROLES, links), table, {"create_table": {"definition": {"columns": [
         {"header": h, "sql_type": t} for h, t in types.items()]}}}, profile(table))
     assert out["context_columns"][2]["describes"] == [1] and out["warnings"] == []
+
+
+async def test_a_header_name_does_not_override_the_model_it_asks():
+    table = {"name": "t", "header": ["price", "sale_price", "price_currency"], "rows": [["9.90", "8.00", "EUR"]]}
+    types = {"create_table": {"definition": {"columns": [{"header": h, "sql_type": t} for h, t in
+                                                         {"price": "REAL", "sale_price": "REAL", "price_currency": "TEXT"}.items()]}}}
+    links, calls = {"k3_category": sure("currency"), "k3_describes_k1": 0.5, "k3_describes_k2": 0.9}, {}
+    out = await context.classify(Recorded(Stub(ROLES, links), calls), table, types, profile(table))
+    assert out["context_columns"][2]["describes"] == [0, 1]    # the model's link to sale_price is kept
+    asked = {w["question"]["key"]: w["question"]["call"] for w in out["warnings"] if "question" in w}
+    assert "k3_describes_k2" in asked                          # the name says price, the model says sale_price: asked
+    settle(calls, asked["k3_describes_k2"], "k3_describes_k2", "no")
+    out = await context.classify(Recorded(Stub(), calls), table, types, profile(table))
+    assert out["context_columns"][2]["describes"] == [0] and out["warnings"] == []
 
 
 async def test_an_unsure_header_letter_is_a_question(monkeypatch):

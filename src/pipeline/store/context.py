@@ -5,6 +5,8 @@
            evidence: headers, sampled values, each column's SQLite type (types step, run first) and profile
     code   dedicated_context, both on an INTEGER/REAL column → not a context column, warned
     Jev 2  dedicated_context, both, uncertain → category, and which columns it describes (uncertain: linked, flagged);
+           a column the header names (price_currency → price) is evidence: linked unless the model is sure it is not,
+           and a disagreement between the name and the model is a yes/no question for the user;
            a header unit read from one letter ("(L)": litres or a size?) → does the header declare it?
     user   an answer below 0.8 (role, category, link, header letter) is also a question for the user
     code   header_context, both → the unit declared in the header (dictionary); none readable → no source, warned
@@ -169,16 +171,21 @@ async def classify(jev, table: dict, schema: dict, profile: dict) -> dict:
                 w["question"] = {"type": "choice", "call": a2.call, "key": f"{k}_category", "options": options(probs)}
             warnings.append(w)
         links = {t: round(a2.get(f"{k}_describes_{t}", 0), 2) for t in candidates}
-        # a header that names value columns ("description_language", "Unité poids") describes those columns only
+        # a header that names value columns ("description_language", "Unité poids") is evidence, not a decision: the
+        # model's answer stands, a named column is also linked when the model is unsure, and where the name and the
+        # model disagree the user is asked (a settled answer, 1.0 or 0.0, decides)
         by_name = [t for t in candidates if _words(ids[t]) and _words(ids[t]) <= _words(h)]
-        if by_name:
-            links = {t: p if t in by_name else 0.0 for t, p in links.items()}
-        describes = [at[t] for t, p in links.items() if p >= 0.5 or t in by_name]
+        elsewhere = any(p >= 0.5 for t, p in links.items() if t not in by_name)
+        describes = [at[t] for t, p in links.items() if p >= 0.5 or (t in by_name and p > 0.2)]
         for t, p in links.items():
-            if 0.2 < p < SURE and t not in by_name:            # a named column is linked by its name: nothing to ask
+            if t in by_name:                                  # the model says no, or links an unnamed column
+                conflict = 0 < p < SURE and (p <= 0.2 or elsewhere)
+            else:                                             # unsure, or linked though the header names another
+                conflict = 0.2 < p < SURE or (bool(by_name) and 0.5 <= p < 1)
+            if conflict:
                 warnings.append({"column": h, "position": i, "problem": f"does it describe {ids[t]}?", "probability": p,
-                                 "linked": p >= 0.5, "question": {"type": "yes_no", "call": a2.call,
-                                                                  "key": f"{k}_describes_{t}"}})
+                                 "linked": at[t] in describes, "question": {"type": "yes_no", "call": a2.call,
+                                                                            "key": f"{k}_describes_{t}"}})
         if not describes:
             warnings.append({"column": h, "position": i,
                              "problem": "context column describes no column: the merchant decides"})
