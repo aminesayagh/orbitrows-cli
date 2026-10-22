@@ -273,7 +273,9 @@ def run(db: sqlite3.Connection, sql: list[str]) -> list:
 
 def check(db: sqlite3.Connection, sql: list[str]) -> list[dict]:
     """SQLite's verdict, nothing kept: [] when every statement runs, else [{"statement", "sql", "error"}]."""
-    isolation, db.isolation_level = db.isolation_level, None
+    isolation = db.isolation_level
+    if isolation is not None:  # set only if needed: setting it COMMITs an open transaction (the session's)
+        db.isolation_level = None
     db.execute("SAVEPOINT ast_check")
     errors = []
     try:
@@ -286,5 +288,6 @@ def check(db: sqlite3.Connection, sql: list[str]) -> list[dict]:
     finally:
         db.execute("ROLLBACK TO ast_check")
         db.execute("RELEASE ast_check")
-        db.isolation_level = isolation
+        if isolation is not None:
+            db.isolation_level = isolation
     return errors

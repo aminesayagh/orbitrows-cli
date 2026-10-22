@@ -333,7 +333,9 @@ def with_condition(ast, cond):
 def execute(db, schema, items, warnings) -> list[dict]:
     """Every statement in order inside a savepoint, rolled back. A request reading the rows an update or delete
     changed gets their ids from that statement's RETURNING."""
-    isolation, db.isolation_level = db.isolation_level, None
+    isolation = db.isolation_level
+    if isolation is not None:  # set only if needed: setting it COMMITs an open transaction (the session's)
+        db.isolation_level = None
     db.execute("SAVEPOINT assemble")
     errors, changed = [], {}
     try:
@@ -372,7 +374,8 @@ def execute(db, schema, items, warnings) -> list[dict]:
     finally:
         db.execute("ROLLBACK TO assemble")
         db.execute("RELEASE assemble")
-        db.isolation_level = isolation
+        if isolation is not None:
+            db.isolation_level = isolation
     return errors
 
 

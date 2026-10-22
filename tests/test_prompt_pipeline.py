@@ -138,3 +138,18 @@ def test_step_1_carries_its_calls_to_the_questions_and_a_settled_answer_ends_the
             for o in w["question"]["options"]] == ["mugs"]   # named by its words; "ambiguous" is not offered
     settled = graph(("m1", {"m1": 1.0}), ("none", {"none": 1.0}), ("rows", {"rows": 1.0}))
     assert settled["warnings"] == []
+
+
+def test_the_dry_runs_keep_the_session_s_transaction_open():
+    """The session holds one open transaction (isolation_level None): the pipeline's dry runs must not commit it."""
+    import sqlite3
+    from orbitrows.pipeline.prompt import assemble
+    from orbitrows.sql import sql
+    db = sqlite3.connect(":memory:", isolation_level=None)
+    db.execute("CREATE TABLE t (x INTEGER)")
+    db.execute("BEGIN")
+    db.execute("INSERT INTO t VALUES (1)")
+    assert sql.check(db, ["UPDATE t SET x = 2"]) == [] and db.in_transaction
+    assert assemble.execute(db, [], [], []) == [] and db.in_transaction
+    db.execute("ROLLBACK")
+    assert db.execute("SELECT COUNT(*) FROM t").fetchone() == (0,)   # the insert was never committed
