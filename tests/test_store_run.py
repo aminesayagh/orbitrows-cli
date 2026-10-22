@@ -165,7 +165,7 @@ async def test_the_roles_step_is_told_which_other_file_key_holds_a_column_values
         return seen
 
     assert await found([orders, lines]) == {
-        "orders": {}, "order_lines": {"order_id": [{"file": "orders.csv", "column": "order_id", "share": 1.0}]}}
+        "orders": {}, "order_lines": {"order_id": [{"file": "orders.csv", "column": "order_id", "share": 1.0, "covers": 1.0}]}}
     assert await found([orders]) == {"orders": {}}             # one file: nothing to be found in
 
 

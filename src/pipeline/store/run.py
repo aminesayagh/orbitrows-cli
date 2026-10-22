@@ -62,20 +62,26 @@ def first_questions(found: list, group, order: list) -> list:
 
 
 def found_in(tables: dict, saved: dict) -> dict[str, dict]:
-    """{"<file>": {position: [{"file", "column", "share"}]}}: for every column, the columns of the other files that
-    could be a key of their own file (no empty cell, no repeated value) and hold at least FOUND_IN of its distinct
-    values (profile.overlap). Sorted by file and position: the roles call stays the same from run to run."""
+    """{"<file>": {position: [{"file", "column", "share", "covers"}]}}: for every column, the columns of the other
+    files that could be a key of their own file (no empty cell, no repeated value, not REAL: a decimal is never a key)
+    and hold at least FOUND_IN of its distinct values (share, profile.overlap); covers: the share of that key's values
+    this column uses (a reference to orders uses most orders; line numbers 1-3 use few of 500 customer ids). Evidence
+    for Jev, judged with the headers. Sorted by file and position: the roles call stays the same from run to run."""
     def cells(f, i):
         return profile.values(tables[f], i)
 
+    def real(f, i):
+        return saved[f]["schema"]["create_table"]["definition"]["columns"][i]["sql_type"] == "REAL"
+
     keys = sorted((f, i) for f, s in saved.items() for i, c in s["profile"]["columns"].items()
-                  if c["empty"] == 0 and c["max_repeat"] == 1)
+                  if c["empty"] == 0 and c["max_repeat"] == 1 and not real(f, i))
     out = {f: {} for f in saved}
     for f in saved:
         for i in range(len(tables[f]["header"])):
             for g, j in keys:
-                if g != f and (share := profile.overlap(cells(f, i), cells(g, j))) >= FOUND_IN:
-                    out[f].setdefault(i, []).append({"file": g, "column": tables[g]["header"][j], "share": share})
+                if g != f and not real(f, i) and (share := profile.overlap(cells(f, i), cells(g, j))) >= FOUND_IN:
+                    out[f].setdefault(i, []).append({"file": g, "column": tables[g]["header"][j], "share": share,
+                                                     "covers": profile.overlap(cells(g, j), cells(f, i))})
     return out
 
 
