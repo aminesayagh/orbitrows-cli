@@ -22,6 +22,7 @@ NO_CONTEXT = {"context_columns": {}, "source_context": {}}    # the types step r
 STEPS = ("schema", "context", "roles", "keys", "joins")       # the saved sections that carry "warnings"
 PHASES = ("header", "types", "context", "roles", "keys", "joins", "naming")
 SECTION = {"types": "schema"}                                 # a phase's warnings are listed under its section, as in build()
+FOUND_IN = 0.9                                                # least share of a column's values found in another file's key
 
 
 class Paused(Exception):
@@ -58,6 +59,24 @@ def first_questions(found: list, group, order: list) -> list:
             i = "q_" + hashlib.sha256((w["question"]["call"] + w["question"]["key"]).encode()).hexdigest()[:8]
             out.setdefault(i, w | {"id": i})
     return list(out.values())
+
+
+def found_in(tables: dict, saved: dict) -> dict[str, dict]:
+    """{"<file>": {position: [{"file", "column", "share"}]}}: for every column, the columns of the other files that
+    could be a key of their own file (no empty cell, no repeated value) and hold at least FOUND_IN of its distinct
+    values (profile.overlap). Sorted by file and position: the roles call stays the same from run to run."""
+    def cells(f, i):
+        return profile.values(tables[f], i)
+
+    keys = sorted((f, i) for f, s in saved.items() for i, c in s["profile"]["columns"].items()
+                  if c["empty"] == 0 and c["max_repeat"] == 1)
+    out = {f: {} for f in saved}
+    for f in saved:
+        for i in range(len(tables[f]["header"])):
+            for g, j in keys:
+                if g != f and (share := profile.overlap(cells(f, i), cells(g, j))) >= FOUND_IN:
+                    out[f].setdefault(i, []).append({"file": g, "column": tables[g]["header"][j], "share": share})
+    return out
 
 
 def unnamed(saved: dict, names: dict | None) -> list[dict]:
@@ -99,9 +118,10 @@ async def classify(jev, paths: list, step=lambda text: None, names: dict | None 
         step(f"{f}: column context")
         s["context"] = await context.classify(jev, tables[f], s["schema"], s["profile"])
     pause("context")
+    found = found_in(tables, saved)
     for f, s in saved.items():
         step(f"{f}: column roles")
-        s["roles"] = await roles.classify(jev, tables[f], s["context"], s["schema"], s["profile"])
+        s["roles"] = await roles.classify(jev, tables[f], s["context"], s["schema"], s["profile"], found[f])
     pause("roles")
     step("keys between the files")
     found = await keys.classify(jev, [(tables[f], s) for f, s in saved.items()])

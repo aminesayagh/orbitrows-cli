@@ -143,6 +143,32 @@ async def test_a_pause_holds_the_questions_of_one_call_per_step(tmp_path):
     assert again.value.phase == "context" and q["question"]["key"] == "k3_category" and stub.calls == 0
 
 
+async def test_the_roles_step_is_told_which_other_file_key_holds_a_column_values(tmp_path):
+    orders, lines = tmp_path / "orders.csv", tmp_path / "order_lines.csv"
+    orders.write_text("order_id,customer\nO-1,Ann\nO-2,Bob\nO-3,Cy\n")
+    lines.write_text("line_id,order_id,qty\nL-1,O-1,2\nL-2,O-1,5\nL-3,O-2,1\nL-4,O-3,7\n")
+
+    async def found(paths):                                     # each file's roles profile, as Jev reads it
+        seen, jev = {}, Unsure({"header": 0.95})
+        answer = jev.answer
+
+        async def capture(state, questions):
+            if any("model_reference" in q.get("criteria", {}) for q in questions.values()):
+                seen[state["file"]] = {state["columns"][k]: c["found_in"]
+                                       for k, c in state["profile"]["columns"].items() if "found_in" in c}
+            return await answer(state, questions)
+        jev.answer = capture
+        try:
+            await run.classify(jev, paths)
+        except run.Paused:
+            pass
+        return seen
+
+    assert await found([orders, lines]) == {
+        "orders": {}, "order_lines": {"order_id": [{"file": "orders.csv", "column": "order_id", "share": 1.0}]}}
+    assert await found([orders]) == {"orders": {}}             # one file: nothing to be found in
+
+
 async def test_two_columns_with_the_same_header_stay_two_columns(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
     path = tmp_path / "prices.csv"
