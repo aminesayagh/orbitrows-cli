@@ -153,9 +153,9 @@ def test_a_change_is_kept_until_exit_and_undo_reverts_it(served, capsys):
 
 def test_export_has_the_unsaved_changes_and_structure_changes_are_refused(served, capsys, tmp_path):
     with closing(sqlite3.connect(served.folder / "session.db")) as db, db:   # products.csv's export map
-        db.execute("INSERT INTO _store_tables VALUES (1, 'products', 'products.csv', '2026-10-21T00:00:00Z')")
-        db.execute("INSERT INTO _store_columns (id, table_id, sql_name, sql_type) VALUES "
-                   "(1, 1, 'id', 'INTEGER'), (2, 1, 'price', 'REAL')")
+        db.execute("INSERT INTO _store_tables VALUES (1, 'products', 'products.csv', '2026-10-21T00:00:00Z', 1)")
+        db.execute("INSERT INTO _store_columns (id, table_id, sql_name, sql_type, edited_by) VALUES "
+                   "(1, 1, 'id', 'INTEGER', 1), (2, 1, 'price', 'REAL', 1)")
         db.execute("INSERT INTO _export VALUES ('products.csv', 1, 1, ?)", (json.dumps(
             [{"header": h, "table_id": 1, "column_id": n, "via": []} for n, h in ((1, "id"), (2, "price"))]),))
     (served.folder / "files").mkdir()

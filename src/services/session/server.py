@@ -277,6 +277,7 @@ class Session:
             self.drop(n)
             return reply
         try:
+            # once a request changes columns, their _store_columns.edited_by will be this row's id
             self.db.execute("INSERT INTO _history (created_at, name, prompt, json_ast, sql, classification_done) "
                             "VALUES (?, ?, ?, ?, ?, 1)",
                             (registry.now(), text if len(text) <= NAME else text[:NAME - 1] + "…", text,

@@ -60,7 +60,7 @@ Each store is a row in the registry, `~/.local/share/pilotstore/stores.db` (`$XD
 
 - `files/`: the uploaded CSV files, unchanged; the import (and every resume) reads these copies;
 - `import.json`: the import's progress, written after each new Jev answer (temporary file, then renamed): `files` (upload order), `calls` (every Jev answer with its probabilities, the user's answers recorded as certain), `step` and `open` (the current pause and its questions), `answered` (each question with the user's answer), `shown` (the notices already printed). It's kept once the import is done;
-- `session.db`: the store's tables with their rows, plus the classification tables (`_store_tables`, `_store_columns`, `_column_context`, `_export`) and `_history`, the log of changes: its first row is the import, with the tables' `create_table` ASTs (`json_ast`) and the `CREATE TABLE` statements run (`sql`). It's written in one transaction, and only if every file can be rebuilt from it;
+- `session.db`: the store's tables with their rows, plus the classification tables (`_store_tables`, `_store_columns`, `_column_context`, `_export`) and `_history`, the log of changes: its first row is the import, with the tables' `create_table` ASTs (`json_ast`) and the `CREATE TABLE` statements run (`sql`). `_store_tables.created_by` and `_store_columns.edited_by` reference the `_history` row of the request that created the table / last changed the column (the import, row 1, for now). It's written in one transaction, and only if every file can be rebuilt from it;
 - `original.db`: a copy of `session.db` taken right after the import.
 
 `foreign_keys` and `synchronous` are per-connection settings in SQLite: every connection that writes `session.db` must set them again.

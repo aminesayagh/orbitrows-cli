@@ -52,6 +52,8 @@ def test_store_is_written(name):
             assert loaded[d["sql_name"]] == len({r[i] for r in rows[ex["file"]] if i < len(r) and r[i]}), d["sql_name"]
     assert {c["table"]: c["rows"] for c in counts} == {n: k for n, k in loaded.items() if n not in OWN}
     assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert {r for r, in db.execute("SELECT created_by FROM _store_tables")} == {1}      # the import is _history row 1
+    assert {r for r, in db.execute("SELECT edited_by FROM _store_columns")} == {1}
     assert db.execute("PRAGMA quick_check").fetchone() == ("ok",)
 
     got = db.execute("SELECT c.id, t.sql_name, c.sql_name, c.role, c.kind, c.level, c.unit_id, c.context_column_id, "

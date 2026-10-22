@@ -38,8 +38,9 @@ def test_case_matches_expected_and_round_trips(case):
     assert {d["kind"] for d in diffs} <= {"number_format"}
     old = saved["store_schema"]                               # what the proof-of-concept saved
     nodes = lambda ts: [{k: v for k, v in t.items() if k != "query"} for t in ts]   # its AST node had a query field (not ported)
-    assert store["tables"] == nodes(old["tables"]) and store["metadata"] == old["metadata"]
-    assert store["export"] == old["export"] and store["metadata_table"] == nodes([old["metadata_table"]])[0]
+    assert store["tables"] == nodes(old["tables"])
+    assert store["metadata"] == [{k: v for k, v in m.items() if k != "edited_by"} for m in old["metadata"]]   # the PoC kept it in the rows
+    assert store["export"] == old["export"]
     assert store["problems"] == old["problems"]
 
 

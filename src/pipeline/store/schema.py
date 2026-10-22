@@ -21,15 +21,6 @@ from .types import EXPORTED
 from orbitrows.sql.ddl import CreateTable, ForeignKey, NewColumn, NewTable, TableColumns, check_references, ddl, sql_name
 
 KEY_SUFFIX = re.compile(r"_(id|sku|ref|code|no|nr|num|number)$")
-META_COLUMNS = [("table_id", "TEXT", False), ("column_id", "TEXT", False), ("source_file", "TEXT", True),
-                ("source_header", "TEXT", True), ("position", "INTEGER", True), ("role", "TEXT", True),
-                ("kind", "TEXT", True), ("level", "TEXT", True), ("unit", "TEXT", True), ("unit_kind", "TEXT", True),
-                ("unit_from", "TEXT", True), ("context_table_id", "TEXT", True), ("context_column_id", "TEXT", True),
-                ("edited_by", "TEXT", False), ("extra_json", "TEXT", True)]
-# ponytail: the metadata's natural key (table, column) is composite; it is the import's own table, not a merchant's
-METADATA = NewTable(table_id="t__columns", sql_name="_columns", primary_key=["c_table_id", "c_column_id"],
-                    columns=[NewColumn(column_id=f"c_{n}", sql_name=n, header=None, sql_type=t, nullable=null)
-                             for n, t, null in META_COLUMNS])
 
 
 def _name(key: str, file: str, taken: set) -> str:
@@ -74,7 +65,7 @@ def _split(file: str, s: dict, taken: set) -> list[dict]:
 
 def assemble(files: dict) -> dict:
     """files: {"<file>.csv": its saved sections (read, schema, roles, context, joins)}, the store files of one session →
-    {"tables": [create_table], "metadata_table": create_table, "metadata": [rows], "export": [per file], "problems": [...]}"""
+    {"tables": [create_table], "metadata": [rows], "export": [per file], "problems": [...]}"""
     taken = {s["schema"]["create_table"]["definition"]["sql_name"] for s in files.values()}
     tables, export, metadata = [], [], []
     for file, s in files.items():
@@ -106,7 +97,7 @@ def assemble(files: dict) -> dict:
                        "source_header": c.header, "position": p,
                        "role": r.get("role"), "kind": r.get("kind"), "level": r.get("level"), "unit": None,
                        "unit_kind": None, "unit_from": None, "context_table_id": None, "context_column_id": None,
-                       "edited_by": "import", "extra_json": None}
+                       "extra_json": None}
                 if p in cc:                                   # a context column: kept as a column, its links here
                     e = cc[p]
                     row |= {"unit": e.get("unit"), "unit_kind": e["kind"], "extra_json": json.dumps(
@@ -120,8 +111,7 @@ def assemble(files: dict) -> dict:
                     row["extra_json"] = json.dumps(json.loads(row["extra_json"] or "{}") | {"flagged": True})
                 metadata.append(row)
     problems = check_references([t.definition for t in tables])
-    return {"tables": [t.model_dump() for t in tables], "metadata_table": CreateTable(
-        id="r_create__columns", definition=METADATA).model_dump(), "metadata": metadata, "export": export,
+    return {"tables": [t.model_dump() for t in tables], "metadata": metadata, "export": export,
         "problems": [{"table_id": t, "problem": p} for t, p in problems]}
 
 

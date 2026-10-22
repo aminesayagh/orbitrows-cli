@@ -28,13 +28,25 @@ LEVELS = tuple(roles.LEVELS)
 
 # The plan's store_tables, column_context, store_columns, export and history, with a leading _: a store table is named after its
 # file (export.csv → export) and sql_name() never starts a name with _, so the two can never collide.
-# ponytail: no created_by/edited_by yet: empty means the import, and only the import writes for now
+# created_by / edited_by point at the _history row of the request that created the table / last changed the column;
+# the import is row 1, so every row has one. _history comes first: the others reference it.
 SCHEMA = f"""
+CREATE TABLE _history (
+    id                    INTEGER PRIMARY KEY,         -- the order of the changes, 1 is the import
+    created_at            TEXT NOT NULL,               -- ISO 8601, UTC
+    name                  TEXT NOT NULL,
+    prompt                TEXT,                        -- the client's sentence, NULL for the import
+    json_ast              TEXT NOT NULL CHECK (json_valid(json_ast)),
+    sql                   TEXT NOT NULL CHECK (json_valid(sql)),  -- the statements run, as a JSON array
+    reclassification_json TEXT CHECK (json_valid(reclassification_json)),
+    classification_done   INTEGER NOT NULL CHECK (classification_done IN (0, 1))
+) STRICT;
 CREATE TABLE _store_tables (
     id          INTEGER PRIMARY KEY,
     sql_name    TEXT NOT NULL UNIQUE,
     source_file TEXT,
-    created_at  TEXT NOT NULL                          -- ISO 8601, UTC
+    created_at  TEXT NOT NULL,                         -- ISO 8601, UTC
+    created_by  INTEGER NOT NULL REFERENCES _history(id)  -- the request that created the table
 ) STRICT;
 CREATE TABLE _column_context (
     id        INTEGER PRIMARY KEY,
@@ -57,6 +69,7 @@ CREATE TABLE _store_columns (
     state             TEXT NOT NULL DEFAULT 'current' CHECK (state IN ('current', 'stale')),
     extra_json        TEXT,
     profile_json      TEXT CHECK (json_valid(profile_json)),  -- the import's profile: empty, distinct, max_repeat, values…
+    edited_by         INTEGER NOT NULL REFERENCES _history(id),  -- the request that last changed it
     UNIQUE (table_id, sql_name)
 ) STRICT;
 CREATE TABLE _export (
@@ -64,16 +77,6 @@ CREATE TABLE _export (
     has_header    INTEGER NOT NULL CHECK (has_header IN (0, 1)),
     root_table_id INTEGER NOT NULL REFERENCES _store_tables(id),
     spec_json     TEXT NOT NULL                        -- the file's columns: header, table_id, column_id, via (ids above)
-) STRICT;
-CREATE TABLE _history (
-    id                    INTEGER PRIMARY KEY,         -- the order of the changes, 1 is the import
-    created_at            TEXT NOT NULL,               -- ISO 8601, UTC
-    name                  TEXT NOT NULL,
-    prompt                TEXT,                        -- the client's sentence, NULL for the import
-    json_ast              TEXT NOT NULL CHECK (json_valid(json_ast)),
-    sql                   TEXT NOT NULL CHECK (json_valid(sql)),  -- the statements run, as a JSON array
-    reclassification_json TEXT CHECK (json_valid(reclassification_json)),
-    classification_done   INTEGER NOT NULL CHECK (classification_done IN (0, 1))
 ) STRICT;
 """
 
@@ -130,7 +133,11 @@ def _classify(db, store: dict) -> None:
     column_ids = {(m["table_id"], m["column_id"]): n for n, m in enumerate(store["metadata"], 1)}
     files = {m["table_id"]: m["source_file"] for m in store["metadata"] if m["source_file"]}
     now = registry.now()
-    db.executemany("INSERT INTO _store_tables VALUES (?, ?, ?, ?)",
+    tables = nodes(store)
+    db.execute("INSERT INTO _history (created_at, name, json_ast, sql, classification_done) VALUES (?, ?, ?, ?, 1)",
+               (now, "Import", json.dumps(store["tables"], ensure_ascii=False),
+                json.dumps([ddl(t, tables) for t in tables.values()], ensure_ascii=False)))   # what load() ran
+    db.executemany("INSERT INTO _store_tables VALUES (?, ?, ?, ?, 1)",
                    [(n, defs[t_id]["sql_name"], files.get(t_id), now) for t_id, n in table_ids.items()])
     units = [m for m in store["metadata"] if m["unit_kind"] is not None]
     unit_ids = {id(m): n for n, m in enumerate(units, 1)}
@@ -139,16 +146,12 @@ def _classify(db, store: dict) -> None:
     columns = {(t_id, c["column_id"]): c for t_id, d in defs.items() for c in d["columns"]}
     db.executemany(
         "INSERT INTO _store_columns (id, table_id, sql_name, sql_type, source_header, position, role, kind, level, "
-        "unit_id, context_column_id, extra_json, profile_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "unit_id, context_column_id, extra_json, profile_json, edited_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
         [(column_ids[m["table_id"], m["column_id"]], table_ids[m["table_id"]],
           (c := columns[m["table_id"], m["column_id"]])["sql_name"], c["sql_type"], m["source_header"], m["position"],
           _index(ROLES, m["role"]), _index(KINDS, m["kind"]), _index(LEVELS, m["level"]), unit_ids.get(id(m)),
           column_ids.get((m["context_table_id"], m["context_column_id"])), m["extra_json"],
           None if m.get("profile") is None else json.dumps(m["profile"], ensure_ascii=False)) for m in store["metadata"]])
-    tables = nodes(store)
-    db.execute("INSERT INTO _history (created_at, name, json_ast, sql, classification_done) VALUES (?, ?, ?, ?, 1)",
-               (now, "Import", json.dumps(store["tables"], ensure_ascii=False),
-                json.dumps([ddl(t, tables) for t in tables.values()], ensure_ascii=False)))   # what load() ran
     for ex in store["export"]:                                # via: the reference columns, each in the table it leaves
         spec = [{"header": c["header"], "table_id": table_ids[c["table_id"]],
                  "column_id": column_ids[c["table_id"], c["column_id"]],
