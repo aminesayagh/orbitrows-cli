@@ -63,10 +63,9 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 
 ## Command line
 
-- [ ] **`incoming` only checks the file,** and `message` only finds the store: neither saves nor runs anything yet. They plug into the storage (store folder, `session.db`) and the prompt pipeline.
+- [ ] **`incoming` only checks the file:** it saves and merges nothing yet.
 - [ ] **Only the store schema is saved, not the step sections.** `store` writes the classification into `session.db` (`_store_columns`, `_column_context`, `_export`), and each column's profile (`_store_columns.profile_json`), but not the rest of the sections behind it (the probabilities, the warnings). Every Jev answer with its probabilities is kept in the store's `import.json` (with the user's answers to its questions), outside `session.db`. Warnings are printed once. Decide whether the merge needs them, and save them in `session.db` if it does. The profile describes the data as imported: no request changes it yet, so mark it stale (or recount it) once requests run.
 - [ ] **Role, kind and level are stored as integers** (user decision 2026-10-21): the index in `ROLES`, `KINDS` and `LEVELS` (`src/services/storage/store.py`). The order must stay fixed once stores exist. `created_by`/`edited_by` aren't stored yet: `_history` exists (its first row is the import), and they come once requests write to it.
-- [ ] **The classification tables start with `_`** (`_store_tables`, `_column_context`, `_store_columns`, `_export`, `_history`; the plan says `store_tables`, `export`…). A store table is named after its file, so `export.csv` would collide with `export`. `sql_name()` never starts a name with `_`, so the prefix rules out any collision.
 - [ ] **No guardrail on `message`** since the Jev intent check was removed with the chat. Add it back when messages run: is it about the data, and for the store or the incoming file.
 
 ## Store upload: questions to the user (review leftovers, all low)
@@ -75,7 +74,6 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 - [ ] **The keys grouping is untested.** A pause keeps one call's questions per step across all files for keys (the reference call depends on every primary key). Add a test with a primary-key question on one file and a reference question on another.
 - [ ] **A notice can describe an answer the user then changes.** A held-back call's notices are still shown (for example "dedicated_context but typed INTEGER: none kept" before the role question is answered). Cosmetic: notices never block.
 - [ ] **A kill right after `COMMIT` in `storage.write`** leaves a complete `session.db`: the next retry fails creating its tables and deletes it, and the one after succeeds. Recovery takes two `answer` runs.
-- [ ] **Some CLI tests load the real GLiNER2** (the end-to-end resume tests run the real classify). No paid call, but slow and a 1.2 GB download on a fresh machine. Stub the extractor there.
 
 ## Messages and the session (review leftovers, all low)
 
@@ -88,6 +86,5 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 
 ## Codex review (2026-10-22), filed for later
 
-- [ ] **CorPipe's work files** go inside the code folder (`src/pipeline/prompt/coref.py:92`): they pile up, and a read-only install breaks `message`. Use the store's folder or a temporary one, cleaned per request.
 - [ ] **`import.json` isn't fsynced** (file and folder) after a paid answer: a power cut right after could lose it.
 - [ ] **Dates in messages** like `22 octobre 2026` or `22/10/2026` aren't recognised (`operations_jev.py:322`); a numeric date would need a question (22/10 vs 10/22).
