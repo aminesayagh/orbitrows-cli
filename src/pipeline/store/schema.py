@@ -43,17 +43,16 @@ def _split(file: str, s: dict, taken: set) -> list[dict]:
     """The file's table and its group tables: [{"t": NewTable fields, "parent": (table_id, fk column) | None}],
     the file's own table first."""
     d = NewTable(**s["schema"]["create_table"]["definition"])
-    by_h = {c.header: c for c in d.columns}                   # ponytail: a repeated header maps to its first column
     groups = (s.get("joins") or {}).get("groups", [])
-    moved = {h for g in groups for h in g["columns"]}
+    moved = {p for g in groups for p in g["columns"]}         # by position: the file's column p is d.columns[p]
     specs = [{"t": {"table_id": d.table_id, "sql_name": d.sql_name, "primary_key": d.primary_key, "foreign_keys": [],
-                    "columns": [c for c in d.columns if c.header not in moved]}, "parent": None}]
+                    "columns": [c for p, c in enumerate(d.columns) if p not in moved]}, "parent": None}]
     for g in groups:
-        key = by_h[g["key"]]
+        key = d.columns[g["key"]]
         name = _name(key.sql_name, d.sql_name, taken)
         specs.append({"t": {"table_id": f"t_{name}", "sql_name": name, "primary_key": [key.column_id],
                             "foreign_keys": [], "columns": [key.model_copy(update={"nullable": False})]
-                            + [by_h[h] for h in g["columns"]]}, "parent": None})
+                            + [d.columns[p] for p in g["columns"]]}, "parent": None})
     home = {c.column_id: sp for sp in specs for c in sp["t"]["columns"] if c.column_id not in sp["t"]["primary_key"]}
     home |= {c.column_id: specs[0] for c in specs[0]["t"]["columns"]}
     for fk in d.foreign_keys:                                 # step 4's references follow their column
@@ -84,37 +83,40 @@ def assemble(files: dict) -> dict:
 
         def via(sp):
             return [] if not sp["parent"] else via(ids[sp["parent"][0]]) + [sp["parent"][1]]
-        where = {}                                            # header → (table_id, column_id, via)
+        # the types step lists the file's columns in order: a column's id in the steps is its position there
+        pos = {c["column_id"]: p for p, c in enumerate(s["schema"]["create_table"]["definition"]["columns"])}
+        where = {}                                            # position → (table_id, column_id, via)
         for sp in specs:
             for c in sp["t"]["columns"]:
                 if c.header is not None and (c.column_id not in sp["t"]["primary_key"] or sp is specs[0]):
-                    where.setdefault(c.header, (sp["t"]["table_id"], c.column_id, via(sp)))
+                    where.setdefault(pos[c.column_id], (sp["t"]["table_id"], c.column_id, via(sp)))
         header = s["read"]["header"]
         export.append({"file": file, "has_header": s["read"]["has_header"], "root": specs[0]["t"]["table_id"],
-                       "columns": [{"header": h, "table_id": where[h][0], "column_id": where[h][1], "via": where[h][2]}
-                                   for h in header]})
+                       "columns": [{"header": h, "table_id": where[p][0], "column_id": where[p][1], "via": where[p][2]}
+                                   for p, h in enumerate(header)]})
         roles, ctx = s.get("roles", {}).get("columns", {}), s.get("context", {})
         cc, sc = ctx.get("context_columns", {}), ctx.get("source_context", {})
         for sp in specs:
             t = NewTable(**sp["t"])
             tables.append(CreateTable(id=f"r_create_{t.sql_name}", definition=t))
             for c in t.columns:
-                r = roles.get(c.header, {})
-                row = {"table_id": t.table_id, "column_id": c.column_id, "source_file": file if c.header is not None else None,
-                       "source_header": c.header, "position": header.index(c.header) if c.header in header else None,
+                p = pos[c.column_id] if c.header is not None else None     # None: an added id
+                r = roles.get(p, {})
+                row = {"table_id": t.table_id, "column_id": c.column_id, "source_file": file if p is not None else None,
+                       "source_header": c.header, "position": p,
                        "role": r.get("role"), "kind": r.get("kind"), "level": r.get("level"), "unit": None,
                        "unit_kind": None, "unit_from": None, "context_table_id": None, "context_column_id": None,
                        "edited_by": "import", "extra_json": None}
-                if c.header in cc:                            # a context column: kept as a column, its links here
-                    e = cc[c.header]
+                if p in cc:                                   # a context column: kept as a column, its links here
+                    e = cc[p]
                     row |= {"unit": e.get("unit"), "unit_kind": e["kind"], "extra_json": json.dumps(
-                        {"context": e["context"], "describes": [list(where[h][:2]) for h in e["describes"]]}
+                        {"context": e["context"], "describes": [list(where[d][:2]) for d in e["describes"]]}
                         | ({"flagged": True} if e.get("flagged") else {}), ensure_ascii=False)}
-                elif src := sc.get(c.header):
+                elif src := sc.get(p):
                     row |= {"unit": src.get("unit"), "unit_kind": src["kind"], "unit_from": src["from"]}
                     if src["from"] == "column":
                         row |= dict(zip(("context_table_id", "context_column_id"), where[src["column"]][:2]))
-                if r.get("flagged") or sc.get(c.header, {}).get("flagged"):
+                if r.get("flagged") or sc.get(p, {}).get("flagged"):
                     row["extra_json"] = json.dumps(json.loads(row["extra_json"] or "{}") | {"flagged": True})
                 metadata.append(row)
     problems = check_references([t.definition for t in tables])
@@ -162,8 +164,9 @@ def load(db, store: dict, rows: dict) -> list[dict]:
         db.execute(ddl(d, defs))
     diffs = []
     for ex in store["export"]:
-        pos = {c["header"]: i for i, c in reversed(list(enumerate(ex["columns"])))}
-        by_table = {t_id: [(c.column_id, pos[c.header]) for c in defs[t_id].columns if c.header is not None]
+        # a column's cells by its column_id (one per column of a file; a group key's copy keeps its column_id)
+        pos = {c["column_id"]: i for i, c in enumerate(ex["columns"])}
+        by_table = {t_id: [(c.column_id, pos[c.column_id]) for c in defs[t_id].columns if c.header is not None]
                     for t_id in dict.fromkeys(c["table_id"] for c in ex["columns"])}
         for n, row in enumerate(rows[ex["file"]]):
             cell = lambda i: (row[i] if i < len(row) else "") or None

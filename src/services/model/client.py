@@ -153,13 +153,15 @@ def sure(answers, key, at=SURE):
     return c if c is not None and probs.get(c, 0) >= at else None
 
 
-def pick(answers, key, column, what, warnings, labels=None):
+def pick(answers, key, column, what, warnings, labels=None, position=None):
     """(answer, flagged): the sure answer, else the likeliest one, flagged in `warnings` with a choice question for the
-    user when the model answered. `labels` names opaque values in the question (options())."""
+    user when the model answered. `labels` names opaque values in the question (options()); `position`, the column's
+    id (its position in the file), goes in the warning next to its header `column`."""
     if c := sure(answers, key):
         return c, False
     top, probs = answers.get(key, (None, {}))
-    w = {"column": column, "problem": f"{what} uncertain", "answer": top,
+    w = {"column": column} | ({"position": position} if position is not None else {}) | {
+         "problem": f"{what} uncertain", "answer": top,
          "probability": round(probs.get(top, 0), 2) if top else None}
     if top:                                                   # a model answer below SURE: the user picks
         w["question"] = {"type": "choice", "call": answers.call, "key": key, "options": options(probs, labels)}

@@ -14,7 +14,7 @@ tables on the key"). Jev sees every table of the case at once: headers, sample r
 from orbitrows.sql.ddl import CreateTable, ForeignKey, TableColumns, check_references
 from orbitrows.services.model.client import ask, choice, pick
 from .context import SAMPLE
-from .profile import overlap, values
+from .profile import named, overlap, values
 
 ACTIVITY = ("A merchant uploads several files (tables) together, either related tables of one database or several "
             "versions of the same catalog; the keys that identify and link their records are found before the "
@@ -43,27 +43,27 @@ NONE = "none"
 async def classify(jev, tables: list) -> dict:
     """tables: [(table, saved sections)] of one case → {file: {"create_table", "warnings"}}."""
     letters = [chr(97 + i) for i in range(len(tables))]          # a, b, c… one per table; columns a1, a2…
-    state, header_of, node_of, roles = {"tables": {}}, {}, {}, {}
+    state, at, headers, node_of, roles = {"tables": {}}, {}, {}, {}, {}
     for t, (table, saved) in zip(letters, tables):
         node_of[t] = CreateTable(**saved["schema"]["create_table"])
         ids = {f"{t}{i}": h for i, h in enumerate(table["header"], 1)}
-        header_of |= {k: (t, h) for k, h in ids.items()}
+        at |= {k: (t, i) for i, k in enumerate(ids)}            # Jev's id → (table, the column's position)
+        headers |= ids                                          # a question shows columns by header, not by letter
         r = saved["roles"]["columns"]
-        roles |= {k: r.get(h, {}) for k, h in ids.items()}
-        types = {c.header: c.sql_type for c in node_of[t].definition.columns}
+        roles |= {k: r.get(at[k][1], {}) for k in ids}
+        types = [c.sql_type for c in node_of[t].definition.columns]
         state["tables"][t] = {
             "file": table["name"], "columns": ids,
             "rows": [{k: (row[i] if i < len(row) else "") for i, k in enumerate(ids)} for row in table["rows"][:SAMPLE]],
-            "types": {k: types.get(h) for k, h in ids.items()},
-            "profile": {"rows": len(table["rows"]), "columns": {k: saved["profile"]["columns"][h] for k, h in ids.items()}},
+            "types": {k: types[i] for i, k in enumerate(ids)},
+            "profile": {"rows": len(table["rows"]), "columns": {
+                k: named(saved["profile"]["columns"][i], table["header"]) for i, k in enumerate(ids)}},
             "roles": {k: roles[k] for k in ids if roles[k]}}
     warnings = {t: [] for t in letters}
-    headers = {k: h for k, (t, h) in header_of.items()}          # a question shows columns by header, not by letter
-    targets_of = {k: f"{h} ({state['tables'][t]['file']})" for k, (t, h) in header_of.items()}   # in another table
+    targets_of = {k: f"{h} ({state['tables'][at[k][0]]['file']})" for k, h in headers.items()}   # in another table
 
     def label(k):
-        t, h = header_of[k]
-        return f"column {h} ({k}) of table {state['tables'][t]['file']}"
+        return f"column {headers[k]} ({k}) of table {state['tables'][at[k][0]]['file']}"
 
     # Jev 1: the primary key of every table
     q1 = {}
@@ -84,11 +84,11 @@ async def classify(jev, tables: list) -> dict:
 
     # Jev 2: what each other key or qualifier refers to (only other tables' primary keys can be referenced)
     def cells(k):
-        t, h = header_of[k]
-        return values(tables[letters.index(t)][0], h)
+        t, i = at[k]
+        return values(tables[letters.index(t)][0], i)
 
     q2, state["overlap"] = {}, {}
-    for k, (t, h) in header_of.items():
+    for k, (t, _) in at.items():
         targets = {p: label(p) for u, p in pk.items() if u != t}
         if targets and roles[k].get("role") in ("dedicated_key", "qualifier") and pk.get(t) != k:
             state["overlap"][k] = {p: overlap(cells(k), cells(p)) for p in targets}
@@ -97,20 +97,20 @@ async def classify(jev, tables: list) -> dict:
     a2 = await ask(jev, state, q2)
     fks = {t: [] for t in letters}
     for k in q2:
-        t, h = header_of[k]
-        target = pick(a2, k, h, "reference", warnings[t], targets_of)[0]
+        t, i = at[k]
+        target = pick(a2, k, headers[k], "reference", warnings[t], targets_of, position=i)[0]
         if target and target != NONE:
             fks[t].append((k, target))
 
-    def cid(k):
-        t, h = header_of[k]
-        return next(c.column_id for c in node_of[t].definition.columns if c.header == h)
+    def cid(k):                                               # the types step lists the columns in file order
+        t, i = at[k]
+        return node_of[t].definition.columns[i].column_id
 
     for t in letters:
         d = node_of[t].definition
         d.primary_key = [cid(pk[t])] if t in pk else []
         d.foreign_keys = [ForeignKey(columns=[cid(k)], references=TableColumns(
-            table=node_of[header_of[p][0]].definition.table_id, columns=[cid(p)])) for k, p in fks[t]]
+            table=node_of[at[p][0]].definition.table_id, columns=[cid(p)])) for k, p in fks[t]]
         node_of[t] = CreateTable(**node_of[t].model_dump())    # re-validated by SQLite with its primary key
     letter_of = {node_of[t].definition.table_id: t for t in letters}
     for table_id, problem in check_references([node_of[t].definition for t in letters]):

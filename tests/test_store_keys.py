@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+import saved_cases
 from orbitrows.pipeline.store.keys import NONE, classify
 from orbitrows.services.csv.reader import read_table
 from orbitrows.services.model.client import Model, Recorded, settle
@@ -33,8 +34,8 @@ def entry(name, cols, rows, roles, sql_types=None):
     node = create_table(name, [{"header": h, "sql_type": (sql_types or {}).get(h, "INTEGER" if h.endswith("_id") else "TEXT"),
                                 "nullable": True} for h in cols]).model_dump()
     table = {"name": name, "path": f"{name}.csv", "header": cols, "rows": rows}
-    saved = {"schema": {"create_table": node}, "roles": {"columns": {h: {"role": r} for h, r in roles.items()}},
-             "profile": {"columns": {h: {"empty": 0, "distinct": len(rows)} for h in cols}}}
+    saved = {"schema": {"create_table": node}, "roles": {"columns": {cols.index(h): {"role": r} for h, r in roles.items()}},
+             "profile": {"columns": {i: {"empty": 0, "distinct": len(rows)} for i in range(len(cols))}}}
     return table, saved
 
 
@@ -100,7 +101,7 @@ async def test_uncertain_reference_is_kept_and_flagged():
     got = await classify(jev, [customers(), orders()])
     assert got["orders.csv"]["create_table"]["definition"]["foreign_keys"][0]["columns"] == ["c_customer_id"]
     [w] = got["orders.csv"]["warnings"]
-    assert w | {"question": None} == {"column": "customer_id", "problem": "reference uncertain", "answer": "a1",
+    assert w | {"question": None} == {"column": "customer_id", "position": 1, "problem": "reference uncertain", "answer": "a1",
                                       "probability": 0.5, "question": None}
     assert w["question"]["key"] == "b2" and w["question"]["options"] == [
         {"answer": "customer_id (customers)", "value": "a1", "probability": 0.5},   # a column of another table
@@ -153,7 +154,7 @@ KEYED = [c for c in ("shop", "joins_chain") if all("keys" in s for s in json.loa
 
 @pytest.mark.parametrize("case", KEYED)
 async def test_sure_answers_give_the_saved_keys(case):
-    saved = json.loads((CASES / case / "result.json").read_text())["tables"]
+    saved = saved_cases.tables(case)
     tables = [(read_table(CASES / case / f, has_header=s["read"]["has_header"]), s) for f, s in sorted(saved.items())]
     got = await classify(Replay({f: s["schema"]["create_table"]["definition"] for f, s in saved.items()}), tables)
     for f, s in saved.items():

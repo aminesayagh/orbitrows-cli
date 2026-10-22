@@ -52,39 +52,40 @@ def repeats(profile, h) -> int:
     return profile.get("profiled", profile["rows"]) - c["empty"] - c["distinct"]
 
 
-def _own(header, roles, profile):
-    """({column: determines}, {key: [columns it may take]}): dedicated_key columns, after the support minimum."""
+def _own(columns, roles, profile):
+    """({column: determines}, {key: [columns it may take]}): dedicated_key columns, after the support minimum.
+    columns: the table's column ids, in file order (their positions)."""
     det = {h: c.get("determines", []) for h, c in profile["columns"].items()}
-    value = {h for h in header if roles.get(h, {}).get("role") == "none"}
+    value = {h for h in columns if roles.get(h, {}).get("role") == "none"}
     own = {h: [b for b in det[h] if b not in value or repeats(profile, h) >= MIN_REPEATS]
-           for h in header if roles.get(h, {}).get("role") == "dedicated_key" and det[h]}
+           for h in columns if roles.get(h, {}).get("role") == "dedicated_key" and det[h]}
     return det, own
 
 
-def candidates(header, roles, profile) -> dict:
+def candidates(columns, roles, profile) -> dict:
     """{key: [columns]} after support and the nearest-group rule; only dedicated_key columns that determine others."""
-    det, own = _own(header, roles, profile)
+    det, own = _own(columns, roles, profile)
     cand = {a: [b for b in cols if not any(c != a and c in det[a] and b in own[c] for c in own)]
             for a, cols in own.items()}
     return {a: cols for a, cols in cand.items() if cols}
 
 
 async def classify(jev, table: dict, saved: dict) -> dict:
-    """{"groups": [{"key", "columns"}], "remaining"?: [...], "warnings": [...]}"""
+    """{"groups": [{"key", "columns"}], "remaining"?: [...], "warnings": [...]}, columns by position."""
     header, rows = table["header"], table["rows"]
     roles, profile = saved["roles"]["columns"], saved["profile"]
-    cand = candidates(header, roles, profile)
+    cand = candidates(range(len(header)), roles, profile)
     if not cand:
         return {"groups": [], "warnings": []}
     ids = {f"k{i}": h for i, h in enumerate(header, 1)}
-    kid = {h: k for k, h in ids.items()}
+    kid = dict(enumerate(ids))                                # the column's position → Jev's id
     state = {"file": table["name"], "columns": ids,
              "rows": [{k: (r[i] if i < len(r) else "") for i, k in enumerate(ids)} for r in rows[:SAMPLE]],
-             "roles": {kid[h]: r.get("role") for h, r in roles.items()},
+             "roles": {kid[i]: r.get("role") for i, r in roles.items()},
              "profile": {"rows": profile["rows"], "columns": {
-                 kid[h]: c | ({"determines": [kid[d] for d in c["determines"]], "repeats": repeats(profile, h)}
+                 kid[i]: c | ({"determines": [kid[d] for d in c["determines"]], "repeats": repeats(profile, i)}
                               if "determines" in c else {})
-                 for h, c in profile["columns"].items()}}}
+                 for i, c in profile["columns"].items()}}}
     keys = list(cand)
     q = {}
     for a in keys:
@@ -107,7 +108,8 @@ async def classify(jev, table: dict, saved: dict) -> dict:
         if p >= SURE:
             members[a] = []
         elif p > LOW:
-            warnings.append({"column": a, "problem": "joined record uncertain: not split", "probability": round(p, 2),
+            warnings.append({"column": header[a], "position": a, "problem": "joined record uncertain: not split",
+                             "probability": round(p, 2),
                              "question": {"type": "yes_no", "call": ans.call, "key": f"{kid[a]}_joined"}})
     for a, cols in cand.items():
         if a not in members:
@@ -120,10 +122,11 @@ async def classify(jev, table: dict, saved: dict) -> dict:
             if pb >= SURE:
                 members[a].append(b)
             elif pb > LOW:
-                warnings.append({"column": b, "problem": f"describes {a}? uncertain: kept on the row",
+                warnings.append({"column": header[b], "position": b,
+                                 "problem": f"describes {header[a]}? uncertain: kept on the row",
                                  "probability": round(pb, 2),
                                  "question": {"type": "yes_no", "call": ans.call, "key": f"{kid[a]}_has_{kid[b]}"}})
     placed = {b for cols in members.values() for b in cols}
     groups = [{"key": a, "columns": cols} for a, cols in members.items() if cols]
-    return {"groups": groups, "warnings": warnings} | ({"remaining": [h for h in header if h not in placed]} if groups else {})
-
+    return {"groups": groups, "warnings": warnings} | (
+        {"remaining": [i for i in range(len(header)) if i not in placed]} if groups else {})

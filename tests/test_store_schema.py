@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+import saved_cases
 from orbitrows.pipeline.store.schema import assemble, round_trip
 from orbitrows.services.csv.reader import read_table
 from orbitrows.sql.ddl import NewTable, create_table, ddl
@@ -28,7 +29,7 @@ def summary(store) -> dict:
 def test_case_matches_expected_and_round_trips(case):
     folder = CASES / case
     saved = json.loads((folder / "result.json").read_text())
-    files = {f: s for f, s in saved["tables"].items() if f != "incoming.csv"}   # the store: one per session
+    files = {f: s for f, s in saved_cases.tables(case).items() if f != "incoming.csv"}   # the store: one per session
     store = assemble(files)
     assert summary(store) == EXPECTED[case]
     rows = {f: read_table(folder / f, has_header=s["read"]["has_header"])["rows"] for f, s in files.items()}
@@ -46,9 +47,10 @@ def sections(name, cols, groups=(), pk=None):
     node = create_table(name, [{"header": h, "sql_type": t, "nullable": True} for h, t in cols]).model_dump()
     if pk:
         node["definition"]["primary_key"] = [f"c_{pk}"]
+    p = [h for h, _ in cols].index                            # the steps name a column by its position
     return {"read": {"header": [h for h, _ in cols], "has_header": True}, "schema": {"create_table": node},
             "roles": {"columns": {}}, "context": {"context_columns": {}, "source_context": {}},
-            "joins": {"groups": list(groups)}}
+            "joins": {"groups": [{"key": p(g["key"]), "columns": [p(c) for c in g["columns"]]} for g in groups]}}
 
 
 COLS = [("order_id", "INTEGER"), ("customer_id", "INTEGER"), ("customer_name", "TEXT"), ("product_sku", "TEXT"),

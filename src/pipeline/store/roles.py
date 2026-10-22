@@ -13,6 +13,7 @@ which classified a matched store/incoming pair; here one column of one table.
 """
 from orbitrows.services.model.client import ask, choice, pick
 from .context import ACTIVITY, SAMPLE
+from .profile import named
 
 KINDS = {
     "record_reference": "A reference code assigned to each record on its own, for lookup: a SKU, an article number, a "
@@ -57,34 +58,36 @@ LEVEL_RULES = [
 
 
 async def classify(jev, table: dict, context: dict, schema: dict, profile: dict) -> dict:
-    """{"columns": {header: {"role", "kind", "level"?, "flagged"?}}, "warnings": [...]}; context columns get no role.
+    """{"columns": {position: {"role", "kind", "level"?, "flagged"?}}, "warnings": [...]}; context columns get no role.
     `profile` is the profile of the table (pipeline/store/profile.py)."""
     header, rows = table["header"], table["rows"]
     ids = {f"k{i}": h for i, h in enumerate(header, 1)}
-    types = {c["header"]: c["sql_type"] for c in schema["create_table"]["definition"]["columns"]}
-    notes = {h: f"context column ({c['kind']})" for h, c in context["context_columns"].items()}
+    at = {k: i for i, k in enumerate(ids)}                    # Jev's id → the column's position
+    types = dict(enumerate(c["sql_type"] for c in schema["create_table"]["definition"]["columns"]))
+    notes = {i: f"context column ({c['kind']})" for i, c in context["context_columns"].items()}
     state = {"file": table["name"], "columns": ids,
              "rows": [{k: (r[i] if i < len(r) else "") for i, k in enumerate(ids)} for r in rows[:SAMPLE]],
-             "types": {k: types.get(h) for k, h in ids.items()},
-             "profile": {"rows": profile["rows"], "columns": {k: profile["columns"][h] for k, h in ids.items()}},
-             "context": {k: notes[h] for k, h in ids.items() if h in notes}}
-    asked = [k for k, h in ids.items() if h not in context["context_columns"]]
+             "types": {k: types.get(i) for k, i in at.items()},
+             "profile": {"rows": profile["rows"], "columns": {k: named(profile["columns"][i], header)
+                                                              for k, i in at.items()}},
+             "context": {k: notes[i] for k, i in at.items() if i in notes}}
+    asked = [k for k, i in at.items() if i not in context["context_columns"]]
 
     a1 = await ask(jev, state, {k: choice(ACTIVITY, "What kind of information is this column?", KINDS, KIND_RULES,
                                           column=k, evidence=EVIDENCE)
                                 for k in asked})
     columns, warnings = {}, []
     for k in asked:
-        kind, flagged = pick(a1, k, ids[k], "kind", warnings)
-        columns[ids[k]] = {"role": KIND_ROLE.get(kind), "kind": kind} | ({"flagged": True} if flagged else {})
+        kind, flagged = pick(a1, k, ids[k], "kind", warnings, position=at[k])
+        columns[at[k]] = {"role": KIND_ROLE.get(kind), "kind": kind} | ({"flagged": True} if flagged else {})
 
-    keys = [k for k in asked if columns[ids[k]]["role"] == "dedicated_key"]
+    keys = [k for k in asked if columns[at[k]]["role"] == "dedicated_key"]
     a2 = await ask(jev, state, {k: choice(ACTIVITY, "Determine the finest record level this key is intended to "
                                           "distinguish.", LEVELS, LEVEL_RULES, column=k, evidence=EVIDENCE)
                                 for k in keys})
     for k in keys:
-        level, flagged = pick(a2, k, ids[k], "level", warnings)
-        columns[ids[k]]["level"] = level
+        level, flagged = pick(a2, k, ids[k], "level", warnings, position=at[k])
+        columns[at[k]]["level"] = level
         if flagged:
-            columns[ids[k]]["flagged"] = True
+            columns[at[k]]["flagged"] = True
     return {"columns": columns, "warnings": warnings}

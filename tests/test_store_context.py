@@ -44,9 +44,9 @@ LINKS = {"k3_category": sure("currency"), "k3_describes_k1": 0.05, "k3_describes
 async def test_dedicated_context_column_describes_the_column_it_is_linked_to():
     jev = Stub(ROLES, LINKS)
     out = await context.classify(jev, TABLE, schema(), profile(TABLE))
-    assert out["context_columns"] == {"currency": {"context": "dedicated_context", "kind": "currency",
-                                                   "describes": ["price"]}}
-    assert out["source_context"] == {"price": {"kind": "currency", "from": "column", "column": "currency"}}
+    assert out["context_columns"] == {2: {"context": "dedicated_context", "kind": "currency",   # by position
+                                          "describes": [1]}}
+    assert out["source_context"] == {1: {"kind": "currency", "from": "column", "column": 2}}
     assert out["warnings"] == [] and jev.asked[1] == {"k3_category", "k3_describes_k1", "k3_describes_k2"}
 
 
@@ -55,7 +55,8 @@ async def test_numeric_dedicated_context_is_demoted_with_a_warning(numeric):
     jev = Stub(ROLES, {})
     out = await context.classify(jev, TABLE, schema(numeric), profile(TABLE))
     assert out["context_columns"] == {} and out["source_context"] == {}
-    assert out["warnings"] == [{"column": "currency", "problem": f"dedicated_context but typed {numeric}: none kept"}]
+    assert out["warnings"] == [{"column": "currency", "position": 2,
+                                "problem": f"dedicated_context but typed {numeric}: none kept"}]
     assert len(jev.asked) == 1                                  # no second call: nothing left to link
 
 
@@ -63,11 +64,11 @@ async def test_uncertain_role_keeps_the_likeliest_flagged_and_asks_the_user():
     roles = ROLES | {"k3": ("dedicated_context", {"dedicated_context": 0.55, "none": 0.45})}
     calls = {}
     out = await context.classify(Recorded(Stub(roles, LINKS), calls), TABLE, schema(), profile(TABLE))
-    assert out["context_columns"]["currency"]["flagged"] is True
-    assert out["context_columns"]["currency"]["context"] == "dedicated_context"
+    assert out["context_columns"][2]["flagged"] is True
+    assert out["context_columns"][2]["context"] == "dedicated_context"
     [w] = out["warnings"]
     q = w.pop("question")
-    assert w == {"column": "currency", "problem": "context option uncertain", "answer": "dedicated_context",
+    assert w == {"column": "currency", "position": 2, "problem": "context option uncertain", "answer": "dedicated_context",
                  "probability": 0.55}
     assert q == {"type": "choice", "call": q["call"], "key": "k3", "options": options(roles["k3"][1])}
     settle(calls, q["call"], q["key"], "none")                 # the user: not a context column
@@ -89,21 +90,21 @@ async def test_an_uncertain_numeric_role_offers_no_role_that_is_demoted():
 async def test_a_sure_uncertain_role_is_a_notice():
     roles = ROLES | {"k3": sure("uncertain", 0.9)}
     out = await context.classify(Stub(roles, {}), TABLE, schema(), profile(TABLE))
-    assert out["warnings"] == [{"column": "currency", "problem": "context option uncertain", "answer": "uncertain",
+    assert out["warnings"] == [{"column": "currency", "position": 2, "problem": "context option uncertain", "answer": "uncertain",
                                 "probability": 0.9}]
 
 
-@pytest.mark.parametrize("answer, describes", [("yes", ["sku", "price"]), ("no", ["price"])])
+@pytest.mark.parametrize("answer, describes", [("yes", [0, 1]), ("no", [1])])
 async def test_an_unsure_link_is_a_yes_no_question(answer, describes):
     links, calls = LINKS | {"k3_describes_k1": 0.4}, {}
     out = await context.classify(Recorded(Stub(ROLES, links), calls), TABLE, schema(), profile(TABLE))
-    assert out["context_columns"]["currency"]["describes"] == ["price"]
+    assert out["context_columns"][2]["describes"] == [1]
     [w] = out["warnings"]
-    assert w == {"column": "currency", "problem": "does it describe sku?", "probability": 0.4, "linked": False,
+    assert w == {"column": "currency", "position": 2, "problem": "does it describe sku?", "probability": 0.4, "linked": False,
                  "question": {"type": "yes_no", "call": w["question"]["call"], "key": "k3_describes_k1"}}
     settle(calls, w["question"]["call"], "k3_describes_k1", answer)
     out = await context.classify(Recorded(Stub(), calls), TABLE, schema(), profile(TABLE))
-    assert out["context_columns"]["currency"]["describes"] == describes and out["warnings"] == []
+    assert out["context_columns"][2]["describes"] == describes and out["warnings"] == []
 
 
 async def test_a_column_the_header_names_is_linked_without_a_question():
@@ -112,7 +113,7 @@ async def test_a_column_the_header_names_is_linked_without_a_question():
     links = LINKS | {"k3_describes_k2": 0.5}                    # unsure, but the header names price: no answer could change it
     out = await context.classify(Stub(ROLES, links), table, {"create_table": {"definition": {"columns": [
         {"header": h, "sql_type": t} for h, t in types.items()]}}}, profile(table))
-    assert out["context_columns"]["price currency"]["describes"] == ["price"] and out["warnings"] == []
+    assert out["context_columns"][2]["describes"] == [1] and out["warnings"] == []
 
 
 async def test_an_unsure_header_letter_is_a_question(monkeypatch):
@@ -129,7 +130,7 @@ async def test_an_unsure_header_letter_is_a_question(monkeypatch):
     assert out["source_context"] == {}
     settle(calls, w["question"]["call"], "k2_letter", "yes")
     out = await context.classify(Recorded(Stub(), calls), table, types, profile(table))
-    assert out["source_context"] == {"Volume (L)": {"kind": "physical_unit", "from": "header", "unit": "l"}}
+    assert out["source_context"] == {1: {"kind": "physical_unit", "from": "header", "unit": "l"}}
     assert out["warnings"] == []
     sure_no = Stub({"k1": sure("none"), "k2": sure("header_context")}, {"k2_letter": 0.1})
     out = await context.classify(sure_no, table, types, profile(table))
@@ -139,14 +140,15 @@ async def test_an_unsure_header_letter_is_a_question(monkeypatch):
 async def test_context_column_describing_nothing_is_flagged_for_the_merchant():
     links = {"k3_category": sure("currency"), "k3_describes_k1": 0.05, "k3_describes_k2": 0.1}
     out = await context.classify(Stub(ROLES, links), TABLE, schema(), profile(TABLE))
-    assert out["context_columns"]["currency"]["describes"] == []
-    assert out["warnings"] == [{"column": "currency", "problem": "context column describes no column: the merchant decides"}]
+    assert out["context_columns"][2]["describes"] == []
+    assert out["warnings"] == [{"column": "currency", "position": 2,
+                                "problem": "context column describes no column: the merchant decides"}]
 
 
 async def test_unsure_category_is_unknown_and_a_question():
     links, calls = LINKS | {"k3_category": ("currency", {"currency": 0.5, "other": 0.5})}, {}
     out = await context.classify(Recorded(Stub(ROLES, links), calls), TABLE, schema(), profile(TABLE))
-    assert out["context_columns"]["currency"]["kind"] == "unknown"
+    assert out["context_columns"][2]["kind"] == "unknown"
     [w] = out["warnings"]
     assert w["problem"] == "context category unsure" and w["question"] == {
         "type": "choice", "call": w["question"]["call"], "key": "k3_category",
@@ -154,4 +156,4 @@ async def test_unsure_category_is_unknown_and_a_question():
                     {"answer": "other", "value": "other", "probability": 0.5}]}
     settle(calls, w["question"]["call"], "k3_category", "other")
     out = await context.classify(Recorded(Stub(), calls), TABLE, schema(), profile(TABLE))
-    assert out["context_columns"]["currency"]["kind"] == "other" and out["warnings"] == []
+    assert out["context_columns"][2]["kind"] == "other" and out["warnings"] == []

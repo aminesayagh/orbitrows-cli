@@ -18,6 +18,7 @@ import re
 from orbitrows.services.model.client import ask, choice, options, sure, yes_no, SURE
 from orbitrows.units.dictionary import declared, per_unit
 from orbitrows.units.header import resolve_header
+from .profile import named
 
 
 def declaration(header, kind=None):
@@ -83,16 +84,18 @@ def _words(header: str) -> set:
 
 
 async def classify(jev, table: dict, schema: dict, profile: dict) -> dict:
-    """The context of every column of one table, in the v1 vocabulary (see tests/fixtures/cases/context_expected.json).
-    `schema` is the types step's section, `profile` the profile of the table (pipeline/store/profile.py)."""
+    """The context of every column of one table, in the v1 vocabulary (see tests/fixtures/cases/context_expected.json),
+    by column position. `schema` is the types step's section, `profile` the profile of the table
+    (pipeline/store/profile.py)."""
     header, rows = table["header"], table["rows"]
     ids = {f"k{i}": h for i, h in enumerate(header, 1)}
-    kid = {h: k for k, h in ids.items()}
-    types = {c["header"]: c["sql_type"] for c in schema["create_table"]["definition"]["columns"]}
+    at = {k: i for i, k in enumerate(ids)}                    # Jev's id → the column's position
+    types = dict(enumerate(c["sql_type"] for c in schema["create_table"]["definition"]["columns"]))
     state = {"file": table["name"], "columns": ids,
              "rows": [{k: (r[i] if i < len(r) else "") for i, k in enumerate(ids)} for r in rows[:SAMPLE]],
-             "sql_types": {k: types.get(h) for k, h in ids.items()},
-             "profile": {"rows": profile["rows"], "columns": {k: profile["columns"][h] for k, h in ids.items()}}}
+             "sql_types": {k: types.get(i) for k, i in at.items()},
+             "profile": {"rows": profile["rows"], "columns": {k: named(profile["columns"][i], header)
+                                                              for k, i in at.items()}}}
     warnings = []
 
     # Jev 1: the role of every column
@@ -103,30 +106,32 @@ async def classify(jev, table: dict, schema: dict, profile: dict) -> dict:
                                 for k in ids})
     roles = {}
     for k, h in ids.items():
+        i = at[k]
         c = sure(a1, k)
-        roles[h] = c if c and c != "uncertain" else "uncertain"
-        if roles[h] == "uncertain":
+        roles[i] = c if c and c != "uncertain" else "uncertain"
+        if roles[i] == "uncertain":
             top = a1.get(k, (None, {}))
-            w = {"column": h, "problem": "context option uncertain", "answer": top[0],
+            w = {"column": h, "position": i, "problem": "context option uncertain", "answer": top[0],
                  "probability": round(top[1].get(top[0], 0), 2) if top[0] else None}
             # a number cannot name a unit: dedicated_context and both are demoted below, so the user is not offered them
-            probs = {o: p for o, p in top[1].items() if not (types.get(h) in NUMERIC and o in CONTEXT_ONLY)}
+            probs = {o: p for o, p in top[1].items() if not (types.get(i) in NUMERIC and o in CONTEXT_ONLY)}
             if top[0] and top[1].get(top[0], 0) < SURE and len(options(probs)) > 1:   # below SURE: the user picks
                 w["question"] = {"type": "choice", "call": a1.call, "key": k, "options": options(probs)}
             warnings.append(w)
     # uncertain: the likeliest role is still used, flagged (diagram: "uncertain -> still linked, flagged")
-    likely = {h: roles[h] if roles[h] != "uncertain" else (a1.get(k, (None,))[0] or "none") for k, h in ids.items()}
-    for h in header:                                          # numbers cannot name a unit: not a context column
-        if likely[h] in CONTEXT_ONLY and types.get(h) in NUMERIC:
-            demoted = "header_context" if likely[h] == "both" else "none"
-            warnings.append({"column": h, "problem": f"{likely[h]} but typed {types[h]}: {demoted} kept"})
-            likely[h] = demoted
-            roles[h] = demoted if roles[h] != "uncertain" else roles[h]
-    linking = [k for k, h in ids.items() if likely[h] in CONTEXT_ONLY]
+    likely = {i: roles[i] if roles[i] != "uncertain" else (a1.get(k, (None,))[0] or "none") for k, i in at.items()}
+    for i, h in enumerate(header):                            # numbers cannot name a unit: not a context column
+        if likely[i] in CONTEXT_ONLY and types.get(i) in NUMERIC:
+            demoted = "header_context" if likely[i] == "both" else "none"
+            warnings.append({"column": h, "position": i, "problem": f"{likely[i]} but typed {types[i]}: {demoted} kept"})
+            likely[i] = demoted
+            roles[i] = demoted if roles[i] != "uncertain" else roles[i]
+    linking = [k for k, i in at.items() if likely[i] in CONTEXT_ONLY]
     # a column whose header declares its own unit is not described by another column
-    own = {h: u for h in header if (u := declaration(h))}
-    candidates = [k for k, h in ids.items() if k not in linking and h not in own]
-    letters = [k for k, h in ids.items() if likely[h] in ("header_context", "both") and h in own and _one_letter(h, own[h])]
+    own = {i: u for i, h in enumerate(header) if (u := declaration(h))}
+    candidates = [k for k, i in at.items() if k not in linking and i not in own]
+    letters = [k for k, i in at.items()
+               if likely[i] in ("header_context", "both") and i in own and _one_letter(ids[k], own[i])]
 
     # Jev 2: category and links of the dedicated context columns
     q2 = {}
@@ -140,14 +145,14 @@ async def classify(jev, table: dict, schema: dict, profile: dict) -> dict:
     for k in letters:
         q2[f"{k}_letter"] = yes_no(ACTIVITY, "The header of column `column` holds a single letter that reads as the unit "
                                    "`unit`. Does the header declare that the column's values are measured in this unit?",
-                                   RULES + [LETTER_RULE], column=k, unit=own[ids[k]]["unit"],
+                                   RULES + [LETTER_RULE], column=k, unit=own[at[k]]["unit"],
                                    evidence="Use the column header, its sampled values and its profile.")
     a2 = await ask(jev, state, q2)
     unconfirmed = set()
     for k in letters:                                         # a letter Jev does not confirm declares nothing
         if (p := a2.get(f"{k}_letter", 0)) < SURE:
-            unconfirmed.add(ids[k])
-            w = {"column": ids[k], "problem": f"header letter read as {own.pop(ids[k])['unit']} not "
+            unconfirmed.add(at[k])
+            w = {"column": ids[k], "position": at[k], "problem": f"header letter read as {own.pop(at[k])['unit']} not "
                  "confirmed: no header unit", "probability": round(p, 2)}
             if p > 1 - SURE:                                  # unsure, not a sure no: the user says if it is the unit
                 w["question"] = {"type": "yes_no", "call": a2.call, "key": f"{k}_letter"}
@@ -155,54 +160,57 @@ async def classify(jev, table: dict, schema: dict, profile: dict) -> dict:
 
     context_columns, source = {}, {}
     for k in linking:
-        h = ids[k]
+        h, i = ids[k], at[k]
         kind = sure(a2, f"{k}_category") or "unknown"
         if kind == "unknown":
             top, probs = a2.get(f"{k}_category", (None, {}))
-            w = {"column": h, "problem": "context category unsure", "answer": top}
+            w = {"column": h, "position": i, "problem": "context category unsure", "answer": top}
             if top and probs.get(top, 0) < SURE:              # a model answer below SURE: the user picks the category
                 w["question"] = {"type": "choice", "call": a2.call, "key": f"{k}_category", "options": options(probs)}
             warnings.append(w)
-        links = {ids[t]: round(a2.get(f"{k}_describes_{t}", 0), 2) for t in candidates}
+        links = {t: round(a2.get(f"{k}_describes_{t}", 0), 2) for t in candidates}
         # a header that names value columns ("description_language", "Unité poids") describes those columns only
-        named = [ids[t] for t in candidates if _words(ids[t]) and _words(ids[t]) <= _words(h)]
-        if named:
-            links = {t: p if t in named else 0.0 for t, p in links.items()}
-        describes = [t for t, p in links.items() if p >= 0.5 or t in named]
+        by_name = [t for t in candidates if _words(ids[t]) and _words(ids[t]) <= _words(h)]
+        if by_name:
+            links = {t: p if t in by_name else 0.0 for t, p in links.items()}
+        describes = [at[t] for t, p in links.items() if p >= 0.5 or t in by_name]
         for t, p in links.items():
-            if 0.2 < p < SURE and t not in named:             # a named column is linked by its name: nothing to ask
-                warnings.append({"column": h, "problem": f"does it describe {t}?", "probability": p,
+            if 0.2 < p < SURE and t not in by_name:            # a named column is linked by its name: nothing to ask
+                warnings.append({"column": h, "position": i, "problem": f"does it describe {ids[t]}?", "probability": p,
                                  "linked": p >= 0.5, "question": {"type": "yes_no", "call": a2.call,
-                                                                  "key": f"{k}_describes_{kid[t]}"}})
+                                                                  "key": f"{k}_describes_{t}"}})
         if not describes:
-            warnings.append({"column": h, "problem": "context column describes no column: the merchant decides"})
-        entry = {"context": roles[h] if roles[h] != "uncertain" else a1[k][0], "kind": kind, "describes": describes}
-        if roles[h] == "uncertain":
+            warnings.append({"column": h, "position": i,
+                             "problem": "context column describes no column: the merchant decides"})
+        entry = {"context": roles[i] if roles[i] != "uncertain" else a1[k][0], "kind": kind, "describes": describes}
+        if roles[i] == "uncertain":
             entry["flagged"] = True
-        if likely[h] == "both" and h in own and (u := declaration(h, kind)):
+        if likely[i] == "both" and i in own and (u := declaration(h, kind)):
             entry["unit"] = u["unit"]
-        context_columns[h] = entry
+        context_columns[i] = entry
         for t in describes:
-            source.setdefault(t, []).append({"kind": kind, "from": "column", "column": h})
+            source.setdefault(t, []).append({"kind": kind, "from": "column", "column": i})
 
-    for h in header:                                          # the source of each value column: column > header
-        if h in context_columns:
+    for i, h in enumerate(header):                            # the source of each value column: column > header
+        if i in context_columns:
             continue
-        found = list(source.get(h, []))
-        if likely.get(h) in ("header_context", "both"):
-            if u := own.get(h):
+        found = list(source.get(i, []))
+        if likely.get(i) in ("header_context", "both"):
+            if u := own.get(i):
                 found.append({"kind": u["kind"], "from": "header", "unit": u["unit"]}
-                               | ({"flagged": True} if roles[h] == "uncertain" else {}))
-            elif h not in unconfirmed:
-                warnings.append({"column": h, "problem": "the header declares a unit the readers cannot name: no source"})
+                               | ({"flagged": True} if roles[i] == "uncertain" else {}))
+            elif i not in unconfirmed:
+                warnings.append({"column": h, "position": i,
+                                 "problem": "the header declares a unit the readers cannot name: no source"})
         if not found:
             continue
-        source[h] = found[0]
+        source[i] = found[0]
         units = {o.get("unit") for o in found if o.get("unit")}
         if len(units) > 1:
-            warnings.append({"column": h, "problem": f"sources disagree: {sorted(units)}; {found[0]['from']} wins"})
+            warnings.append({"column": h, "position": i,
+                             "problem": f"sources disagree: {sorted(units)}; {found[0]['from']} wins"})
         if len([o for o in found if o["from"] == "column"]) > 1:
-            warnings.append({"column": h, "problem": "described by several context columns"})
+            warnings.append({"column": h, "position": i, "problem": "described by several context columns"})
     return {"table": table["name"], "context_columns": context_columns,
-            "source_context": {h: v for h, v in source.items() if isinstance(v, dict)},
+            "source_context": {i: v for i, v in source.items() if isinstance(v, dict)},
             "warnings": warnings}

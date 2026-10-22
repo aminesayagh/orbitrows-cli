@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import saved_cases
 from orbitrows.pipeline.store import run
 from orbitrows.services.storage import store as storage
 
@@ -21,8 +22,7 @@ def home(tmp_path, monkeypatch):
 
 def case(name):
     """The store files' saved sections (as test_store_schema builds them) and their rows."""
-    saved = json.loads((CASES / name / "result.json").read_text())
-    files = {f: s for f, s in saved["tables"].items() if f != "incoming.csv"}
+    files = {f: s for f, s in saved_cases.tables(name).items() if f != "incoming.csv"}
     return files, run.rows([CASES / name / f for f in files], files)
 
 
@@ -80,7 +80,7 @@ def test_store_is_written(name):
 
     for (header, profile), m in zip(db.execute("SELECT source_header, profile_json FROM _store_columns ORDER BY id"),
                                     st["metadata"]):            # each column's own profile; none for an added id
-        want = None if header is None else files[m["source_file"]]["profile"]["columns"][header]
+        want = None if header is None else files[m["source_file"]]["profile"]["columns"][m["position"]]
         assert (profile and json.loads(profile)) == want, header
 
     [(hid, name, prompt, ast, sql, done)] = db.execute(
@@ -111,7 +111,7 @@ def test_a_cell_beyond_the_header_refuses_the_store(tmp_path):
     lines = (tmp_path / "customers.csv").read_text().splitlines()
     lines[1] += ",LOST CELL"                                  # row 1 has one cell more than the header
     (tmp_path / "customers.csv").write_text("\n".join(lines) + "\n")
-    files = json.loads((CASES / "shop" / "result.json").read_text())["tables"]
+    files = saved_cases.tables("shop")
     rows = run.rows([tmp_path / f for f in files], files)
     with pytest.raises(storage.Lost) as lost:
         storage.write("st_test", run.build(files)["store"], rows)

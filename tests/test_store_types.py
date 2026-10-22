@@ -1,4 +1,4 @@
-import json
+import saved_cases
 from pathlib import Path
 
 import pytest
@@ -10,7 +10,7 @@ from orbitrows.sql.ddl import create_table
 
 CASES = Path(__file__).parent / "fixtures" / "cases"
 TABLES = [(f.parent.name, name, saved) for f in sorted(CASES.glob("*/result.json"))
-          for name, saved in json.loads(f.read_text())["tables"].items()]
+          for name, saved in saved_cases.tables(f.parent.name).items()]
 PICKED = [x for x in TABLES if x[0] in ("shop", "joins_chain")][:2]
 NO_CONTEXT = {"context_columns": {}, "source_context": {}}
 
@@ -80,7 +80,7 @@ async def test_uncertain_type_keeps_text_and_unsure_nullability_is_nullable():
     cols = out["create_table"]["definition"]["columns"]
     assert [(c["sql_type"], c["nullable"]) for c in cols] == [("TEXT", True), ("INTEGER", True)]
     w = out["warnings"][0]
-    assert w | {"question": None} == {"column": "sku", "problem": "type uncertain: TEXT kept", "answer": "INTEGER",
+    assert w | {"question": None} == {"column": "sku", "position": 0, "problem": "type uncertain: TEXT kept", "answer": "INTEGER",
                                       "probability": 0.6, "question": None}
     assert w["question"] == {"type": "choice", "call": w["question"]["call"], "key": "k1_type",     # for the user
                              "options": [{"answer": "INTEGER", "value": "INTEGER", "probability": 0.6},

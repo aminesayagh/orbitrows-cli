@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import shutil
@@ -10,6 +11,7 @@ from pathlib import Path
 import pytest
 from typesafe_sdk import TypeSafeError
 
+import saved_cases
 from orbitrows.pipeline.store.schema import _same_number
 from orbitrows.services.cli import main as cli
 from orbitrows.services.csv.reader import read_table
@@ -22,11 +24,7 @@ SHOP = ["customers.csv", "orders.csv", "order_lines.csv", "products.csv"]
 CLASSIFY = cli.run.classify                                   # the real one, before the env fixture replaces it
 
 
-def saved(case) -> dict:
-    return json.loads((CASES / case / "result.json").read_text())["tables"]
-
-
-SAVED = saved("shop") | saved("joins_chain")                  # what the model's steps decided, by file name
+SAVED = saved_cases.tables("shop") | saved_cases.tables("joins_chain")   # what the model's steps decided, by file name
 
 
 @pytest.fixture
@@ -40,7 +38,7 @@ def env(tmp_path, monkeypatch):
 
     async def fake_classify(jev, paths, step=lambda text: None):
         step("classifying")
-        return {p.name: json.loads(json.dumps(SAVED[p.name])) for p in paths}
+        return {p.name: copy.deepcopy(SAVED[p.name]) for p in paths}
 
     monkeypatch.setattr(cli.run, "classify", fake_classify)
     for f in SHOP:
@@ -244,7 +242,7 @@ def pausing(runs: list):
         if len(runs) == 1:                                    # what the model answered, as Recorded keeps it
             jev.calls |= {"c" * 16: {"k4_role": ["price", {"price": 0.5, "quantity": 0.4}]}, "h" * 16: {"header": 0.6}}
             raise cli.run.Paused("roles", [CHOICE, YES_NO], [{"file": "orders.csv", "step": "roles"} | SHOWN_NOTICE])
-        return {p.name: json.loads(json.dumps(SAVED[p.name])) for p in paths}
+        return {p.name: copy.deepcopy(SAVED[p.name]) for p in paths}
     return classify
 
 

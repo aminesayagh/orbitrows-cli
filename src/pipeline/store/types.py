@@ -77,7 +77,7 @@ def check_store(table: dict, create: dict) -> list[dict]:
             bad += [(n, v, "empty in a not-nullable column") for n, v in enumerate(vals) if v is None]
         bad.sort(key=lambda b: b[0])
         if bad:
-            warnings.append({"column": c["header"], "type": c["sql_type"], "count": len(bad),
+            warnings.append({"column": c["header"], "position": i, "type": c["sql_type"], "count": len(bad),
                              "rows": [{"row": n + first, "value": v, "problem": p} for n, v, p in bad[:LISTED]]})
     return warnings
 
@@ -88,11 +88,13 @@ def classify_incoming(table: dict) -> dict:
     return {"create_table": create_table(table["name"], columns).model_dump(), "warnings": []}
 
 
-def _context_note(h, context):
-    if c := context["context_columns"].get(h):
-        return f"context column: the {c['kind']} of {', '.join(c['describes']) or 'no column'}"
-    if s := context["source_context"].get(h):
-        return f"its {s['kind']} comes from " + (f"column {s['column']}" if s["from"] == "column" else f"the header ({s['unit']})")
+def _context_note(i, context, header):
+    """What the context step found for the column at position i, by header."""
+    if c := context["context_columns"].get(i):
+        return f"context column: the {c['kind']} of {', '.join(header[d] for d in c['describes']) or 'no column'}"
+    if s := context["source_context"].get(i):
+        return f"its {s['kind']} comes from " + (f"column {header[s['column']]}" if s["from"] == "column"
+                                                 else f"the header ({s['unit']})")
     return "no context"
 
 
@@ -103,7 +105,7 @@ async def classify(jev, table: dict, context: dict) -> dict:
     ids = {f"k{i}": h for i, h in enumerate(header, 1)}
     state = {"file": table["name"], "columns": ids,
              "rows": [{k: (r[i] if i < len(r) else "") for i, k in enumerate(ids)} for r in rows[:SAMPLE]],
-             "context": {k: _context_note(h, context) for k, h in ids.items()}}
+             "context": {k: _context_note(i, context, header) for i, k in enumerate(ids)}}
     q = {}
     for k in ids:
         q[f"{k}_type"] = choice(ACTIVITY, "Choose the SQLite type that stores this column's values as they are written.",
@@ -112,11 +114,11 @@ async def classify(jev, table: dict, context: dict) -> dict:
     a = await ask(jev, state, q)
 
     columns, warnings = [], []
-    for k, h in ids.items():
+    for i, (k, h) in enumerate(ids.items()):
         t = sure(a, f"{k}_type")
         if not t:
             top, probs = a.get(f"{k}_type", (None, {}))
-            w = {"column": h, "problem": "type uncertain: TEXT kept", "answer": top,
+            w = {"column": h, "position": i, "problem": "type uncertain: TEXT kept", "answer": top,
                  "probability": round(probs.get(top, 0), 2) if top else None}
             if top:                                           # a model answer below SURE: the user picks the type
                 w["question"] = {"type": "choice", "call": a.call, "key": f"{k}_type", "options": options(probs)}

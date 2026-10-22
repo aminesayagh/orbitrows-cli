@@ -1,5 +1,7 @@
 """The steps of the store import. The first six run on one CSV file at a time; keys, joins and schema come after,
 joins per file and keys and schema over all the store files together. run.py chains them, keys before joins.
+Every step identifies a column by its position in the file (0 for the first), never by its header: two columns may
+share a header. The header stays data: what Jev reads, what a warning shows ("column"), what the export writes back.
 
     header.detect(jev, path)                       is the first row a header? (1 Jev yes/no)
     read_table(path, has_header=...)               orbitrows.services.csv.reader (code)

@@ -1,10 +1,16 @@
 import json
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
 
+import saved_cases
 from orbitrows.pipeline.store import run, schema
+from orbitrows.services.csv.reader import read_table
 from orbitrows.services.model.client import Model, Recorded, options, settle
+from orbitrows.services.storage import store as storage
+from orbitrows.services.storage.export import export
 
 CASES = Path(__file__).parent / "fixtures" / "cases"
 pytestmark = pytest.mark.usefixtures("no_gliner")
@@ -89,8 +95,7 @@ async def test_an_unsure_type_is_a_question_and_the_rows_that_do_not_fit_are_not
 
 
 def fixture(case):
-    saved = json.loads((CASES / case / "result.json").read_text())
-    return {f: s for f, s in saved["tables"].items() if f != "incoming.csv"}
+    return {f: s for f, s in saved_cases.tables(case).items() if f != "incoming.csv"}
 
 
 def test_build_collects_every_warning():
@@ -136,3 +141,20 @@ async def test_a_pause_holds_the_questions_of_one_call_per_step(tmp_path):
         await run.classify(Recorded(stub := Unsure(given), calls), [path])
     [q] = again.value.questions
     assert again.value.phase == "context" and q["question"]["key"] == "k3_category" and stub.calls == 0
+
+
+async def test_two_columns_with_the_same_header_stay_two_columns(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
+    path = tmp_path / "prices.csv"
+    path.write_text("id,Price,Price\n1,10,12\n2,20,25\n3,30,12\n")
+    saved = await run.classify(Unsure({"header": 0.95}), [path])
+    storage.copy_files("st_twin", [path])
+    storage.write("st_twin", run.build(saved)["store"], run.rows([path], saved))     # no Lost: nothing merged
+    with closing(sqlite3.connect(storage.folder("st_twin") / "session.db")) as db:
+        twins = db.execute("SELECT id, position, profile_json FROM _store_columns WHERE source_header = 'Price' "
+                           "ORDER BY position").fetchall()
+        assert [p for _, p, _ in twins] == [1, 2] and twins[0][0] != twins[1][0]
+        assert [json.loads(j)["values"] for *_, j in twins] == [["10", "20", "30"], ["12", "25"]]   # each its own
+        [written] = export(db, storage.folder("st_twin"), tmp_path / "out")
+    back, upload = read_table(written["path"], has_header=True), read_table(path, has_header=True)
+    assert (back["header"], back["rows"]) == (upload["header"], upload["rows"])
