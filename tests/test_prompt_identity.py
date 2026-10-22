@@ -15,7 +15,8 @@ SRC = Path(__file__).resolve().parents[1] / "src"
 PORTED = {f"pipeline/prompt/{p.name}": f"v2/prompt_ast/{p.name}" for p in sorted((SRC / "pipeline" / "prompt").glob("*.py"))
           if p.name not in ("pipeline.py", "asking.py")} | {
     "sql/dml.py": "v2/ast/dml.py", "sql/sql.py": "v2/ast/sql.py", "units/parameters.py": "v2/units/parameters.py"}
-GONE = {"fastino/gliner2-multi-v1"}                          # split.py's model name: the loader is services/extractor now
+GONE = {"fastino/gliner2-multi-v1",                          # split.py's model name: the loader is services/extractor now
+        "coref_work"}                                        # coref.py's work folder: a private temporary one per process now
 ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 
 

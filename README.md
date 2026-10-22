@@ -16,6 +16,22 @@ cp .env.example .env   # then fill in TYPESAFE_API_KEY
 uv run --env-file .env orbitrows --help
 ```
 
+## CorPipe setup
+
+Messages find the words that point to other words ("them", "the copies") with CorPipe, a local model that runs in its
+own Python environment, because its `transformers` version clashes with the CLI's. `orbitrows message` refuses, and
+says what is missing, until it is set up. The PoC documents no commands for it, only the paths it expects, so these
+are the steps that produce them:
+
+```bash
+python -m venv .venv-corpipe                                   # next to pyproject.toml
+git clone https://github.com/ufal/crac2026-corpipe .venv-corpipe/src/crac2026-corpipe
+.venv-corpipe/bin/pip install -r .venv-corpipe/src/crac2026-corpipe/requirements.txt
+```
+
+The model (`ufal/corpipe26-onestage-corefud1.4-large-260702`) downloads on first use. Its license is CC BY-NC-SA 4.0
+(non-commercial).
+
 ## Using it
 
 ```bash

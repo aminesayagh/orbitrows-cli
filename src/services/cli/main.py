@@ -15,6 +15,7 @@ from pathlib import Path
 
 from typesafe_sdk import TypeSafeError
 
+from orbitrows.pipeline.prompt import coref
 from orbitrows.pipeline.store import run
 from orbitrows.services.cli.crash import report
 from orbitrows.services.csv.reader import read_table
@@ -259,6 +260,8 @@ def ask(target: tuple[str, str | None], request: dict, launch: bool = True) -> d
 def message(text: str, ref: str | None) -> int:
     """Run by the prompt pipeline in the store's session (started if needed, after the key is checked): applied, not
     saved until exit, undo reverts it; or paused on questions for the user."""
+    if not os.environ.get("ORBITROWS_HANDLER") and (why := coref.missing()):   # a test's handler needs no CorPipe
+        raise Refusal(why)
     target, request = resolve(ref), {"op": "message", "text": text}
     if (reply := ask(target, request, launch=False)) is None:
         need_key()                                            # the server runs the model with this process's env

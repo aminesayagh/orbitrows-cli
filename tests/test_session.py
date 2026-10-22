@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from orbitrows.pipeline.prompt import pipeline
+from orbitrows.pipeline.prompt import coref, pipeline
 from orbitrows.pipeline.store.run import Paused
 from orbitrows.services.cli import main as cli
 from orbitrows.services.model import client as model
@@ -278,6 +278,7 @@ def piped(served, monkeypatch):
 
     monkeypatch.delenv("ORBITROWS_HANDLER")
     monkeypatch.setattr(pipeline, "run", doubling)
+    monkeypatch.setattr(coref, "missing", lambda: None)       # CorPipe is not set up here, and never started
     monkeypatch.setattr(model, "connect", Unsure)
     s = sessions.Session(served.id, sessions.handler())
 
