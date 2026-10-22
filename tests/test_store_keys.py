@@ -5,6 +5,7 @@ import pytest
 
 import saved_cases
 from orbitrows.pipeline.store.keys import NONE, classify
+from orbitrows.pipeline.store.profile import profile
 from orbitrows.services.csv.reader import read_table
 from orbitrows.services.model.client import Model, Recorded, settle
 from orbitrows.sql.ddl import create_table
@@ -121,6 +122,22 @@ async def test_reference_of_another_sqlite_type_is_reported_by_check_references(
     problems = [w for w in got["orders.csv"]["warnings"] if w["column"] is None]
     assert len(problems) == 1 and "TEXT" in problems[0]["problem"] and "INTEGER" in problems[0]["problem"], problems
     assert got["customers.csv"]["warnings"] == []
+
+
+async def test_primary_key_question_shows_the_roles_probabilities_and_the_row_order():
+    stock = "35 7 25 12 20 5 3 140 18 31".split()
+    rows = [[q, f"A-{1001 + i}"] for i, q in enumerate(stock)]
+    table, saved = entry("no_headers", ["col1", "col3"], rows, {})
+    saved["profile"] = profile(table)
+    saved["roles"]["columns"] = {
+        0: {"role": "dedicated_key", "kind": "record_reference", "probability": {"kind": 0.8, "level": 0.95}},
+        1: {"role": "dedicated_key", "kind": "record_reference", "probability": {"kind": 1.0, "level": 0.97}}}
+    jev = Stub({"a": sure("a2")})
+    await classify(jev, [(table, saved)])
+    t = jev.states[0]["tables"]["a"]
+    assert t["roles"]["a1"]["probability"] == {"kind": 0.8, "level": 0.95}
+    assert t["profile"]["columns"]["a2"]["follows_row_order"] is True and "follows_row_order" not in t["profile"]["columns"]["a1"]
+    assert any("follows_row_order" in r for r in jev.asked[0]["a"]["instructions"]["rules"])
 
 
 class Replay(Model):

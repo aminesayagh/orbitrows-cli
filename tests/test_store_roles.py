@@ -36,6 +36,8 @@ async def test_sure_answers_give_the_saved_roles(case, name, saved):
     table = read_table(CASES / case / name, has_header=saved["read"]["has_header"])
     replay = Replay({h: c for h, c in saved["roles"]["columns"].items()})
     out = await classify(replay, table, saved["context"], saved["schema"], profile(table))
+    for c in out["columns"].values():
+        c.pop("probability")                                   # the PoC saved no probabilities
     assert out == saved["roles"]
 
 
@@ -70,8 +72,9 @@ async def test_kind_gives_the_role_and_a_context_column_is_not_asked():
     jev = Stub({"k1": sure("record_reference"), "k2": sure("name")}, {"k1": sure("individual_record")})
     out = await classify(jev, TABLE, CONTEXT, SCHEMA, profile(TABLE))
     assert jev.asked == [{"k1", "k2"}, {"k1"}]                  # no question for k3 (currency); levels for keys only
-    assert out["columns"] == {0: {"role": "dedicated_key", "kind": "record_reference", "level": "individual_record"},
-                              1: {"role": "descriptive_base", "kind": "name"}}
+    assert out["columns"] == {0: {"role": "dedicated_key", "kind": "record_reference", "level": "individual_record",
+                                  "probability": {"kind": 0.9, "level": 0.9}},
+                              1: {"role": "descriptive_base", "kind": "name", "probability": {"kind": 0.9}}}
     assert out["warnings"] == []
 
 
@@ -79,7 +82,8 @@ async def test_uncertain_kind_keeps_the_likeliest_role_flagged_and_asks_the_user
     calls = {}
     jev = Stub({"k1": ("attribute", {"attribute": 0.6, "name": 0.4}), "k2": sure("name")})
     out = await classify(Recorded(jev, calls), TABLE, CONTEXT, SCHEMA, profile(TABLE))
-    assert out["columns"][0] == {"role": "qualifier", "kind": "attribute", "flagged": True}
+    assert out["columns"][0] == {"role": "qualifier", "kind": "attribute", "flagged": True,
+                                 "probability": {"kind": 0.6}}
     [w] = out["warnings"]
     q = w.pop("question")
     assert w == {"column": "sku", "position": 0, "problem": "kind uncertain", "answer": "attribute", "probability": 0.6}
@@ -88,7 +92,8 @@ async def test_uncertain_kind_keeps_the_likeliest_role_flagged_and_asks_the_user
                              {"answer": "name", "value": "name", "probability": 0.4}]}
     settle(calls, q["call"], "k1", "name")                     # the user: it is a name
     out = await classify(Recorded(Stub(), calls), TABLE, CONTEXT, SCHEMA, profile(TABLE))   # replayed, no call
-    assert out["columns"][0] == {"role": "descriptive_base", "kind": "name"} and out["warnings"] == []
+    assert out["columns"][0] == {"role": "descriptive_base", "kind": "name", "probability": {"kind": 1.0}}
+    assert out["warnings"] == []
 
 
 async def test_uncertain_level_keeps_the_likeliest_flagged():
@@ -96,5 +101,5 @@ async def test_uncertain_level_keeps_the_likeliest_flagged():
                {"k1": ("product_family", {"product_family": 0.55, "individual_record": 0.45})})
     out = await classify(jev, TABLE, CONTEXT, SCHEMA, profile(TABLE))
     assert out["columns"][0] == {"role": "dedicated_key", "kind": "record_reference", "level": "product_family",
-                                     "flagged": True}
+                                     "flagged": True, "probability": {"kind": 0.9, "level": 0.55}}
     assert out["warnings"][0]["problem"] == "level uncertain"

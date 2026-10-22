@@ -57,9 +57,15 @@ LEVEL_RULES = [
 ]
 
 
+def prob(answers, key) -> float:
+    """The probability of the chosen option (1.0 once the user settled it), for the later steps to weigh."""
+    c, probs = answers.get(key, (None, {}))
+    return round(probs.get(c, 0), 2)
+
+
 async def classify(jev, table: dict, context: dict, schema: dict, profile: dict) -> dict:
-    """{"columns": {position: {"role", "kind", "level"?, "flagged"?}}, "warnings": [...]}; context columns get no role.
-    `profile` is the profile of the table (pipeline/store/profile.py)."""
+    """{"columns": {position: {"role", "kind", "level"?, "flagged"?, "probability"?: {"kind", "level"?}}},
+    "warnings": [...]}; context columns get no role. `profile` is the profile of the table (pipeline/store/profile.py)."""
     header, rows = table["header"], table["rows"]
     ids = {f"k{i}": h for i, h in enumerate(header, 1)}
     at = {k: i for i, k in enumerate(ids)}                    # Jev's id → the column's position
@@ -79,7 +85,8 @@ async def classify(jev, table: dict, context: dict, schema: dict, profile: dict)
     columns, warnings = {}, []
     for k in asked:
         kind, flagged = pick(a1, k, ids[k], "kind", warnings, position=at[k])
-        columns[at[k]] = {"role": KIND_ROLE.get(kind), "kind": kind} | ({"flagged": True} if flagged else {})
+        columns[at[k]] = {"role": KIND_ROLE.get(kind), "kind": kind} | ({"flagged": True} if flagged else {}) | (
+            {"probability": {"kind": prob(a1, k)}} if kind else {})
 
     keys = [k for k in asked if columns[at[k]]["role"] == "dedicated_key"]
     a2 = await ask(jev, state, {k: choice(ACTIVITY, "Determine the finest record level this key is intended to "
@@ -88,6 +95,8 @@ async def classify(jev, table: dict, context: dict, schema: dict, profile: dict)
     for k in keys:
         level, flagged = pick(a2, k, ids[k], "level", warnings, position=at[k])
         columns[at[k]]["level"] = level
+        if level:
+            columns[at[k]]["probability"]["level"] = prob(a2, k)
         if flagged:
             columns[at[k]]["flagged"] = True
     return {"columns": columns, "warnings": warnings}

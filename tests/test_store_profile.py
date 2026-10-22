@@ -15,7 +15,10 @@ PICKED = [x for x in TABLES if x[0] in ("shop", "joins_chain")][:2]
 @pytest.mark.parametrize("case, name, saved", PICKED, ids=[f"{c}/{n}" for c, n, _ in PICKED])
 def test_profile_matches_the_saved_one(case, name, saved):
     table = read_table(CASES / case / name, has_header=saved["read"]["has_header"])
-    assert profile(table) == saved["profile"]
+    got = profile(table)
+    for c in got["columns"].values():
+        c.pop("follows_row_order", None)                       # the PoC did not count it
+    assert got == saved["profile"]
 
 
 def test_profile():
@@ -26,3 +29,10 @@ def test_profile():
     assert overlap(["1", "3", ""], ["1", "2"]) == 0.5
     big = {"header": ["x"], "rows": [[str(i)] for i in range(25_000)]}
     assert profile(big)["profiled"] == 8_334 and profile(big)["rows"] == 25_000
+
+
+def test_follows_row_order():
+    t = {"header": ["ref", "id", "stock", "code"],
+         "rows": [[f"A-{1001 + i}", str(i + 1), q, f"B{i % 3}"] for i, q in enumerate("35 7 25 12 20 5 3 140 18 31".split())]}
+    p = profile(t)["columns"]
+    assert [p[i].get("follows_row_order", False) for i in range(4)] == [True, True, False, False]
