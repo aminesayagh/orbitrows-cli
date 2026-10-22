@@ -124,6 +124,7 @@ async def classify(jev, table: dict, context: dict) -> dict:
                 w["question"] = {"type": "choice", "call": a.call, "key": f"{k}_type", "options": options(probs)}
             warnings.append(w)
         p = a.get(f"{k}_nullable", 1.0)
-        columns.append({"header": h, "sql_type": t or "TEXT", "nullable": p > NOT_NULL})
+        empty = any(not (r[i] if i < len(r) else "").strip() for r in table["rows"])   # a fact: it can be empty
+        columns.append({"header": h, "sql_type": t or "TEXT", "nullable": p > NOT_NULL or empty})
     node = create_table(table["name"], columns).model_dump()
     return {"create_table": node, "warnings": warnings + check_store(table, node)}

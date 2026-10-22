@@ -41,8 +41,9 @@ async def through_the_store(tmp_path, monkeypatch, raw, name="t.csv"):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
     path = tmp_path / name
     path.write_bytes(raw)
+    # the model says neither column is ever empty: the blank row's empty cells decide, so the store is kept
     saved = await run.classify(Unsure({"header": 0.95, "k1_type": TEXT, "k2_type": TEXT,
-                                           "k1_nullable": 0.9, "k2_nullable": 0.9}), [path])
+                                           "k1_nullable": 0.1, "k2_nullable": 0.1}), [path])
     storage.copy_files("st_rt", [path])
     storage.write("st_rt", run.build(saved)["store"], run.rows([path], saved))
     with closing(sqlite3.connect(storage.folder("st_rt") / "session.db")) as db:
