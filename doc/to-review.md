@@ -85,3 +85,9 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 - [ ] **A failed run of a waiting message** (Jev down, a crash) drops its answers: the message is sent again and its model calls are paid again. The import keeps its answers in that case.
 - [ ] **The final JSON lists every assembly notice,** which may be noisy for the LLM relaying it.
 - [ ] **`undo`, `exit` and refusals aren't JSON:** `undo`/`exit` print plain text, refusals go to stderr only.
+
+## Codex review (2026-10-22), filed for later
+
+- [ ] **CorPipe's work files** go inside the code folder (`src/pipeline/prompt/coref.py:92`): they pile up, and a read-only install breaks `message`. Use the store's folder or a temporary one, cleaned per request.
+- [ ] **`import.json` isn't fsynced** (file and folder) after a paid answer: a power cut right after could lose it.
+- [ ] **Dates in messages** like `22 octobre 2026` or `22/10/2026` aren't recognised (`operations_jev.py:322`); a numeric date would need a question (22/10 vs 10/22).
