@@ -12,7 +12,7 @@ share a header. The header stays data: what Jev reads, what a warning shows ("co
     roles.classify(jev, table, context, schema, profile)   role and level of every column (Jev)
     joins.classify(jev, table, saved)              groups of columns that describe another record, per file (Jev + code)
     keys.classify(jev, [(table, saved), ...])      primary and foreign keys over all the store files (Jev + code)
-    schema.assemble(files)                         the store schema, its metadata rows and export map (code)
+    schema.assemble(files, names)                  the store schema, its metadata rows and export map (code)
     schema.round_trip(store, rows)                 proof: rebuild every file from the loaded rows (code); the import
                                                    itself proves it on disk, in storage.write
 """
