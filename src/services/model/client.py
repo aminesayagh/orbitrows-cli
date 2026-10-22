@@ -96,12 +96,6 @@ def settle(calls: dict, call: str, key: str, value) -> None:
     calls[call][key] = [value, {value: 1.0}] if isinstance(old, (list, tuple)) else {"yes": 1.0, "no": 0.0}[value]
 
 
-def answers(question: dict) -> dict:
-    """A question's valid answers as the user gives them (an option's answer, or yes/no) → the value settle() takes."""
-    return ({str(o["answer"]): o["value"] for o in question["options"]} if question["type"] == "choice"
-            else {"yes": "yes", "no": "no"})
-
-
 def options(probs: dict, labels: dict | None = None) -> list[dict]:
     """The options shown to the user, likeliest first: those at FLOOR or above, at most SHOWN, at least two.
     `labels` names opaque values (a letter for a column); "uncertain" is no answer the user can give."""

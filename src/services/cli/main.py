@@ -18,7 +18,8 @@ from typesafe_sdk import TypeSafeError
 from orbitrows.pipeline.store import run
 from orbitrows.services.cli.crash import report
 from orbitrows.services.csv.reader import read_table
-from orbitrows.services.model.client import Recorded, answers, connect, settle
+from orbitrows.services import questions
+from orbitrows.services.model.client import Recorded, connect
 from orbitrows.services.session import client as session
 from orbitrows.services.storage import export as exporting
 from orbitrows.services.storage import registry
@@ -28,6 +29,7 @@ from orbitrows.sql.ddl import sql_name
 SHOWN = 5                                                     # differences listed when a store would lose data
 PAUSED = 3                                                    # exit code: the import or message waits for answers
 NOTICE = ("file", "step", "column", "problem", "probability")  # a notice's fields in the questions JSON
+QUESTION = ("id", "file", "step", "column", "problem")      # a question's, each one shown (null when missing)
 
 
 class Refusal(Exception):
@@ -117,15 +119,8 @@ def unseen(progress: dict, warnings: list[dict]) -> list[dict]:
 
 def paused(store: tuple[str, str | None], progress: dict, notices: list[dict]) -> int:
     """The open questions and the new notices as one JSON object on stdout, for the LLM driving this CLI."""
-    def question(q):
-        ask = q["question"]
-        options = [{"answer": o["answer"], "probability": o["probability"]} for o in ask.get("options", [])]
-        return ({k: q.get(k) for k in ("id", "file", "step", "column", "problem")} | {"type": ask["type"]}
-                | ({"options": options} if ask["type"] == "choice" else {})    # a yes/no is answered yes or no
-                | ({"default": ask["default"]} if ask["type"] == "name" else {}))   # a name: any text, or skip
-    print(json.dumps({"store": store[0], "name": store[1], "step": progress["step"],
-                      "questions": [question(q) for q in progress["open"]],
-                      "notices": [{k: n[k] for k in NOTICE if n.get(k) is not None} for n in notices]},
+    notices = [{k: n[k] for k in NOTICE if n.get(k) is not None} for n in notices]
+    print(json.dumps({"store": store[0], "name": store[1]} | questions.asking(progress, notices, QUESTION, nulls=True),
                      ensure_ascii=False))
     return PAUSED
 
@@ -212,15 +207,14 @@ def answer(question: str | None, given: str | None, ref: str | None) -> int:
 def record(target: tuple[str, str | None], question: str | None, given: str | None) -> int:
     progress = storage.load_import(target[0])
     if question is not None:
-        q = next((q for q in progress["open"] if q["id"] == question), None)
-        if given is None or q is None:
-            ids = ", ".join(q["id"] for q in progress["open"])
-            raise Refusal(f"Give an open question's id and its answer. Open questions of {label(target)}: {ids}" if ids
-                          else f"Store {label(target)} has no open question. Retry its import: orbitrows answer -s "
+        try:
+            q = questions.find(progress, question, given, f" of {label(target)}",
+                               f"Store {label(target)} has no open question. Retry its import: orbitrows answer -s "
                                f"{target[0]}")
-        ask = q["question"]
-        if ask["type"] == "name":                             # a table split out of a file: any name, or skip
-            match = ask["default"] if given.casefold() == "skip" else sql_name(given)   # never a leading _: the store's own
+            match = questions.match(q, given)
+        except questions.Invalid as e:
+            raise Refusal(str(e)) from None
+        if q["question"]["type"] == "name":                   # a table split out of a file: kept for the replay
             names = progress.setdefault("names", {})
             taken = ({sql_name(Path(f).stem, default="imported") for f in progress["files"]}
                      | {n for i, n in names.items() if i != question}
@@ -229,15 +223,7 @@ def record(target: tuple[str, str | None], question: str | None, given: str | No
                 raise Refusal(f"{given} can't name this table: {match} is another table's name. Give another name, "
                               "or skip.")
             names[question] = match
-        else:
-            valid = answers(ask)
-            match = next((a for a in valid if a.casefold() == given.casefold()), None)
-            if match is None:
-                raise Refusal(f"{given} isn't an answer to {question}. Answers: {', '.join(valid)}")
-            settle(progress["calls"], ask["call"], ask["key"], valid[match])
-        progress["open"].remove(q)
-        progress["answered"].append({k: q.get(k) for k in ("id", "file", "step", "column", "problem")}
-                                    | {"answer": match})
+        questions.record(progress, q, match, QUESTION, nulls=True)
         storage.save_import(target[0], progress)
     if progress["open"]:
         registry.set_status(target[0], registry.WAITING)      # a killed resume's store was left importing

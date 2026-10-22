@@ -28,6 +28,7 @@ import traceback
 from datetime import UTC, datetime
 from pathlib import Path
 
+from orbitrows.services import questions
 from orbitrows.services.storage import registry
 
 IDLE = 1800                                                   # seconds without a request before it saves and ends
@@ -36,6 +37,7 @@ READ = 30                                                     # seconds a client
 WAIT = 10                                                     # seconds a new server waits for the last one to end
 ROWS = 1000                                                   # rows of a statement sent back; "more" says there were others
 NAME = 60                                                     # characters of the prompt kept as the change's name
+QUESTION = ("id", "request", "step", "problem")              # a question's fields shown, those it has
 # a statement that changes the tables' structure: its first keyword, after blanks and comments (one statement each:
 # sqlite3 runs no more); refused for now (user, 2026-10-21)
 STRUCTURE = re.compile(r"(?:\s|--[^\n]*|/\*.*?\*/)*(?:CREATE|ALTER|DROP)\b", re.IGNORECASE | re.DOTALL)
@@ -77,12 +79,9 @@ def handler():
     return getattr(importlib.import_module(module), name)
 
 
-def shown(q: dict) -> dict:
-    """A question as the user sees it: its options' answers and probabilities, not the call its answer settles."""
-    ask = q["question"]
-    return ({k: q[k] for k in ("id", "request", "step", "problem") if k in q} | {"type": ask["type"]}
-            | ({"options": [{"answer": o["answer"], "probability": o["probability"]} for o in ask["options"]]}
-               if ask["type"] == "choice" else {}))           # a yes/no is answered yes or no
+def asking(p: dict, notices: list) -> dict:
+    """The reply of a message paused on its open questions."""
+    return {"ok": True} | questions.asking(p, notices, QUESTION, nulls=False)
 
 
 def alive(pid: int) -> bool:
@@ -176,31 +175,24 @@ class Session:
     def answer(self, question: str, given: str | None) -> dict:
         """The user's answer to an open question of the pending message, recorded as the model's certain answer;
         once none is open, the message runs again (its recorded calls replayed, not asked again)."""
-        from orbitrows.services.model.client import answers, settle
         p = self.pending or {"open": []}
-        q = next((q for q in p["open"] if q["id"] == question), None)
-        if q is None or given is None:
-            ids = ", ".join(q["id"] for q in p["open"])
-            return {"ok": False, "error": f"Give an open question's id and its answer. Open questions: {ids}" if ids
-                    else "No message is waiting for answers. Send it again: orbitrows message … "
-                    "If it belongs to another store, add -s <store>."}
-        valid = answers(q["question"])
-        if (match := next((a for a in valid if a.casefold() == given.casefold()), None)) is None:
-            return {"ok": False, "error": f"{given} isn't an answer to {question}. Answers: {', '.join(valid)}"}
-        p["open"].remove(q)
-        if q["question"].get("confirm"):                      # a change to every row, built: yes applies it, no drops it
-            if match == "no":
-                self.pending = None
-                return {"ok": True, "ran": [], "notices": [{"step": "assembly", "request": q.get("request"),
-                                                            "problem": "not applied: you answered no"}]}
-            if not p["open"]:
-                self.pending = None
-                return self.apply(p["prompt"], p["built"].get("program") or [], [])
-        else:
-            settle(p["calls"], q["question"]["call"], q["question"]["key"], valid[match])
-        p["answered"].append(shown(q) | {"answer": match})
+        try:
+            q = questions.find(p, question, given, "", "No message is waiting for answers. Send it again: orbitrows "
+                               "message … If it belongs to another store, add -s <store>.")
+            match = questions.match(q, given)
+        except questions.Invalid as e:
+            return {"ok": False, "error": str(e)}
+        confirm = q["question"].get("confirm")                # a change to every row, built: yes applies it, no drops it
+        if confirm and match == "no":
+            self.pending = None
+            return {"ok": True, "ran": [], "notices": [{"step": "assembly", "request": q.get("request"),
+                                                        "problem": "not applied: you answered no"}]}
+        questions.record(p, q, match, QUESTION, nulls=False)
+        if confirm and not p["open"]:
+            self.pending = None
+            return self.apply(p["prompt"], p["built"].get("program") or [], [])
         if p["open"]:
-            return {"ok": True, "step": p["step"], "questions": [shown(q) for q in p["open"]], "notices": []}
+            return asking(p, [])
         return self.resume([])
 
     def resume(self, notices: list) -> dict:
@@ -224,7 +216,7 @@ class Session:
         if paused:
             p["step"] = paused["step"]
             p["open"] = [q | {"id": "m_" + q["id"].removeprefix("q_")} for q in paused["questions"]]
-            return {"ok": True, "step": p["step"], "questions": [shown(q) for q in p["open"]], "notices": notices}
+            return asking(p, notices)
         if errors := result.get("errors"):
             self.pending = None
             return {"ok": False, "error": "\n  ".join(["The request couldn't be built, so nothing was changed:"] + [
@@ -235,7 +227,7 @@ class Session:
                           "problem": f"This {c['problem']} ({c.get('rows')} rows), and the rows to change weren't "
                                      "found for sure. Apply it?", "question": {"type": "yes_no", "confirm": True}}
                          for c in confirm]
-            return {"ok": True, "step": p["step"], "questions": [shown(q) for q in p["open"]], "notices": notices}
+            return asking(p, notices)
         self.pending = None
         return self.apply(p["prompt"], result.get("program") or [], notices)
 
