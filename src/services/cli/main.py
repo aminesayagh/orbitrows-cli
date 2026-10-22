@@ -121,7 +121,8 @@ def paused(store: tuple[str, str | None], progress: dict, notices: list[dict]) -
         ask = q["question"]
         options = [{"answer": o["answer"], "probability": o["probability"]} for o in ask.get("options", [])]
         return ({k: q.get(k) for k in ("id", "file", "step", "column", "problem")} | {"type": ask["type"]}
-                | ({"options": options} if ask["type"] == "choice" else {}))   # a yes/no is answered yes or no
+                | ({"options": options} if ask["type"] == "choice" else {})    # a yes/no is answered yes or no
+                | ({"default": ask["default"]} if ask["type"] == "name" else {}))   # a name: any text, or skip
     print(json.dumps({"store": store[0], "name": store[1], "step": progress["step"],
                       "questions": [question(q) for q in progress["open"]],
                       "notices": [{k: n[k] for k in NOTICE if n.get(k) is not None} for n in notices]},
@@ -139,7 +140,7 @@ def importing(store: tuple[str, str | None], progress: dict) -> int:
 
     async def ask_model():
         async with Recorded(connect(), progress["calls"], saved=save) as model:
-            return await run.classify(model, paths, step=step)
+            return await run.classify(model, paths, step=step, names=progress.get("names", {}))
 
     try:
         registry.set_status(store_id, registry.IMPORTING)
@@ -153,7 +154,7 @@ def importing(store: tuple[str, str | None], progress: dict) -> int:
             registry.set_status(store_id, registry.WAITING)
             return paused(store, progress, notices)
         rows = run.rows(paths, saved)
-        built = run.build(saved)
+        built = run.build(saved, progress.get("names", {}))
         for w in unseen(progress, built["warnings"]):        # before writing, so a refusal shows them too
             print(warning(w))
         save()
@@ -188,7 +189,7 @@ def store(paths: list[Path], name: str | None) -> int:
             raise Refusal(f"{', '.join(str(f) for f in files)} would all be the table {table}. Rename one of them.")
     need_key()
     store_id = registry.create(name)
-    progress = {"files": [p.name for p in paths], "calls": {}, "open": [], "answered": [], "shown": []}
+    progress = {"files": [p.name for p in paths], "calls": {}, "names": {}, "open": [], "answered": [], "shown": []}
     try:                                                      # the import runs on the copies: a resume needs no path
         storage.copy_files(store_id, paths)
         storage.save_import(store_id, progress)
@@ -218,11 +219,22 @@ def record(target: tuple[str, str | None], question: str | None, given: str | No
                           else f"Store {label(target)} has no open question. Retry its import: orbitrows answer -s "
                                f"{target[0]}")
         ask = q["question"]
-        valid = answers(ask)
-        match = next((a for a in valid if a.casefold() == given.casefold()), None)
-        if match is None:
-            raise Refusal(f"{given} isn't an answer to {question}. Answers: {', '.join(valid)}")
-        settle(progress["calls"], ask["call"], ask["key"], valid[match])
+        if ask["type"] == "name":                             # a table split out of a file: any name, or skip
+            match = ask["default"] if given.casefold() == "skip" else sql_name(given)   # never a leading _: the store's own
+            names = progress.setdefault("names", {})
+            taken = ({sql_name(Path(f).stem, default="imported") for f in progress["files"]}
+                     | {n for i, n in names.items() if i != question}
+                     | {o["question"]["default"] for o in progress["open"] if o is not q and o["question"]["type"] == "name"})
+            if match in taken:
+                raise Refusal(f"{given} can't name this table: {match} is another table's name. Give another name, "
+                              "or skip.")
+            names[question] = match
+        else:
+            valid = answers(ask)
+            match = next((a for a in valid if a.casefold() == given.casefold()), None)
+            if match is None:
+                raise Refusal(f"{given} isn't an answer to {question}. Answers: {', '.join(valid)}")
+            settle(progress["calls"], ask["call"], ask["key"], valid[match])
         progress["open"].remove(q)
         progress["answered"].append({k: q.get(k) for k in ("id", "file", "step", "column", "problem")}
                                     | {"answer": match})
@@ -336,7 +348,8 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("-n", "--name", help="a name for the store (optional)")
     a = commands.add_parser("answer", help="answer a question of an import or a message; then it resumes")
     a.add_argument("question", nargs="?", help="the question's id, from the questions JSON")
-    a.add_argument("answer", nargs="?", help="one of its options' answers, or yes/no")
+    a.add_argument("answer", nargs="?", help="one of its options' answers, or yes/no; for a table's name, "
+                                                     "any name, or skip")
     a.add_argument("-s", "--store", help="store id or name (default: the latest store waiting for answers; for a "
                                          "message's question, m_…, the latest ready store with an open session)")
     i = commands.add_parser("incoming", help="add a supplier file to a store")

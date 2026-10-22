@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 import saved_cases
-from orbitrows.pipeline.store.schema import assemble, round_trip
+from orbitrows.pipeline.store.schema import assemble, groups, round_trip
 from orbitrows.services.csv.reader import read_table
 from orbitrows.sql.ddl import NewTable, create_table, ddl
 
@@ -25,12 +25,15 @@ def summary(store) -> dict:
     return out
 
 
+POC_NAMES = {"joins_chain": ["order", "customer"]}             # the proof of concept's table names, as the user's
+
+
 @pytest.mark.parametrize("case", ["shop", "joins_chain"])
 def test_case_matches_expected_and_round_trips(case):
     folder = CASES / case
     saved = json.loads((folder / "result.json").read_text())
     files = {f: s for f, s in saved_cases.tables(case).items() if f != "incoming.csv"}   # the store: one per session
-    store = assemble(files)
+    store = assemble(files, {g["id"]: n for g, n in zip(groups(files), POC_NAMES.get(case, []))})
     assert summary(store) == EXPECTED[case]
     rows = {f: read_table(folder / f, has_header=s["read"]["has_header"])["rows"] for f, s in files.items()}
     diffs = round_trip(store, rows)
@@ -66,11 +69,11 @@ STORE = assemble({"export.csv": FLAT})
 
 def test_groups_become_tables_with_references():
     t = {x["definition"]["sql_name"]: x["definition"] for x in STORE["tables"]}
-    assert list(t) == ["export", "order", "customer", "product"], list(t)
+    assert list(t) == ["export", "record_1", "record_2", "record_3"], list(t)    # generated: no name from the key
     assert t["export"]["primary_key"] == ["c_row_id"] and t["export"]["columns"][0]["sql_name"] == "row_id"
     assert {fk["columns"][0]: fk["references"]["table"] for fk in t["export"]["foreign_keys"]} == {
-        "c_order_id": "t_order", "c_product_sku": "t_product"}
-    assert t["order"]["foreign_keys"][0]["references"]["table"] == "t_customer" and STORE["problems"] == []
+        "c_order_id": "t_record_1", "c_product_sku": "t_record_3"}
+    assert t["record_1"]["foreign_keys"][0]["references"]["table"] == "t_record_2" and STORE["problems"] == []
     assert [c["via"] for c in STORE["export"][0]["columns"]][:3] == [[], ["c_order_id"], ["c_order_id", "c_customer_id"]]
 
 

@@ -1,8 +1,9 @@
 """The store import from end to end, in two halves so each can be tested alone:
 
     classify(jev, paths)   the questions, phase by phase over all the files: header, types (with the profile), context,
-                           roles, keys, joins → {"<file>.csv": its saved sections}
-    build(saved)           the code: the store schema, with every step's warnings in one list
+                           roles, keys, joins, then naming (the user's name for each table split out, or skip: no
+                           model call) → {"<file>.csv": its saved sections}
+    build(saved, names)    the code: the store schema, with every step's warnings in one list
 
 A model answer below SURE is a question for the user: classify stops after the first phase that has one (Paused); once
 the user has answered (client.settle), the import runs again from the start, replaying the recorded answers
@@ -19,7 +20,7 @@ from . import context, header, joins, keys, profile, roles, schema, types
 
 NO_CONTEXT = {"context_columns": {}, "source_context": {}}    # the types step runs before the context step
 STEPS = ("schema", "context", "roles", "keys", "joins")       # the saved sections that carry "warnings"
-PHASES = ("header", "types", "context", "roles", "keys", "joins")
+PHASES = ("header", "types", "context", "roles", "keys", "joins", "naming")
 SECTION = {"types": "schema"}                                 # a phase's warnings are listed under its section, as in build()
 
 
@@ -59,10 +60,21 @@ def first_questions(found: list, group, order: list) -> list:
     return list(out.values())
 
 
-async def classify(jev, paths: list, step=lambda text: None) -> dict[str, dict]:
+def unnamed(saved: dict, names: dict | None) -> list[dict]:
+    """The naming questions: one per table split out of a file (schema.groups) that `names` has no answer for. Its
+    answer is any name, or skip for the generated one (the question's "default")."""
+    def question(g):
+        cols = ", ".join(saved[g["file"]]["read"]["header"][p] for p in [g["key"], *g["columns"]])
+        return {"id": g["id"], "file": g["file"], "step": "naming", "question": {"type": "name", "default": g["name"]},
+                "problem": f"These columns are their own record: {cols}. Name this table, or skip."}
+    return [question(g) for g in schema.groups(saved) if g["id"] not in (names or {})]
+
+
+async def classify(jev, paths: list, step=lambda text: None, names: dict | None = None) -> dict[str, dict]:
     """{"<file name>": {"read", "schema", "profile", "context", "roles", "keys", "joins"}} for the store files.
     The rows are not kept: read them again with read_table(path, has_header=saved[file]["read"]["has_header"]).
-    Raises Paused after the first phase whose warnings carry a question."""
+    Raises Paused after the first phase whose warnings carry a question; last, "naming" for every table split out
+    of a file that `names` ({question id: name}) has no answer for."""
     saved, tables, notices, jev = {}, {}, [], _Ordered(jev)
 
     def pause(phase):
@@ -102,6 +114,8 @@ async def classify(jev, paths: list, step=lambda text: None) -> dict[str, dict]:
         step(f"{f}: joined records")
         s["joins"] = await joins.classify(jev, tables[f], s)
     pause("joins")
+    if questions := unnamed(saved, names):
+        raise Paused("naming", questions, notices)
     return saved
 
 
@@ -125,11 +139,12 @@ def rows(paths: list, saved: dict) -> dict[str, list]:
     return {p.name: read_table(p, has_header=saved[p.name]["read"]["has_header"])["rows"] for p in paths}
 
 
-def build(saved: dict) -> dict:
+def build(saved: dict, names: dict | None = None) -> dict:
     """{"store": schema.assemble's output, each metadata row with its column's "profile", "warnings": [{"file", "step",
     "column"?, "position"?, "problem", …}]}: every step's warnings, then the schema's problems. A column is named by
-    its header ("column") and identified by its position in the file: two columns may share a header."""
-    store = schema.assemble(saved)
+    its header ("column") and identified by its position in the file: two columns may share a header. names: the
+    user's table names, {naming question id: name}."""
+    store = schema.assemble(saved, names)
     for m in store["metadata"]:
         m["profile"] = None                                   # an added id is no column of a file
         if m["position"] is not None:

@@ -36,7 +36,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("MODEL", "orbitrows.services.model.client:Model")
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
 
-    async def fake_classify(jev, paths, step=lambda text: None):
+    async def fake_classify(jev, paths, step=lambda text: None, names=None):
         step("classifying")
         return {p.name: copy.deepcopy(SAVED[p.name]) for p in paths}
 
@@ -213,7 +213,7 @@ def test_store_needs_files(env, capsys):
 
 
 def test_failed_import_marks_the_store_failed(env, capsys, monkeypatch):
-    async def broken(jev, paths, step=lambda text: None):
+    async def broken(jev, paths, step=lambda text: None, names=None):
         raise TypeSafeError("down")
 
     monkeypatch.setattr(cli.run, "classify", broken)
@@ -243,7 +243,7 @@ SHOWN_NOTICE = {"column": "status", "problem": "role uncertain", "probability": 
 
 def pausing(runs: list):
     """A classify that pauses on CHOICE and YES_NO the first time, then returns the fixtures' sections."""
-    async def classify(jev, paths, step=lambda text: None):
+    async def classify(jev, paths, step=lambda text: None, names=None):
         runs.append([p.parent.name for p in paths])
         if len(runs) == 1:                                    # what the model answered, as Recorded keeps it
             jev.calls |= {"c" * 16: {"k4_role": ["price", {"price": 0.5, "quantity": 0.4}]}, "h" * 16: {"header": 0.6}}
@@ -390,7 +390,7 @@ def test_a_failed_resume_waits_and_retries(stub, capsys, monkeypatch):
 def test_what_the_pipeline_prints_never_reaches_stdout(env, capsys, monkeypatch):
     pause = pausing([])
 
-    async def chatty(jev, paths, step=lambda text: None):
+    async def chatty(jev, paths, step=lambda text: None, names=None):
         print("GLiNER2 config banner")                        # what loading the extractor prints
         return await pause(jev, paths, step)
 
@@ -469,3 +469,28 @@ def test_export_writes_each_file_like_its_upload(env, capsys):
     code, out, err = run(capsys, "export", "-o", "out")
     assert code == 1 and out == "" and "Already there" in err and "--force" in err
     assert run(capsys, "export", "-o", "out", "--force")[0] == 0
+
+
+def test_a_table_split_out_of_a_file_is_named_or_skipped(env, capsys, monkeypatch):
+    saved_steps = cli.run.classify                            # the env fixture's: the fixtures' saved sections
+
+    async def naming(jev, paths, step=lambda text: None, names=None):   # then the real naming pause
+        saved = await saved_steps(jev, paths, step)
+        if questions := cli.run.unnamed(saved, names):
+            raise cli.run.Paused("naming", questions, [])
+        return saved
+    monkeypatch.setattr(cli.run, "classify", naming)
+    code, out, err = run(capsys, "store", "export.csv")
+    asked = json.loads(out)
+    order, customer = asked["questions"]
+    assert code == cli.PAUSED and asked["step"] == "naming"
+    assert (customer["type"], customer["default"], order["default"]) == ("name", "record_2", "record_1")
+    code, out, err = run(capsys, "answer", customer["id"], "Record 1")
+    assert code == 1 and "record_1 is another table's name" in err
+    assert run(capsys, "answer", order["id"], "SKIP")[0] == cli.PAUSED
+    code, out, err = run(capsys, "answer", customer["id"], "Customers")
+    assert code == 0, err                                     # the replay asks no name again
+    [(store_id, _, _)] = stores()
+    with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
+        names = {n for n, in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert {"export", "record_1", "customers"} <= names and "record_2" not in names

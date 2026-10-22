@@ -158,3 +158,25 @@ async def test_two_columns_with_the_same_header_stay_two_columns(tmp_path, monke
         [written] = export(db, storage.folder("st_twin"), tmp_path / "out")
     back, upload = read_table(written["path"], has_header=True), read_table(path, has_header=True)
     assert (back["header"], back["rows"]) == (upload["header"], upload["rows"])
+
+
+async def test_a_table_split_out_of_a_file_is_a_naming_question(monkeypatch):
+    path, calls = CASES / "joins_chain" / "export.csv", {}
+    joined = saved_cases.tables("joins_chain")["export.csv"]["joins"]                # order ← customer, by position
+
+    async def joins(jev, table, s):
+        return json.loads(json.dumps(joined))
+    monkeypatch.setattr(run.joins, "classify", joins)
+    with pytest.raises(run.Paused) as paused:
+        await run.classify(Recorded(Unsure({"header": 0.95}), calls), [path])
+    order, customer = paused.value.questions
+    assert paused.value.phase == "naming" and customer["step"] == "naming"
+    assert [order["question"], customer["question"]] == [{"type": "name", "default": "record_1"},
+                                                         {"type": "name", "default": "record_2"}]
+    assert customer["problem"] == ("These columns are their own record: customer_id, customer_name, customer_city. "
+                                   "Name this table, or skip.")
+    names = {order["id"]: "record_1", customer["id"]: "customers"}                 # skipped, then named
+    saved = await run.classify(Recorded(stub := Unsure({}), calls), [path], names=names)   # no question on replay
+    assert stub.calls == 0
+    tables = [t["definition"]["sql_name"] for t in run.build(saved, names)["store"]["tables"]]
+    assert tables == ["export", "record_1", "customers"]

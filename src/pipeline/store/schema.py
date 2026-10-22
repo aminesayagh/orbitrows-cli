@@ -3,8 +3,8 @@ decisions of steps 1–6 are assembled into the final AST, validated, and mapped
 Store files only; the output is the AST (no SQL text kept, no rows loaded).
 
     code  a joined group (step 6) → its own table: the group key is its primary key, its columns move there, and the
-          table that held the key references it (a group inside a group: orders → customers); named from the key
-          (customer_id → customer), else <file>_<key>
+          table that held the key references it (a group inside a group: orders → customers); named by a generated
+          key (record_1, record_2…, groups()) unless the user named it (the import's naming question)
     code  a table without a primary key → an added `id INTEGER` key (`row_id` when `id` is taken; SQLite numbers it)
     code  metadata: one row per column (table `_columns`): source file, header and position, role, kind, level,
           context; the export map: how to rebuild each uploaded file, column by column, along the references
@@ -12,27 +12,31 @@ Store files only; the output is the AST (no SQL text kept, no rows loaded).
     proof round_trip(): load the rows into an in-memory SQLite along the schema, rebuild every file, compare cell by cell
           (load() then check(); the store writer, services/storage/store.py, runs both on the store's session.db)
 """
+import hashlib
 import json
-import re
 import sqlite3
 from decimal import Decimal
 
 from .types import EXPORTED
 from orbitrows.sql.ddl import CreateTable, ForeignKey, NewColumn, NewTable, TableColumns, check_references, ddl, sql_name
 
-KEY_SUFFIX = re.compile(r"_(id|sku|ref|code|no|nr|num|number)$")
+
+def groups(files: dict) -> list[dict]:
+    """The joined groups of the store files, in order: [{"id", "file", "key", "columns", "name"}], positions in the file;
+    "name" a generated table name (record_1, record_2…) no file's table has, "id" stable across replays."""
+    taken, out = {s["schema"]["create_table"]["definition"]["sql_name"] for s in files.values()}, []
+    for file, s in files.items():
+        for g in (s.get("joins") or {}).get("groups", []):
+            name = sql_name(f"record_{len(out) + 1}", taken)
+            taken.add(name)
+            out.append({"id": "n_" + hashlib.sha256(f"{file}:{g['key']}".encode()).hexdigest()[:8], "file": file,
+                        "key": g["key"], "columns": g["columns"], "name": name})
+    return out
 
 
-def _name(key: str, file: str, taken: set) -> str:
-    base = KEY_SUFFIX.sub("", key)
-    name = base if base and base not in taken else sql_name(f"{file}_{base or key}", taken)
-    taken.add(name)
-    return name
-
-
-def _split(file: str, s: dict, taken: set) -> list[dict]:
+def _split(s: dict, names: dict) -> list[dict]:
     """The file's table and its group tables: [{"t": NewTable fields, "parent": (table_id, fk column) | None}],
-    the file's own table first."""
+    the file's own table first. names: {group key position: its table name}."""
     d = NewTable(**s["schema"]["create_table"]["definition"])
     groups = (s.get("joins") or {}).get("groups", [])
     moved = {p for g in groups for p in g["columns"]}         # by position: the file's column p is d.columns[p]
@@ -40,7 +44,7 @@ def _split(file: str, s: dict, taken: set) -> list[dict]:
                     "columns": [c for p, c in enumerate(d.columns) if p not in moved]}, "parent": None}]
     for g in groups:
         key = d.columns[g["key"]]
-        name = _name(key.sql_name, d.sql_name, taken)
+        name = names[g["key"]]
         specs.append({"t": {"table_id": f"t_{name}", "sql_name": name, "primary_key": [key.column_id],
                             "foreign_keys": [], "columns": [key.model_copy(update={"nullable": False})]
                             + [d.columns[p] for p in g["columns"]]}, "parent": None})
@@ -63,13 +67,14 @@ def _split(file: str, s: dict, taken: set) -> list[dict]:
     return specs
 
 
-def assemble(files: dict) -> dict:
-    """files: {"<file>.csv": its saved sections (read, schema, roles, context, joins)}, the store files of one session →
+def assemble(files: dict, names: dict | None = None) -> dict:
+    """files: {"<file>.csv": its saved sections (read, schema, roles, context, joins)}, the store files of one session;
+    names: {group id (groups()): the table name the user gave it} →
     {"tables": [create_table], "metadata": [rows], "export": [per file], "problems": [...]}"""
-    taken = {s["schema"]["create_table"]["definition"]["sql_name"] for s in files.values()}
+    named = {(g["file"], g["key"]): (names or {}).get(g["id"], g["name"]) for g in groups(files)}
     tables, export, metadata = [], [], []
     for file, s in files.items():
-        specs = _split(file, s, taken)
+        specs = _split(s, {k: n for (f, k), n in named.items() if f == file})
         ids = {sp["t"]["table_id"]: sp for sp in specs}
 
         def via(sp):

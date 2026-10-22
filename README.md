@@ -54,12 +54,14 @@ A Jev answer below its threshold is a question for the user: a choice (`options`
 
 Answer each question with `orbitrows answer <id> <answer>`: one of its options' `answer` (any case), or `yes`/`no` for a `yes_no` question (it has no `options`). A wrong id or answer is refused with the valid ones. While questions are open, `answer` prints the same JSON with the remaining ones (exit 3). Notices are warnings without a question: each is shown once, in the JSON or in the final warnings, and the import goes on.
 
+When the joins split repeated records out of a file into their own tables, the import stops once more (step `naming`) with one `name` question per table: it lists the table's columns and its generated name, `default` (`record_1`, `record_2`…). Answer with any name (made a SQL name; refused if another table has it) or `skip` to keep the generated one. The columns keep their headers' names, and the export gives every file back with its original headers either way.
+
 If the import fails after its questions were asked (Jev down, Ctrl+C or SIGTERM, a crash), the store waits again with its answers kept: `orbitrows answer -s <id>` retries it. Before any question it's failed, and a store that would lose data is always failed.
 
 Each store is a row in the registry, `~/.local/share/pilotstore/stores.db` (`$XDG_DATA_HOME` moves it): its id (`st_` + 8 hex), its optional name, and its status (`0` importing, `1` ready, `2` waiting for answers, `-1` failed). Each store also has its own folder, `stores/<id>/` next to the registry:
 
 - `files/`: the uploaded CSV files, unchanged; the import (and every resume) reads these copies;
-- `import.json`: the import's progress, written after each new Jev answer (temporary file, then renamed): `files` (upload order), `calls` (every Jev answer with its probabilities, the user's answers recorded as certain), `step` and `open` (the current pause and its questions), `answered` (each question with the user's answer), `shown` (the notices already printed). It's kept once the import is done;
+- `import.json`: the import's progress, written after each new Jev answer (temporary file, then renamed): `files` (upload order), `calls` (every Jev answer with its probabilities, the user's answers recorded as certain), `names` (the table name chosen for each naming question), `step` and `open` (the current pause and its questions), `answered` (each question with the user's answer), `shown` (the notices already printed). It's kept once the import is done;
 - `session.db`: the store's tables with their rows, plus the classification tables (`_store_tables`, `_store_columns`, `_column_context`, `_export`) and `_history`, the log of changes: its first row is the import, with the tables' `create_table` ASTs (`json_ast`) and the `CREATE TABLE` statements run (`sql`). `_store_tables.created_by` and `_store_columns.edited_by` reference the `_history` row of the request that created the table / last changed the column (the import, row 1, for now). It's written in one transaction, and only if every file can be rebuilt from it;
 - `original.db`: a copy of `session.db` taken right after the import.
 
