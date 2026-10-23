@@ -470,10 +470,11 @@ def build(db, requests, schema, sources, values, a1, a2, numeric_by_formula=Fals
             if not out[rid]["outputs"]:
                 warnings.append({"request": rid, "problem": "nothing shown"})
         if st == "insert":
-            cols, vals = [], []
+            cols, vals, gives = [], [], []
             for key in columns_of(schema, [main]):
                 if not unsure_yes(rid, f"{rid}_gives_{key}", f"gives {key}"):
                     continue
+                gives.append(key)                             # an insert from an upload takes these (pipeline.py)
                 typ, _ = coltype(schema, key)
                 c = pick(rid, f"{rid}_{key}_value", f"value of {key}", labels=said_nums if typ != "TEXT" else {
                     f"x{i}": t for i, t in enumerate(texts(db, schema, r, values, tuple(key.split("."))))})
@@ -487,7 +488,7 @@ def build(db, requests, schema, sources, values, a1, a2, numeric_by_formula=Fals
                     v = int(v) if typ == "INTEGER" and float(v).is_integer() else v
                 cols.append(key.split(".")[1])
                 vals.append(_lit(v))
-            out[rid]["insert"] = {"columns": cols, "values": vals}
+            out[rid]["insert"] = {"columns": cols, "values": vals, "gives": gives}
         if st == "alter_table":
             action = pick(rid, f"{rid}_action", "action")
             new = pick(rid, f"{rid}_new_name", "new name")

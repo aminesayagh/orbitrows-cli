@@ -409,3 +409,85 @@ def test_a_missing_conversion_is_asked_then_applied(supplied):
     reply = supplied.answer(q["id"], "x * 10")
     assert reply["ran"][0]["changed"] == 2, reply
     assert supplied.db.execute("SELECT price FROM products ORDER BY sku").fetchall() == [(15.0,), (20.0,), (30.0,)]
+
+
+@pytest.fixture
+def adding(served, monkeypatch):
+    """products(sku, name, price in MAD) with A1, B2 and an upload supplier.csv(ref, nom, prix in EUR; a row without
+    a ref) linked ref → sku (the key), nom → name, prix → price, x * 10; r1 inserts into products, the pipeline
+    stubbed. → make(stock): the Session, products with a NOT NULL stock column the upload has no link to."""
+    from orbitrows.pipeline.merge import convert
+    from orbitrows.pipeline.prompt import (conditions, formula, grouping, operation, parts, request_graph,
+                                           source_route, sources, values)
+    from orbitrows.services.storage import incoming
+    made = []
+
+    def make(stock=False):
+        with closing(sqlite3.connect(served.folder / "session.db")) as db:
+            db.executescript(incoming.SCHEMA + f"""
+                DROP TABLE products;
+                CREATE TABLE products (sku TEXT PRIMARY KEY, name TEXT, price REAL{", stock INTEGER NOT NULL" * stock});
+                INSERT INTO products VALUES ('A1', 'Tee', 10{", 1" * stock}), ('B2', 'Cap', 20{", 1" * stock});
+                INSERT INTO _history VALUES (1, 'now', 'import', NULL, '[]', '[]', NULL, 1);
+                INSERT INTO _store_tables VALUES (1, 'products', NULL, 'now', 1);
+                INSERT INTO _column_context VALUES (1, 'MAD', 'currency', 'header'), (2, 'EUR', 'currency', 'header');
+                INSERT INTO _store_columns (id, table_id, sql_name, sql_type, source_header, unit_id, edited_by)
+                    VALUES (1, 1, 'sku', 'TEXT', 'SKU', NULL, 1), (2, 1, 'name', 'TEXT', 'Name', NULL, 1),
+                           (3, 1, 'price', 'REAL', 'Prix (DH)', 1, 1);
+                INSERT INTO _incoming_tables VALUES (1, 'in_supplier_1', 'incoming/1/supplier.csv', 'now', 1);
+                INSERT INTO _incoming_columns (id, table_id, sql_name, sql_type, source_header, position, unit_id,
+                                               extra_json)
+                    VALUES (1, 1, 'ref', 'TEXT', 'Ref', 0, NULL, '{{"primary_key_candidate": true}}'),
+                           (2, 1, 'nom', 'TEXT', 'Nom', 1, NULL, '{{}}'), (3, 1, 'prix', 'TEXT', 'Prix (€)', 2, 2, '{{}}');
+                CREATE TABLE in_supplier_1 (ref TEXT, nom TEXT, prix TEXT);
+                INSERT INTO in_supplier_1 VALUES ('A1', 'Tee v2', '1.5'), ('C3', 'Mug', '2'), ('D4', 'Bag', '3'),
+                                                 ('', 'Blank', '4');
+                INSERT INTO _incoming_store_matches VALUES (1, 1, 'direct', 1, 'now'), (2, 2, 'direct', 1, 'now'),
+                                                           (3, 3, 'direct', 1, 'now');""")
+            convert.save(db, 3, "EUR", "MAD", "x * 10")
+            db.commit()
+        prompt = "add the new products from supplier.csv"
+        sections = {request_graph: {"requests": [{"id": "r1", "text": prompt, "start": 0, "end": len(prompt)}],
+                                    "references": [], "warnings": []},
+                    operation: {"requests": {"r1": {"statement": "insert"}}, "warnings": []},
+                    values: {"values": [], "warnings": []},
+                    sources: {"requests": {"r1": {"target": {"type": "database_table", "reference": "t_products"}}},
+                              "warnings": []},
+                    parts: {"requests": {"r1": {"insert": {"columns": [], "values": [], "gives": []}}},
+                            "warnings": []},
+                    conditions: {"requests": {}, "parameters": {}, "warnings": []},
+                    grouping: {"requests": {}, "warnings": []}, formula: {"requests": {}, "warnings": []}}
+        for module, section in sections.items():
+            monkeypatch.setattr(module, "run", lambda *a, section=section, **k: _now(json.loads(json.dumps(section))))
+        monkeypatch.setattr(source_route, "run", lambda model, prompt, db: _now(
+            {"store": True, "incoming": source_route.available(db), "warnings": []}))
+        monkeypatch.setattr(pipeline.extractor, "connect", lambda: "gliner2")
+        monkeypatch.setattr(coref, "mentions", lambda prompts, name: [[]])
+        monkeypatch.setattr(coref, "missing", lambda: None)
+        monkeypatch.delenv("ORBITROWS_HANDLER")
+        made.append(sessions.Session(served.id, sessions.handler()))
+        return made[-1]
+    yield make
+    for s in made:
+        s.end()
+        s.db.close()
+
+
+def test_an_insert_from_an_upload_adds_its_new_records_converted_and_undo_removes_them(adding):
+    s = adding()
+    reply = s.message("add the new products from supplier.csv")
+    [ran] = reply["ran"]
+    assert ran["sql"].startswith('INSERT INTO "products"') and 'NOT "i"."ref" IN (SELECT' in ran["sql"], reply
+    assert ran["changed"] == 2, reply                          # A1 is in the store; a row without a ref is no record
+    rows = "SELECT sku, name, price FROM products ORDER BY sku"
+    assert s.db.execute(rows).fetchall() == [("A1", "Tee", 10.0), ("B2", "Cap", 20.0), ("C3", "Mug", 20.0),
+                                             ("D4", "Bag", 30.0)]
+    assert s.undo()["ok"]
+    assert s.db.execute(rows).fetchall() == [("A1", "Tee", 10.0), ("B2", "Cap", 20.0)]
+
+
+def test_an_insert_from_an_upload_stops_on_a_required_column_without_a_link(adding):
+    s = adding(stock=True)
+    reply = s.message("add the new products from supplier.csv")
+    assert not reply["ok"] and "stock" in reply["error"] and "nothing is guessed" in reply["error"], reply
+    assert s.db.execute("SELECT sku FROM products ORDER BY sku").fetchall() == [("A1",), ("B2",)]

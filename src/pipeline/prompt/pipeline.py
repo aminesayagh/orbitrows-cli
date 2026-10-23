@@ -3,7 +3,8 @@ its order, each step fed the previous steps' outputs. Paid: the model; local: Co
 
     store   the store's tables read back from SQLite (ddl.schema_from_sqlite), without the CLI's own tables (`_…`);
             with the selected uploads' tables, keyed and linked in that view only (with_incoming): an update takes
-            a linked upload column's value through the key, converted by the user's formula (from_incoming)
+            a linked upload column's value through the key, converted by the user's formula (from_incoming); an
+            insert takes the upload's records whose key the store doesn't have (insert_from)
     out     {prompt, requests, operation, values, sources, parts, conditions, grouping, formula, assembly}; assembly is
             {"program", "questions", "errors"}: step 7 runs the program in a savepoint, rolled back (nothing is changed)
 
@@ -65,17 +66,44 @@ def with_incoming(db, store: list[dict], incoming: list[dict]) -> tuple[list[dic
     return out, None
 
 
-def from_incoming(db, store: list[dict], incoming: list[dict], reqs: list[dict], parts_: dict) -> tuple[list, list]:
+def from_incoming(db, store: list[dict], incoming: list[dict], reqs: list[dict], parts_: dict,
+                  sources_: dict) -> tuple[list, list]:
     """An update's changed column directly matched to a (non-key) column of a selected upload takes that column's
     value, which assembly reaches through the key: as is (cast to REAL for a number column: incoming cells are TEXT),
     or converted by the user's formula (convert.py). → (questions: a formula to give, errors: a unit varying row by
-    row); each assignment so built is set (from: incoming), no longer pending."""
+    row); each assignment so built is set (from: incoming), no longer pending. An insert takes the upload's new
+    records (insert_from)."""
     asked, errors = [], []
     plans = {t["id"]: convert.plan(db, t["id"]) for t in incoming}
     names = {t["id"]: t["sql_name"] for t in incoming}
     types = {f"{n['definition']['table_id']}.{c['column_id']}": c["sql_type"] for n in store
              for c in n["definition"]["columns"]}
+
+    def taken(rid, upload, i, s, name, typ):
+        """Upload column i's value for store column s, converted; None when asked or refused."""
+        plan = plans[upload]
+        value = {"type": "column", "source": f"t_{names[upload]}", "reference": f"c_{name}"}
+        if typ in ("INTEGER", "REAL"):
+            value = {"type": "function", "name": "real", "arguments": [value]}
+        if refused := next((x for x in plan["refused"] if x["pair"] == (i, s)), None):
+            errors.append({"request": rid, "stage": "conversion", "error": refused["reason"]})
+            return None
+        if need := next((x for x in plan["needs"] if x["pair"] == (i, s)), None):
+            q = convert.question(db, need)
+            asked.append({"request": rid} | q | {"question": q["question"] | {
+                "save": [s, need["from"], need["to"]]}})         # the session keeps the answer (convert.save)
+            return None
+        if formula := next((x["formula"] for x in plan["known"] if x["pair"] == (i, s)), None):
+            value = json.loads(json.dumps(convert.parse(formula).model_dump(by_alias=True))
+                               .replace(json.dumps(convert.X.model_dump()), json.dumps(value)))
+            if typ == "INTEGER":
+                value = {"type": "function", "name": "round", "arguments": [value]}
+        return value
+
     for r in reqs:
+        if r["statement"] == "insert":
+            insert_from(db, r["id"], parts.main_table(reqs, sources_, r["id"]), plans, names, types, taken,
+                        parts_.setdefault(r["id"], {}), errors)
         if r["statement"] != "update":
             continue
         for a in parts_.get(r["id"], {}).get("assignments", []):
@@ -90,26 +118,58 @@ def from_incoming(db, store: list[dict], incoming: list[dict], reqs: list[dict],
             if not linked:
                 continue
             upload, i, s, name = linked[0]
-            plan, typ = plans[upload], types[a["column"]]
-            value = {"type": "column", "source": f"t_{names[upload]}", "reference": f"c_{name}"}
-            if typ in ("INTEGER", "REAL"):
-                value = {"type": "function", "name": "real", "arguments": [value]}
-            if refused := next((x for x in plan["refused"] if x["pair"] == (i, s)), None):
-                errors.append({"request": r["id"], "stage": "conversion", "error": refused["reason"]})
+            if (value := taken(r["id"], upload, i, s, name, types[a["column"]])) is None:
                 continue
-            if need := next((x for x in plan["needs"] if x["pair"] == (i, s)), None):
-                q = convert.question(db, need)
-                asked.append({"request": r["id"]} | q | {"question": q["question"] | {
-                    "save": [s, need["from"], need["to"]]}})     # the session keeps the answer (convert.save)
-                continue
-            if formula := next((x["formula"] for x in plan["known"] if x["pair"] == (i, s)), None):
-                value = json.loads(json.dumps(convert.parse(formula).model_dump(by_alias=True))
-                                   .replace(json.dumps(convert.X.model_dump()), json.dumps(value)))
-                if typ == "INTEGER":
-                    value = {"type": "function", "name": "round", "arguments": [value]}
             a.update({"value": value, "from": "incoming"})
             a.pop("pending", None)
     return asked, errors
+
+
+def insert_from(db, rid, main, plans, names, types, taken, part, errors):
+    """An insert into `main` from the first selected upload whose key is linked to it: the store's columns directly
+    linked to that upload (the key included; only those step 5 says the request gives, when it names some), each
+    value converted (taken); assembly reads the upload's rows whose key is not empty and not in the store yet. Never
+    guessed: a NOT NULL store column without default and without a link, or a linked column of a parent table (the
+    record would need one there), stops the message."""
+    table = main and main.split("_", 1)[1]
+    links = [x for x in db.execute(
+        "SELECT ic.table_id, ic.id, sc.id, ic.sql_name, sc.sql_name, st.sql_name, "
+        "COALESCE(json_extract(ic.extra_json, '$.primary_key_candidate'), 0) FROM _incoming_store_matches m "
+        "JOIN _incoming_columns ic ON ic.id = m.incoming_column_id "
+        "JOIN _store_columns sc ON sc.id = m.store_column_id JOIN _store_tables st ON st.id = sc.table_id "
+        "WHERE m.relation = 'direct' ORDER BY ic.table_id, ic.id") if x[0] in plans]
+    upload = next((x[0] for x in links if x[5] == table and x[6]), None)
+    if upload is None:
+        errors.append({"request": rid, "stage": "insert", "error": f"no selected upload has a key linked to {table}: "
+                                                                   "its new records can't be told; nothing is guessed."})
+        return
+    parents = {p for (_, _, p, *_) in db.execute(f'PRAGMA foreign_key_list("{table}")')}
+    if split := sorted({f"{x[5]}.{x[4]}" for x in links if x[0] == upload and x[5] in parents}):
+        errors.append({"request": rid, "stage": "insert", "error": f"{', '.join(split)} live in another table: a new "
+                       f"{table} record would need its record there first, which is not built yet."})
+        return
+    gives = set((part.get("insert") or {}).get("gives") or [])
+    key = next(x for x in links if x[0] == upload and x[5] == table and x[6])
+    mine = {}                                                 # store column → its first linked upload column
+    for x in links:
+        if x[0] == upload and x[5] == table and x[4] not in mine and (
+                x is key or not gives or f"t_{table}.c_{x[4]}" in gives):
+            mine[x[4]] = x
+    mine = {key[4]: key} | mine
+    required = [n for _, n, typ, nn, default, pk in db.execute(f'PRAGMA table_info("{table}")')
+                if (nn or pk and typ.upper() != "INTEGER") and default is None and n not in mine]
+    if required:
+        errors.append({"request": rid, "stage": "insert", "error": f"{', '.join(required)} of {table} must have a "
+                       f"value and {names[upload]} has no column linked to {'it' if len(required) == 1 else 'them'}: "
+                       "nothing is guessed."})
+        return
+    cols, vals = [], []
+    for column, (_, i, s, name, *_) in mine.items():
+        if (value := taken(rid, upload, i, s, name, types[f"t_{table}.c_{column}"])) is not None:
+            cols.append(f"c_{column}")
+            vals.append(value)
+    part["insert"] = {"columns": cols, "values": vals, "from": f"t_{names[upload]}", "key": f"c_{key[3]}",
+                      "store_key": f"c_{key[4]}"}
 
 
 async def run(prompt: str, model, db, step=lambda text: None) -> dict:
@@ -162,9 +222,9 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
             step("step 2 · operation, after cutting a request with two actions")
             s2 = await operation.run(model, prompt, s1["requests"], store)
     pause("requests", "operation", requests=s1, operation=s2)  # after the recut: its cut and links are step 1's
-    if incoming and (other := {x["statement"] for x in s2["requests"].values()} - {"update"}):
-        return stop(f"Selected incoming source(s): {named}. Only an update of the store's records from an upload is "
-                    f"built yet, not {', '.join(sorted(other))}.", "operation", requests=s1, operation=s2)
+    if incoming and (other := {x["statement"] for x in s2["requests"].values()} - {"update", "insert"}):
+        return stop(f"Selected incoming source(s): {named}. Only an update or an insert of the store's records from "
+                    f"an upload is built yet, not {', '.join(sorted(other))}.", "operation", requests=s1, operation=s2)
     reqs = [r | {k: v for k, v in s2["requests"][r["id"]].items() if k in ("statement", "input")}
             for r in s1["requests"]]
     step("step 3 · values")
@@ -180,7 +240,9 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
     s5 = await parts.run(model, db, prompt, reqs, store, s4["requests"], s3["values"], numeric_by_formula=True)
     pause("parts", parts=s5)
     if incoming:
-        asked, errors = from_incoming(db, store, incoming, reqs, s5["requests"])
+        asked, errors = from_incoming(db, store, incoming, reqs, s5["requests"], s4["requests"])
+        s5["warnings"] = [w for w in s5["warnings"] if not ((s5["requests"].get(w.get("request")) or {}).get(
+            "insert", {}).get("from") and w.get("problem", "").startswith("value of "))]   # the upload gives them
         if errors:
             return {"prompt": prompt, "source_selection": selected, "requests": s1, "operation": s2, "parts": s5,
                     "assembly": {"program": [], "questions": errors, "errors": errors}}

@@ -228,6 +228,16 @@ def statement(r, st, main, schema, src, part, cond6, group6, built, warnings):
         ins = part.get("insert") or {}
         if not ins.get("columns"):
             return None
+        if frm := ins.get("from"):                      # an upload's new records: a key not empty, not in the store
+            b, s = names.alias(frm), names.alias(main)
+            key, known = col(b, ins["key"]), col(s, ins["store_key"])
+            new = {"type": "all", "children": [
+                {"type": "null_check", "expression": key, "operator": "is_not_null"},
+                {"type": "comparison", "operator": "!=", "left": key, "right": {"type": "literal", "value": ""}},
+                {"type": "membership", "operator": "not_in", "expression": key, "query": select(
+                    names, main, s, [known], {"type": "null_check", "expression": known, "operator": "is_not_null"})}]}
+            return {"id": rid, "type": "insert", "target": target, "columns": ins["columns"],
+                    "query": select(names, frm, b, [rewrite(v, {frm: b}) for v in ins["values"]], new)}
         return {"id": rid, "type": "insert", "target": target, "columns": ins["columns"], "values": [ins["values"]]}
     where = lift((group6 or {}).get("where"), main, a, schema, names, warnings, rid)
     scope = {"type": "filtered", "where": where} if where else {"type": "all_rows"}
