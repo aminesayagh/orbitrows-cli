@@ -14,10 +14,13 @@ from orbitrows.services.csv.reader import read_table
 async def classify(model, path: Path, encoding: str | None = None, store_id: str | None = None) -> dict:
     saved, notices, ordered = {}, [], run._Ordered(model)
 
+    def group(w):                                             # matching calls are independent: all asked at once
+        return (w["step"], w["position"]) if w["step"] == "matching" else w["step"]
+
     def pause(phase: str):
         found = run._warnings(path.name, saved, "schema" if phase == "types" else phase)
         notices.extend(w for w in found if "question" not in w)
-        if asked := run.first_questions(found, lambda w: w["step"], ordered.order):
+        if asked := run.first_questions(found, group, ordered.order):
             raise run.Paused(phase, asked, notices)
 
     saved["read"] = await header.detect(ordered, path, encoding=encoding)

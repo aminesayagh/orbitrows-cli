@@ -1,7 +1,8 @@
 """Many-to-many incoming → store column matching, adapted from the pilotstore PoC.
 
-Every eligible pair is judged independently. A pair is kept when P(none) < .5;
-uncertain choices are questions before any mapping is saved.
+Every eligible pair is judged independently. A pair is kept when P(none) < .5. Per incoming column at most one
+question, about its best candidate (highest 1 - P(none)): asked when that judgment is below SURE, or when another
+uncertain candidate scores within TIE of it. The column's other uncertain pairs are one notice line.
 """
 
 import json
@@ -11,6 +12,8 @@ from contextlib import closing
 from orbitrows.pipeline.store.schema import q
 from orbitrows.services.model.client import SURE, ask, choice, options
 from orbitrows.services.storage import store
+
+TIE = 0.1                                                     # an uncertain runner-up this close to the best: ask
 
 CRITERIA = {
     "direct": "The incoming column supplies the same business field, with compatible purpose, scope, and basis. Formatting or unit normalization may differ.",
@@ -80,23 +83,33 @@ async def classify(model, table: dict, saved: dict, store_id: str) -> dict:
             incoming_column=source, store_column=c)
             for c in store_columns}
         answers = await ask(model, state, questions)
+        judged = []                                           # (P(match), store column, key, selected, probabilities)
         for target_col in store_columns:
             key = f"i{pos}_s{target_col['id']}"
             if key not in answers:
                 continue
             selected, probabilities = answers[key]
             none = probabilities.get("none", 0)
+            judged.append((1 - none, target_col, key, selected, probabilities))
             relation = None if none >= 0.5 else max((c for c in CRITERIA if c != "none"),
                                                     key=lambda c: probabilities.get(c, 0))
-            if probabilities.get(selected, 0) < SURE:
-                warnings.append({"step": "matching", "column": source["header"], "position": pos,
-                                 "problem": f"Does {source['header']} supply {target_col['table']}.{target_col['header']}?",
-                                 "probability": round(probabilities.get(selected, 0), 2),
-                                 "question": {"type": "choice", "call": answers.call, "key": key,
-                                              "options": options(probabilities)}})
             if relation:
                 matches.append({"incoming_position": pos, "store_column_id": target_col["id"],
                                 "incoming_header": source["header"], "store_table": target_col["table"],
                                 "store_header": target_col["header"], "relation": relation,
                                 "confidence": round(1 - none, 3)})
+        judged.sort(key=lambda j: -j[0])                      # stable: a tie keeps the store column order
+        uncertain = [j for j in judged[1:] if j[4].get(j[3], 0) < SURE]
+        if judged:                                            # one question at most: the best candidate
+            score, target_col, key, selected, probabilities = judged[0]
+            if probabilities.get(selected, 0) < SURE or (uncertain and uncertain[0][0] >= score - TIE):
+                warnings.append({"step": "matching", "column": source["header"], "position": pos,
+                                 "problem": f"Does {source['header']} supply {target_col['table']}.{target_col['header']}?",
+                                 "probability": round(probabilities.get(selected, 0), 2),
+                                 "question": {"type": "choice", "call": answers.call, "key": key,
+                                              "options": options(probabilities)}})
+        if uncertain:                                         # the other uncertain pairs: one notice, likeliest first
+            warnings.append({"step": "matching", "column": source["header"], "position": pos,
+                             "problem": f"{source['header']}: also possibly "
+                                        + ", ".join(f"{j[1]['table']}.{j[1]['header']}" for j in uncertain)})
     return {"matches": matches, "warnings": warnings}

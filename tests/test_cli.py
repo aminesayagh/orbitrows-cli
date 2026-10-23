@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import fcntl
 import json
@@ -17,7 +18,7 @@ from orbitrows.pipeline.store.schema import _same_number
 from orbitrows.pipeline.prompt import pipeline as prompt_pipeline
 from orbitrows.services.cli import main as cli
 from orbitrows.services.csv.reader import read_table
-from orbitrows.services.model.client import Model, call_id
+from orbitrows.services.model.client import Model, Recorded, call_id, settle
 from orbitrows.services.storage import registry
 from orbitrows.services.storage import store as storage
 
@@ -360,6 +361,41 @@ def test_uncertain_incoming_match_waits_for_user_answer(env, capsys, monkeypatch
     assert code == 0, error
     with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
         assert db.execute("SELECT COUNT(*) FROM _incoming_store_matches").fetchone()[0] == 2
+
+
+def test_uncertain_incoming_matches_ask_one_question_per_column_at_once(env, capsys):
+    assert run(capsys, "store", "products.csv")[0] == 0
+    store_id = stores()[0][0]
+    targets = [c["header"] for t in cli.incoming_pipeline.incoming_match.catalog(store_id)["tables"]
+               for c in t["columns"]][:4]
+
+    class ManyUncertain(IncomingModel):                       # every pair with the first 4 store columns: below SURE
+        async def answer(self, state, questions):
+            answers, usage = await super().answer(state, questions)
+            for key, question in questions.items():
+                if (target := question["instructions"].get("store_column", {}).get("header")) in targets:
+                    i, j = question["instructions"]["incoming_column"]["position"], targets.index(target)
+                    direct = 0.3 + 0.1 * ((i + j) % 4)          # the best: (i + j) % 4 == 3, P(match) .7
+                    answers[key] = ("direct", {"direct": direct, "partial": 0.1, "none": 0.9 - direct})
+            return answers, usage
+
+    def best(i):
+        return targets[(3 - i) % 4]
+
+    path = env / "supplier.csv"
+    path.write_text("a,b,c\n1,2,3\n")
+    calls = {}
+    with pytest.raises(cli.run.Paused) as paused:
+        asyncio.run(cli.incoming_pipeline.classify(Recorded(ManyUncertain(), calls), path, store_id=store_id))
+    asked, notices = paused.value.questions, paused.value.notices
+    assert paused.value.phase == "matching"
+    assert [q["problem"].rsplit(".", 1)[-1] for q in asked] == [f"{best(i)}?" for i in range(3)]
+    assert sum("also possibly" in n["problem"] for n in notices) == 3
+    for q in asked:
+        settle(calls, q["question"]["call"], q["question"]["key"], "direct")
+    result = asyncio.run(cli.incoming_pipeline.classify(Recorded(Model(), calls), path, store_id=store_id))
+    assert {(m["incoming_position"], m["store_header"]) for m in result["saved"]["matching"]["matches"]
+            if m["confidence"] == 1} == {(i, best(i)) for i in range(3)}
 
 
 def test_incoming_rejects_ragged_rows_without_saving_an_upload(env, capsys):
