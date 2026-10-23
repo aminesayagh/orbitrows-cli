@@ -88,3 +88,10 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 
 - [ ] **`import.json` isn't fsynced** (file and folder) after a paid answer: a power cut right after could lose it.
 - [ ] **Dates in messages** like `22 octobre 2026` or `22/10/2026` aren't recognised (`operations_jev.py:322`); a numeric date would need a question (22/10 vs 10/22).
+
+## Incoming uploads (review leftovers, low)
+
+- [ ] **A session that crashes with unsaved uploads** leaves their `incoming_pending/<upload>/` folders (with a CSV copy) behind; the journal names the lost upload, but nothing removes the folder.
+- [ ] **The matching catalog is the store as committed when the upload started** (kept in the upload's progress): a store change made while an `i_` question is open isn't seen by that upload's matching.
+- [ ] **A second upload in the same session can hit "database is locked"** if a large first upload made SQLite spill its page cache (the catalog is read by a separate connection). The snapshot makes it rarer.
+- [ ] **Same-named uploads** selected for a message are all kept, with a notice; a real question needs the message flow to pass a user answer back.
