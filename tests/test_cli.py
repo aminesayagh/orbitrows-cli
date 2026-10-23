@@ -243,22 +243,6 @@ def test_two_incoming_uploads_with_same_filename_are_independent_snapshots(env, 
     assert {p.name for p in (env / "out").iterdir()} == {"customers.csv"}
 
 
-def test_first_single_database_upload_discards_old_incoming_database(env, capsys):
-    assert run(capsys, "store", "customers.csv")[0] == 0
-    root = storage.folder(stores()[0][0])
-    old_file = root / "incoming" / "1" / "old.csv"
-    old_file.parent.mkdir(parents=True)
-    old_file.write_text("old\nvalue\n")
-    with sqlite3.connect(root / "incoming.db") as legacy:
-        legacy.execute("CREATE TABLE old_upload (value TEXT)")
-    code, output, error = run(capsys, "incoming", "supplier.csv")
-    assert code == 0, error
-    assert "in_supplier_2" in output
-    leave(capsys)
-    assert not (root / "incoming.db").exists()
-    assert old_file.read_text() == "old\nvalue\n"
-
-
 def test_incoming_classification_question_resumes_before_upload(env, capsys, monkeypatch):
     assert run(capsys, "store", "customers.csv")[0] == 0
     store_id = stores()[0][0]
@@ -278,8 +262,8 @@ def test_incoming_classification_question_resumes_before_upload(env, capsys, mon
                                        "WHERE source_header = 'ref'").fetchone()
         assert role == storage.ROLES.index("dedicated_key")
         assert kind == storage.KINDS.index("record_reference")
-        assert json.loads(extra)["profile"]["distinct"] == 1
-        assert db.execute("PRAGMA table_info(in_supplier_1)").fetchall()[0][5] == 1
+        assert json.loads(extra)["profile"]["distinct"] == 1 and json.loads(extra)["primary_key_candidate"]
+        assert db.execute("PRAGMA table_info(in_supplier_1)").fetchall()[0][5] == 0   # flagged, never enforced
 
 
 def test_repeating_incoming_key_keeps_all_rows(env, capsys):
@@ -292,6 +276,17 @@ def test_repeating_incoming_key_keeps_all_rows(env, capsys):
         assert db.execute("SELECT ref, warehouse, qty FROM in_supplier_1").fetchall() == [
             ("001", "A", "4"), ("001", "B", "8")]
         assert all(row[5] == 0 for row in db.execute("PRAGMA table_info(in_supplier_1)"))
+
+
+def test_incoming_key_duplicated_outside_the_profile_sample_uploads(env, capsys, monkeypatch):
+    assert run(capsys, "store", "customers.csv")[0] == 0
+    monkeypatch.setattr(cli.incoming_pipeline.profile, "MAX_ROWS", 2)   # profiled: rows 1 and 3, both unique
+    (env / "supplier.csv").write_text("ref,prix\n001,10\n002,20\n003,30\n002,40\n")
+    code, _, error = run(capsys, "incoming", "supplier.csv")
+    assert code == 0, error
+    leave(capsys)
+    with closing(sqlite3.connect(storage.folder(stores()[0][0]) / "session.db")) as db:
+        assert db.execute("SELECT COUNT(*) FROM in_supplier_1").fetchone()[0] == 4
 
 
 def test_incoming_context_unit_is_saved_with_the_profile(env, capsys, monkeypatch):
@@ -410,6 +405,31 @@ def test_uncertain_incoming_match_waits_for_user_answer(env, capsys, monkeypatch
         assert db.execute("SELECT COUNT(*) FROM _incoming_store_matches").fetchone()[0] == 2
 
 
+def test_settled_best_match_is_not_asked_again_beside_a_close_uncertain_runner_up(env, capsys, monkeypatch):
+    assert run(capsys, "store", "products.csv")[0] == 0
+    (env / "supplier.csv").write_text("sku,Vendor\nA-1001,Logitech\n")
+
+    class NearTie(ManyMatchModel):                            # sku → sku .95, sku → name .92: both uncertain
+        async def answer(self, state, questions):
+            answers, usage = await super().answer(state, questions)
+            for key, question in questions.items():
+                pair = (question["instructions"].get("incoming_column", {}).get("header"),
+                        question["instructions"].get("store_column", {}).get("header"))
+                if pair == ("sku", "sku"):
+                    answers[key] = ("direct", {"direct": 0.75, "partial": 0.2, "none": 0.05})
+                elif pair == ("sku", "name"):
+                    answers[key] = ("direct", {"direct": 0.5, "partial": 0.42, "none": 0.08})
+            return answers, usage
+
+    monkeypatch.setattr(cli, "connect", NearTie)
+    code, output, error = run(capsys, "incoming", "supplier.csv")
+    assert code == 3, error
+    [question] = json.loads(output)["questions"]
+    assert question["problem"].endswith("products.sku?")
+    code, output, error = run(capsys, "answer", question["id"], "direct")
+    assert code == 0, output + error                          # settled: 1.0, the runner-up only a notice
+
+
 def test_uncertain_incoming_matches_ask_one_question_per_column_at_once(env, capsys):
     assert run(capsys, "store", "products.csv")[0] == 0
     store_id = stores()[0][0]
@@ -431,16 +451,16 @@ def test_uncertain_incoming_matches_ask_one_question_per_column_at_once(env, cap
 
     path = env / "supplier.csv"
     path.write_text("a,b,c\n1,2,3\n")
-    calls = {}
+    calls, catalog = {}, cli.incoming_pipeline.incoming_match.catalog(store_id)
     with pytest.raises(cli.run.Paused) as paused:
-        asyncio.run(cli.incoming_pipeline.classify(Recorded(ManyUncertain(), calls), path, store_id=store_id))
+        asyncio.run(cli.incoming_pipeline.classify(Recorded(ManyUncertain(), calls), path, catalog=catalog))
     asked, notices = paused.value.questions, paused.value.notices
     assert paused.value.phase == "matching"
     assert [q["problem"].rsplit(".", 1)[-1] for q in asked] == [f"{best(i)}?" for i in range(3)]
     assert sum("also possibly" in n["problem"] for n in notices) == 3
     for q in asked:
         settle(calls, q["question"]["call"], q["question"]["key"], "direct")
-    result = asyncio.run(cli.incoming_pipeline.classify(Recorded(Model(), calls), path, store_id=store_id))
+    result = asyncio.run(cli.incoming_pipeline.classify(Recorded(Model(), calls), path, catalog=catalog))
     assert {(m["incoming_position"], m["store_header"]) for m in result["saved"]["matching"]["matches"]
             if m["confidence"] == 1} == {(i, best(i)) for i in range(3)}
 

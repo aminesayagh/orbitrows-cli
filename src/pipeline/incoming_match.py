@@ -1,8 +1,9 @@
 """Many-to-many incoming → store column matching, adapted from the pilotstore PoC.
 
 Every eligible pair is judged independently. A pair is kept when P(none) < .5. Per incoming column at most one
-question, about its best candidate (highest 1 - P(none)): asked when that judgment is below SURE, or when another
-uncertain candidate scores within TIE of it. The column's other uncertain pairs are one notice line.
+question, about its best candidate (highest 1 - P(none)), asked only when that judgment is below SURE: a sure or
+settled best pair is never asked again, however close an uncertain runner-up. The column's other uncertain pairs are
+one notice line.
 """
 
 import json
@@ -12,8 +13,6 @@ from contextlib import closing
 from orbitrows.pipeline.store.schema import q
 from orbitrows.services.model.client import SURE, ask, choice, options
 from orbitrows.services.storage import store
-
-TIE = 0.1                                                     # an uncertain runner-up this close to the best: ask
 
 SHOWN = 3                                                     # other uncertain store columns named in one notice
 CRITERIA = {
@@ -61,9 +60,9 @@ def catalog(store_id: str) -> dict:
     return out
 
 
-async def classify(model, table: dict, saved: dict, store_id: str) -> dict:
-    """Return {matches, warnings}; matches use incoming positions and store column IDs."""
-    target = catalog(store_id)
+async def classify(model, table: dict, saved: dict, target: dict) -> dict:
+    """Return {matches, warnings}; matches use incoming positions and store column IDs. target: catalog() as the
+    upload started, kept with it so a resume's calls are the same."""
     store_columns = [c | {"table": t["name"]} for t in target["tables"] for c in t["columns"]]
     context = saved["context"]
     incoming = []
@@ -102,8 +101,8 @@ async def classify(model, table: dict, saved: dict, store_id: str) -> dict:
         judged.sort(key=lambda j: -j[0])                      # stable: a tie keeps the store column order
         uncertain = [j for j in judged[1:] if j[4].get(j[3], 0) < SURE]
         if judged:                                            # one question at most: the best candidate
-            score, target_col, key, selected, probabilities = judged[0]
-            if probabilities.get(selected, 0) < SURE or (uncertain and uncertain[0][0] >= score - TIE):
+            _, target_col, key, selected, probabilities = judged[0]
+            if probabilities.get(selected, 0) < SURE:
                 warnings.append({"step": "matching", "column": source["header"], "position": pos,
                                  "problem": f"Does {source['header']} supply {target_col['table']}.{target_col['header']}?",
                                  "probability": round(probabilities.get(selected, 0), 2),

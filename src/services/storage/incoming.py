@@ -88,8 +88,7 @@ def pending_path(store_id: str, upload_id: str, progress: dict) -> Path:
 def save_classified(store_id: str, upload_id: str, table: dict, saved: dict) -> Path:
     """The classified upload, for the store's session to write: → its pending folder."""
     directory = pending_dir(store_id, upload_id)
-    (directory / "classified.json").write_text(json.dumps({"table": table, "saved": saved}, ensure_ascii=False,
-                                                          default=str))
+    (directory / "classified.json").write_text(json.dumps({"table": table, "saved": saved}, ensure_ascii=False))
     return directory
 
 
@@ -116,14 +115,9 @@ def upload(db: sqlite3.Connection, root: Path, folder: Path) -> dict:
     # create_table() normalizes identifiers, so use a name it preserves exactly.
     name = f"in_{sql_name(Path(file).stem, default='imported')}_{table_id}"
     source_ast = CreateTable(**saved["schema"]["create_table"])
-    definition = source_ast.definition.model_copy(update={"sql_name": name})
-    # A candidate PK is enforced only when the whole file proves it unique and nonempty.
-    if definition.primary_key:
-        key = definition.primary_key[0]
-        position = next(i for i, c in enumerate(definition.columns) if c.column_id == key)
-        facts = saved["profile"]["columns"][position]
-        if facts["empty"] or facts["max_repeat"] != 1:
-            definition = definition.model_copy(update={"primary_key": []})
+    # Never a PRIMARY KEY: profile facts may come from a sample, so a duplicate outside it would fail the INSERT.
+    # The candidate is only flagged (primary_key_candidate in _incoming_columns.extra_json).
+    definition = source_ast.definition.model_copy(update={"sql_name": name, "primary_key": []})
     ast = CreateTable(id=f"r_create_{name}", definition=definition)
     statements = [ddl(definition)] + [f'CREATE TRIGGER "_incoming_no_{operation.lower()}_{table_id}" '
                                       f'BEFORE {operation} ON {q(name)} '
@@ -186,6 +180,3 @@ def place(root: Path, folder: Path, source_file: str) -> None:
     destination.parent.mkdir(parents=True, exist_ok=False)
     os.replace(folder / destination.name, destination)
     shutil.rmtree(folder)
-    # Earlier development versions stored incoming tables in a separate file. The user chose
-    # a fresh start; copied CSV bytes stay under incoming/ so they can be reimported if needed.
-    (root / "incoming.db").unlink(missing_ok=True)

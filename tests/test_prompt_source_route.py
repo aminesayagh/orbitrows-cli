@@ -88,13 +88,3 @@ async def test_same_filename_uploads_selected_together_are_kept_with_a_notice(db
     assert "question" not in notice
     assert "in_supplier_1 (upload 1), in_supplier_3 (upload 3)" in notice["problem"]
 
-
-@pytest.mark.asyncio
-async def test_old_incoming_database_requires_reimport_before_prompt(db):
-    with db:
-        db.execute("DROP TABLE _incoming_columns")
-        db.execute("DROP TABLE _incoming_tables")
-    from pathlib import Path
-    Path(db.execute("PRAGMA database_list").fetchone()[2]).with_name("incoming.db").touch()
-    result = await pipeline.run("Use supplier.csv prices", Sources(), db)
-    assert "need to be reimported" in result["assembly"]["errors"][0]["error"]

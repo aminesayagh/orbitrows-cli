@@ -21,11 +21,6 @@ async def run(model, prompt: str, db) -> dict:
     with a notice."""
     tables = available(db)
     if not tables:
-        path = next((Path(file) for _, schema, file in db.execute("PRAGMA database_list")
-                     if schema == "main" and file), None)
-        if path is not None and path.with_name("incoming.db").is_file():
-            return {"store": False, "incoming": [], "warnings": [], "error":
-                    "Incoming uploads from the previous storage layout need to be reimported before prompts run."}
         return {"store": True, "incoming": [], "warnings": []}
     state = {"prompt": prompt, "incoming_tables": tables}
     warnings = []

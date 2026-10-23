@@ -8,6 +8,7 @@ import csv
 import hashlib
 import json
 import os
+import shutil
 import signal
 import sqlite3
 import sys
@@ -262,13 +263,14 @@ def record(target: tuple[str, str | None], question: str | None, given: str | No
 
 
 def incoming_paused(target: tuple[str, str | None], upload_id: str, progress: dict, notices: list) -> int:
+    notices = [{k: n[k] for k in NOTICE if n.get(k) is not None} for n in notices]   # as paused() shows them
     print(json.dumps({"store": target[0], "name": target[1], "upload": upload_id}
                      | questions.asking(progress, notices, QUESTION, nulls=True), ensure_ascii=False))
     return PAUSED
 
 
 def inspect_incoming(path: Path, encoding: str | None = None) -> None:
-    """Check readability without guessing whether its first row is a header."""
+    """Check readability and row widths before any model call, without guessing whether row 1 is a header."""
     if not path.is_file():
         raise Refusal(f"File not found: {path}")
     try:
@@ -281,16 +283,30 @@ def inspect_incoming(path: Path, encoding: str | None = None) -> None:
         raise Refusal(f"Cannot read {path.name}: empty file") from None
     if not rows:
         raise Refusal(f"Cannot read {path.name}: empty file")
+    for number, row in enumerate(rows, 1):
+        if len(row) != len(rows[0]):
+            raise Refusal(f"Cannot read {path.name}: row {number} has {len(row)} cells; expected {len(rows[0])}.")
 
 
 def resume_incoming(target: tuple[str, str | None], upload_id: str, progress: dict) -> int:
+    try:
+        return classify_incoming(target, upload_id, progress)
+    except Refusal:                                           # terminal: nobody will resume its CSV copy
+        shutil.rmtree(incoming_storage.pending_dir(target[0], upload_id), ignore_errors=True)
+        raise
+
+
+def classify_incoming(target: tuple[str, str | None], upload_id: str, progress: dict) -> int:
     store_id = target[0]
-    path =incoming_storage.pending_path(store_id, upload_id, progress)
+    path = incoming_storage.pending_path(store_id, upload_id, progress)
     save = lambda: incoming_storage.save_pending(store_id, upload_id, progress)
+    if "catalog" not in progress:                             # the store as committed when the upload started: kept,
+        progress["catalog"] = incoming_pipeline.incoming_match.catalog(store_id)   # so a resume's calls are the same
+        save()
 
     async def classify():
         async with Recorded(connect(), progress["calls"], saved=save) as model:
-            return await incoming_pipeline.classify(model, path, progress["encoding"], store_id)
+            return await incoming_pipeline.classify(model, path, progress["encoding"], progress["catalog"])
 
     try:
         result = asyncio.run(classify())
@@ -304,10 +320,6 @@ def resume_incoming(target: tuple[str, str | None], upload_id: str, progress: di
     table = result["table"]
     if not table["rows"]:
         raise Refusal(f"Cannot read {progress['file']}: no data rows")
-    for number, row in enumerate(table["rows"], 2 if table["has_header"] else 1):
-        if len(row) != len(table["header"]):
-            raise Refusal(f"Cannot read {progress['file']}: row {number} has {len(row)} cells; "
-                          f"expected {len(table['header'])}.")
     for notice in unseen(progress, result["notices"]):
         print(warning(notice))
     save()
@@ -343,7 +355,11 @@ def answer_incoming(question: str, given: str | None, ref: str | None) -> int:
         except questions.Invalid as e:
             raise Refusal(str(e)) from None
         if asked["step"] == "encoding":
-            inspect_incoming(incoming_storage.pending_path(target[0], upload_id, progress), matched)
+            try:
+                inspect_incoming(incoming_storage.pending_path(target[0], upload_id, progress), matched)
+            except Refusal:                                   # a bad file: no answer makes it readable
+                shutil.rmtree(incoming_storage.pending_dir(target[0], upload_id), ignore_errors=True)
+                raise
             progress["encoding"] = matched
         questions.record(progress, asked, matched, QUESTION, nulls=True)
         incoming_storage.save_pending(target[0], upload_id, progress)

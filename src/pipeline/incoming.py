@@ -11,14 +11,15 @@ from orbitrows.pipeline.store import context, header, keys, profile, roles, run,
 from orbitrows.services.csv.reader import read_table
 
 
-async def classify(model, path: Path, encoding: str | None = None, store_id: str | None = None) -> dict:
+async def classify(model, path: Path, encoding: str | None = None, catalog: dict | None = None) -> dict:
+    """catalog: incoming_match.catalog() of the store to match against; None: no matching."""
     saved, notices, ordered = {}, [], run._Ordered(model)
 
     def group(w):                                             # matching calls are independent: all asked at once
         return (w["step"], w["position"]) if w["step"] == "matching" else w["step"]
 
     def pause(phase: str):
-        found = run._warnings(path.name, saved, "schema" if phase == "types" else phase)
+        found = run._warnings(path.name, saved, phase)
         notices.extend(w for w in found if "question" not in w)
         if asked := run.first_questions(found, group, ordered.order):
             raise run.Paused(phase, asked, notices)
@@ -37,7 +38,7 @@ async def classify(model, path: Path, encoding: str | None = None, store_id: str
     saved["schema"]["create_table"] = result[table["path"]]["create_table"]
     saved["keys"] = {"warnings": result[table["path"]]["warnings"]}
     pause("keys")
-    if store_id is not None:
-        saved["matching"] = await incoming_match.classify(ordered, table, saved, store_id)
+    if catalog is not None:
+        saved["matching"] = await incoming_match.classify(ordered, table, saved, catalog)
         pause("matching")
     return {"table": table, "saved": saved, "notices": notices}
