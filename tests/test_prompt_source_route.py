@@ -43,8 +43,9 @@ def db(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_explicit_prompt_can_select_several_incoming_sources(db):
-    result = await source_route.run(Sources(), "Compare in_supplier_1 and in_warehouse_2 with our store", db)
+async def test_model_can_select_several_incoming_sources(db):
+    result = await source_route.run(Sources({"incoming_1": 1.0, "incoming_2": 1.0}),
+                                    "Compare in_supplier_1 and in_warehouse_2 with our store", db)
     assert result["store"] is True
     assert [t["id"] for t in result["incoming"]] == [1, 2]
 
@@ -77,19 +78,15 @@ async def test_uncertain_source_asks_and_replays_answer(db):
 
 
 @pytest.mark.asyncio
-async def test_same_filename_uploads_require_an_explicit_choice(db):
+async def test_same_filename_uploads_selected_together_are_kept_with_a_notice(db):
     with db:
         db.execute("INSERT INTO _incoming_tables VALUES (3, 'in_supplier_3', 'incoming/3/supplier.csv')")
-    inner, calls = Sources(), {}
-    with pytest.raises(Paused) as paused:
-        await pipeline.run("Show supplier.csv beside our products", Recorded(inner, calls), db)
-    assert paused.value.phase == "source_selection"
-    [question] = paused.value.questions
-    assert {o["answer"] for o in question["question"]["options"]} == {
-        "in_supplier_1 (upload 1)", "in_supplier_3 (upload 3)"}
-    settle(calls, question["question"]["call"], question["question"]["key"], "3")
-    result = await pipeline.run("Show supplier.csv beside our products", Recorded(inner, calls), db)
-    assert [t["id"] for t in result["source_selection"]["incoming"]] == [3]
+    result = await source_route.run(Sources({"incoming_1": 1.0, "incoming_3": 1.0}),
+                                    "Show supplier.csv beside our products", db)
+    assert [t["id"] for t in result["incoming"]] == [1, 3]
+    [notice] = result["warnings"]
+    assert "question" not in notice
+    assert "in_supplier_1 (upload 1), in_supplier_3 (upload 3)" in notice["problem"]
 
 
 @pytest.mark.asyncio
