@@ -95,3 +95,9 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 - [ ] **The matching catalog is the store as committed when the upload started** (kept in the upload's progress): a store change made while an `i_` question is open isn't seen by that upload's matching.
 - [ ] **A second upload in the same session can hit "database is locked"** if a large first upload made SQLite spill its page cache (the catalog is read by a separate connection). The snapshot makes it rarer.
 - [ ] **Same-named uploads** selected for a message are all kept, with a notice; a real question needs the message flow to pass a user answer back.
+
+## Update / insert from an upload (review leftovers, low)
+
+- [ ] **Keys that differ only by format** (`'7'` and `'007'`, or `' A1'` and `'A1'`) pass the duplicate check as two keys, yet SQLite matches both `'7'` and `'007'` to an INTEGER store key 7 (numeric affinity): an update then takes one of them arbitrarily. Normalise the upload key (trim; for an INTEGER store key, compare as integers) before the duplicate check.
+- [ ] **An insert copies the upload key as written** (untrimmed): `' A1'` passes "not in the store" when the store has `'A1'`, then a STRICT TEXT key stores `' A1'` beside it.
+- [ ] **An update from several columns of one upload** runs only on rows where every taken cell is filled: a row with one empty cell keeps all its values, even those the file had.
