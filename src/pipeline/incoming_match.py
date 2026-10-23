@@ -15,6 +15,7 @@ from orbitrows.services.storage import store
 
 TIE = 0.1                                                     # an uncertain runner-up this close to the best: ask
 
+SHOWN = 3                                                     # other uncertain store columns named in one notice
 CRITERIA = {
     "direct": "The incoming column supplies the same business field, with compatible purpose, scope, and basis. Formatting or unit normalization may differ.",
     "partial": "The incoming column supplies a supported component of the store field, or contains a supported part that supplies it. Combination or separation is required.",
@@ -111,5 +112,6 @@ async def classify(model, table: dict, saved: dict, store_id: str) -> dict:
         if uncertain:                                         # the other uncertain pairs: one notice, likeliest first
             warnings.append({"step": "matching", "column": source["header"], "position": pos,
                              "problem": f"{source['header']}: also possibly "
-                                        + ", ".join(f"{j[1]['table']}.{j[1]['header']}" for j in uncertain)})
+                                        + ", ".join(f"{j[1]['table']}.{j[1]['header']}" for j in uncertain[:SHOWN])
+                                        + (f" and {len(uncertain) - SHOWN} more" if len(uncertain) > SHOWN else "")})
     return {"matches": matches, "warnings": warnings}
