@@ -1,7 +1,7 @@
 """A question for the user, shared by store imports (q_…/n_…), incoming uploads (i_…), and messages (m_…). Their
 states live in import.json, incoming_pending/<upload>/progress.json, and the session server's memory respectively. A question is
-a warning with {"id", "question": {"type": choice | yes_no | name, …}}; a state is {"open", "answered", "calls",
-"step", …}. Light on imports: the session server loads this at its start."""
+a warning with {"id", "question": {"type": choice | yes_no | name | formula, …}}; a state is {"open", "answered",
+"calls", "step", …}. Light on imports: the session server loads this at its start."""
 
 
 class Invalid(Exception):
@@ -46,8 +46,15 @@ def find(state: dict, question: str | None, given: str | None, where: str, none:
 
 def match(q: dict, given: str) -> str:
     """The answer as recorded: a valid answer matched case-insensitively; for a name, the text as a SQL name or, on
-    skip, the default. Else Invalid, listing the valid answers."""
+    skip, the default; for a formula, the text parse() accepts. Else Invalid, listing the valid answers."""
     ask = q["question"]
+    if ask["type"] == "formula":                              # a unit conversion: any formula from x parse() takes
+        from orbitrows.pipeline.merge.convert import parse    # here: pydantic, as for a name
+        try:
+            parse(given)
+        except ValueError as e:
+            raise Invalid(str(e)) from None
+        return given.strip()
     if ask["type"] == "name":                                 # a table split out of a file: any name, or skip
         from orbitrows.sql.ddl import sql_name                # here: pydantic, which a message's answer doesn't need
         return ask["default"] if given.casefold() == "skip" else sql_name(given)   # never a leading _: the store's own
