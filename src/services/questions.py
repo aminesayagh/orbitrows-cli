@@ -1,5 +1,5 @@
-"""A question for the user, the same in both flows that ask them: an import's (cli/main.py, ids q_…/n_…, its state in
-stores/<id>/import.json) and a message's (session/server.py, ids m_…, its state in the server's memory). A question is
+"""A question for the user, shared by store imports (q_…/n_…), incoming uploads (i_…), and messages (m_…). Their
+states live in import.json, incoming_pending/<upload>/progress.json, and the session server's memory respectively. A question is
 a warning with {"id", "question": {"type": choice | yes_no | name, …}}; a state is {"open", "answered", "calls",
 "step", …}. Light on imports: the session server loads this at its start."""
 
@@ -17,7 +17,8 @@ def shown(q: dict, keys: tuple, nulls: bool) -> dict:
     """A question as the user sees it: its options' answers and probabilities, not the call its answer settles."""
     ask = q["question"]
     return (fields(q, keys, nulls) | {"type": ask["type"]}
-            | ({"options": [{"answer": o["answer"], "probability": o["probability"]} for o in ask["options"]]}
+            | ({"options": [{k: o[k] for k in ("answer", "probability", "preview") if k in o}
+                            for o in ask["options"]]}
                if ask["type"] == "choice" else {})                    # a yes/no is answered yes or no
             | ({"default": ask["default"]} if ask["type"] == "name" else {}))   # a name: any text, or skip
 

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from orbitrows.pipeline.store import run
-from orbitrows.services.csv.reader import first_rows, read_table
+from orbitrows.services.csv.reader import EncodingNeeded, first_rows, read_table
 from orbitrows.services.storage import store as storage
 from orbitrows.services.storage.export import export
 from test_store_run import Unsure
@@ -29,8 +29,24 @@ def test_has_header_can_be_forced(tmp_path):
 def test_semicolon_and_windows_1252(tmp_path):
     f = tmp_path / "t.csv"
     f.write_bytes("nom;prix\nCafé;3\nThé;4\n".encode("cp1252"))
-    t = read_table(f, has_header=True)
+    with pytest.raises(EncodingNeeded) as needed:
+        read_table(f, has_header=True)
+    assert any(o["answer"] == "cp1252" and "Café" in o["preview"] for o in needed.value.options)
+    t = read_table(f, has_header=True, encoding="cp1252")
     assert t["encoding"] == "cp1252" and t["delimiter"] == ";" and t["rows"][0] == ["Café", "3"]
+
+
+@pytest.mark.parametrize(("encoding", "value"), [
+    ("mac_roman", "Café crème"), ("cp1251", "Сахар"), ("cp1254", "Şeker"),
+    ("cp1250", "Łódź"), ("latin-1", "Grüße"),
+])
+def test_legacy_encodings_are_never_guessed_silently(tmp_path, encoding, value):
+    f = tmp_path / "t.csv"
+    f.write_bytes(f"name;price\n{value};3\n".encode(encoding))
+    with pytest.raises(EncodingNeeded) as needed:
+        read_table(f, has_header=True)
+    assert any(option["answer"] == encoding and value in option["preview"] for option in needed.value.options)
+    assert read_table(f, has_header=True, encoding=encoding)["rows"][0][0] == value
 
 
 TEXT = ("TEXT", {"TEXT": 0.9})
@@ -67,12 +83,12 @@ async def test_a_blank_row_between_records_is_kept_and_exported_but_a_trailing_o
 
 
 @pytest.mark.usefixtures("no_gliner")
-async def test_utf_16_is_read_and_written_back_and_an_unknown_encoding_is_refused(tmp_path, monkeypatch):
+async def test_utf_16_is_read_and_written_back_and_an_ambiguous_encoding_is_asked(tmp_path, monkeypatch):
     raw = "nom,prix\nCafé,3\nThé,4\n".encode("utf-16")                 # BOM, native byte order
     assert await through_the_store(tmp_path, monkeypatch, raw) == raw
     bad = tmp_path / "bad.csv"
     bad.write_bytes(b"a,b\n\x81,2\n")                                  # 0x81 is undefined in Windows-1252
-    with pytest.raises(ValueError, match="Unknown text encoding"):
+    with pytest.raises(EncodingNeeded):
         read_table(bad)
 
 

@@ -33,9 +33,9 @@ def decide(p: float) -> dict:
     return out
 
 
-async def detect(jev, path) -> dict:
+async def detect(jev, path, encoding=None) -> dict:
     """{"has_header": bool, "probability": float, "warning"?: str, "question"?: {"type": "yes_no", "call", "key"}}."""
-    ev = first_rows(path, ROWS)
+    ev = first_rows(path, ROWS, encoding=encoding)
     state = {"file": Path(path).name, "first_rows": ev["rows"],
              "sniffer_hint": {True: "header", False: "no header", None: "no guess"}[ev["sniffer_header"]]}
     a = await ask(jev, state, {"header": yes_no(

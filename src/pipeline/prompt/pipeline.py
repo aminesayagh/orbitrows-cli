@@ -13,13 +13,16 @@ from orbitrows.pipeline.store.run import Paused, _Ordered, first_questions
 from orbitrows.services.extractor import client as extractor
 from orbitrows.sql.ddl import schema_from_sqlite
 
-from . import assemble, conditions, coref, formula, grouping, operation, parts, request_graph, sources, values
+from . import assemble, conditions, coref, formula, grouping, operation, parts, request_graph, source_route, sources, values
 
 
 def store_of(db) -> list[dict]:
     """The store's create_table nodes, as the PoC's Orbitrow schema(); `_` tables and columns are the CLI's
     (classification, history; a file's row order), not the merchant's."""
-    nodes = [n for n in schema_from_sqlite(db) if not n.definition.sql_name.startswith("_")]
+    known = {name for (name,) in db.execute("SELECT sql_name FROM _store_tables")} if db.execute(
+        "SELECT 1 FROM sqlite_schema WHERE name = '_store_tables'").fetchone() else None
+    nodes = [n for n in schema_from_sqlite(db) if not n.definition.sql_name.startswith("_")
+             and (known is None or n.definition.sql_name in known)]
     for n in nodes:
         n.definition.columns = [c for c in n.definition.columns if not c.sql_name.startswith("_")]
     return [n.model_dump() for n in nodes]
@@ -28,7 +31,7 @@ def store_of(db) -> list[dict]:
 async def run(prompt: str, model, db, step=lambda text: None) -> dict:
     """The PoC's run(), with `model` opened by the caller and progress through `step` (no printing). Raises Paused
     after the first step whose warnings carry a question; its notices are those of the steps run so far."""
-    store, spans = store_of(db), extractor.connect()           # spans: GLiNER2, the PoC's `model`
+    store = store_of(db)
     model, warned = _Ordered(model), {}                       # step → its latest warnings (lists changed in place too)
 
     def pause(*names, **sections):
@@ -38,6 +41,20 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
             if questions := first_questions(found, lambda w: w["step"], model.order):
                 raise Paused(name, questions, [{"step": k} | w for k, ws in warned.items() for w in ws
                                                if "question" not in w])
+
+    step("source selection")
+    selected = await source_route.run(model, prompt, db)
+    pause("source_selection", source_selection=selected)
+    if selected.get("error") or selected["incoming"] or not selected["store"]:
+        named = ", ".join(t["sql_name"] for t in selected["incoming"])
+        problem = selected.get("error") or (f"Selected incoming source(s): {named}. SQL generation across incoming "
+                                            "and store tables is not implemented yet." if named
+                                            else "No data source could be identified for this prompt.")
+        return {"prompt": prompt, "source_selection": selected,
+                "assembly": {"program": [], "questions": [], "errors": [
+                    {"request": "message", "stage": "source_selection", "error": problem}]}}
+
+    spans = extractor.connect()                                # GLiNER2 is needed only for the store compiler
 
     step("references (CorPipe)")
     mentions = coref.mentions([prompt], name="pipeline")[0]

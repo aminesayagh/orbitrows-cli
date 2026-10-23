@@ -22,4 +22,4 @@ dist/
 *.egg-info/
 
 # CorPipe: its own environment
-.venv-corpipe/
+.venv-corpipe

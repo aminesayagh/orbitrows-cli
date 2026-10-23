@@ -1,0 +1,9 @@
+sku,product_id,variant,product_name,brand,category,cost_mad,recommended_price_mad,available_qty,barcode
+MUG-WHT,P100,White,"Ceramic Mug, 350ml",Atlas Home,Kitchen,54.00,99.00,30,6110000000011
+MUG-BLU,P100,Blue,"Ceramic Mug, 350ml",Atlas Home,Kitchen,54.00,99.00,20,6110000000012
+TOTE-NAT,P101,Natural,Canvas Tote,Atlas Home,Accessories,72.00,129.00,10,6110000000021
+LAMP-BLK,P102,Black,Desk Lamp,Noor Living,Lighting,250.00,,0,6110000000031
+TEA-GRN,P103,100g,Thé vert 100g,Amal Foods,Grocery,31.00,55.00,40,6110000000041
+TEE-BLK-M,P104,Black M,Cotton Tee,NorthWear,Apparel,90.00,159.00,15,6110000000051
+TEE-BLK-L,P104,Black L,Cotton Tee,NorthWear,Apparel,90.00,159.00,12,6110000000999
+NEW-CUP,P106,Red,Enamel Cup,Atlas Home,Kitchen,42.00,79.00,25,6110000000071

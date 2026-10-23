@@ -32,14 +32,15 @@ class Generic(Model):
 async def test_classify_runs_every_step_on_every_file():
     paths = sorted((CASES / "french").glob("*.csv"))
     steps, jev = [], Generic()
-    saved = await run.classify(jev, paths, step=steps.append)
+    encodings = {p.name: "cp1252" for p in paths}
+    saved = await run.classify(jev, paths, step=steps.append, encodings=encodings)
     assert list(saved) == [p.name for p in paths] and len(paths) == 2
     for f, s in saved.items():
         assert set(s) == SECTIONS, f
         assert {"header", "has_header", "probability"} <= set(s["read"])
         assert all("warnings" in s[name] for name in run.STEPS)
     assert jev.calls > 0 and "keys between the files" in steps
-    diffs = schema.round_trip(run.build(saved)["store"], run.rows(paths, saved))   # the chain goes through to the proof,
+    diffs = schema.round_trip(run.build(saved)["store"], run.rows(paths, saved, encodings))   # the chain goes through to the proof,
     assert any("datatype mismatch" in d.get("problem", "") for d in diffs)         # which catches the stub's INTEGER for text
 
 
@@ -59,9 +60,9 @@ async def test_a_second_run_replays_every_answer_without_a_call():
     paths, calls = sorted((CASES / "french").glob("*.csv")), {}
     first, second = Generic(), Generic()
     async with Recorded(first, calls) as m:
-        saved = await run.classify(m, paths)
+        saved = await run.classify(m, paths, encodings={p.name: "cp1252" for p in paths})
     async with Recorded(second, calls) as m:
-        assert await run.classify(m, paths) == saved
+        assert await run.classify(m, paths, encodings={p.name: "cp1252" for p in paths}) == saved
     assert first.calls == len(calls) > 0 and second.calls == 0
 
 

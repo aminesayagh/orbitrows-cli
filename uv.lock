@@ -759,6 +759,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "babel" },
+    { name = "charset-normalizer" },
     { name = "en-core-web-sm" },
     { name = "fr-core-news-sm" },
     { name = "gliner2", extra = ["local"] },
@@ -784,6 +785,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "babel", specifier = ">=2.18.0" },
+    { name = "charset-normalizer", specifier = ">=3.5.1" },
     { name = "en-core-web-sm", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" },
     { name = "fr-core-news-sm", url = "https://github.com/explosion/spacy-models/releases/download/fr_core_news_sm-3.8.0/fr_core_news_sm-3.8.0-py3-none-any.whl" },
     { name = "gliner2", extras = ["local"], specifier = ">=2.0.0" },

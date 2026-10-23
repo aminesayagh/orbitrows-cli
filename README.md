@@ -36,6 +36,7 @@ The model (`ufal/corpipe26-onestage-corefud1.4-large-260702`) downloads on first
 
 ```bash
 orbitrows store products.csv variants.csv -n "Orbitrow shop"   # prints: Store st_7f3a91c2 (Orbitrow shop)
+orbitrows store legacy.csv --encoding cp1252                 # when its encoding is already known
 orbitrows answer q_1a2b3c4d REAL                              # when the import stopped on a question (exit 3)
 orbitrows incoming supplier.csv                               # for the latest store
 orbitrows message "raise all prices by 5%" --store st_7f3a91c2
@@ -46,17 +47,21 @@ orbitrows export -o out/                                      # writes the store
 
 | Command | Takes | Does |
 |---|---|---|
-| `store` | one or more CSV files, `-n/--name` (optional) | checks every file (one bad file, or two files with the same name, refuses the store), registers the store, and imports it: Jev classifies the header, types, context, roles, keys and joined records; the store's tables are built and proven to give every file back. It writes the store folder, prints each table and every warning, and prints the store's id as the last line. When Jev is unsure, the import stops on its questions instead (below) |
-| `answer` | a question's id and its answer (both optional), `-s/--store` | records the answer to one open question of a store waiting for answers (a message's question, `m_…`, goes to its session: see Sessions). Once none is open, the import runs again from the start, replaying every answer already given (no new Jev call for them), and ends like `store`, or stops on the next questions. With no question and none open, it only retries the import (after a failure) |
-| `incoming` | one CSV file, `-s/--store` | checks the file for a store; not saved yet |
-| `message` | the request (quoted or not), `-s/--store` | runs the request through the prompt pipeline in the store's session (below), starting it if none is open, and applies its SQL: prints one JSON object with each statement's rows (a query) or row count (a change). When Jev is unsure, it stops on its questions instead, like the import |
+| `store` | one or more CSV files, `-n/--name` and `--encoding` (optional) | checks every file, then imports it: Jev classifies the header, types, context, roles, keys and joined records; the store's tables are built and proven to give every file back. A non-UTF-8 file without a BOM pauses for an encoding choice before Jev runs. `--encoding` applies to all files when it is known. It writes the store folder, prints each table and every warning, and prints the store's id as the last line. When Jev is unsure, the import stops on its questions instead (below) |
+| `answer` | a question's id and its answer (both optional), `-s/--store` | records an answer for a store import (`q_…`), incoming upload (`i_…`), or message (`m_…`). The paused work resumes with earlier model answers replayed |
+| `incoming` | one CSV file, `-s/--store`, `--encoding` (optional) | profiles and classifies the file, asks about uncertain decisions, then saves a protected TEXT table and its incoming-to-store column matches in that store's `session.db` (finish an open session before uploading) |
+| `message` | the request (quoted or not), `-s/--store` | selects store and incoming sources first, then runs store-only requests through the session's SQL pipeline. Incoming sources are identified, but SQL generation using them is not implemented yet, so such requests stop without changing data. When Jev is unsure, it asks a question |
 | `undo` | `-s/--store` | reverts the session's last change |
 | `exit` | `-s/--store` | saves the session's changes and ends it |
 | `export` | `-o/--output` folder (required), `--force`, `-s/--store` | rebuilds every uploaded file from the store's tables (the same rebuild the import's proof runs) and writes it into the folder: same file name, encoding, delimiter and line ending as the upload, the header row only if it had one, an empty cell for NULL, numbers as stored (`12.50` comes back `12.5`), rows in the order they were loaded. With a session open, it exports through it, so its unsaved changes are included. A file already in the folder refuses the export (nothing is written) unless `--force`. Prints one JSON object: `{"store", "name", "files": [{"file", "path", "rows"}]}` |
 
 `--store` takes a store's id or name; without it, the latest ready store is used (for `answer`, the latest store waiting for answers, or left importing after its questions by a killed resume). Two `answer` commands on one store run one after the other: the second waits for the first. Progress goes to stderr and results to stdout; a refusal exits with 1, Ctrl+C with 130 (SIGTERM is handled like Ctrl+C).
 
+Incoming row tables share `session.db` with the store. Each has triggers rejecting INSERT, UPDATE, and DELETE after its initial load; export still uses only store tables. Finish an open store session with `orbitrows exit` before an incoming upload, because that session holds the database's write transaction. An earlier `incoming.db` is retired after the first successful upload in the new layout; its copied CSV files remain under `incoming/` for reimport, while its old classifications and matches are not carried over.
+
 ### Questions
+
+An encoding is accepted automatically when the file has a UTF-8, UTF-16 or UTF-32 BOM, or reads as UTF-8 without a BOM. Other files pause at step `encoding`, before a model call. Each option shows a line decoded with that encoding; choose the one with the right letters using `orbitrows answer <id> <encoding>`. The chosen encoding is kept with the store and used again for export. The list includes common legacy encodings and charset-normalizer suggestions; the detector's ranking is not treated as proof. If you already know the encoding, use `store --encoding <name>`.
 
 A Jev answer below its threshold is a question for the user: a choice (`options`) or a yes/no. The import runs phase by phase (header, types, context, roles, keys, joins) and stops after the first phase that has one. The store is then waiting for answers, `store` (or `answer`) exits with **3**, and stdout is one JSON object and nothing else, for the LLM that drives this CLI and asks the user:
 
@@ -77,7 +82,7 @@ If the import fails after its questions were asked (Jev down, Ctrl+C or SIGTERM,
 Each store is a row in the registry, `~/.local/share/pilotstore/stores.db` (`$XDG_DATA_HOME` moves it): its id (`st_` + 8 hex), its optional name, and its status (`0` importing, `1` ready, `2` waiting for answers, `-1` failed). Each store also has its own folder, `stores/<id>/` next to the registry:
 
 - `files/`: the uploaded CSV files, unchanged; the import (and every resume) reads these copies;
-- `import.json`: the import's progress, written after each new Jev answer (temporary file, then renamed): `files` (upload order), `calls` (every Jev answer with its probabilities, the user's answers recorded as certain), `names` (the table name chosen for each naming question), `step` and `open` (the current pause and its questions), `answered` (each question with the user's answer), `shown` (the notices already printed). It's kept once the import is done;
+- `import.json`: the import's progress, written after each new answer (temporary file, then renamed): `files` (upload order), `encodings` (explicit or user-chosen readings), `calls` (every Jev answer with its probabilities, the user's answers recorded as certain), `names` (the table name chosen for each naming question), `step` and `open` (the current pause and its questions), `answered` (each question with the user's answer), `shown` (the notices already printed). It's kept once the import is done;
 - `session.db`: the store's tables with their rows, plus the classification tables (`_store_tables`, `_store_columns`, `_column_context`, `_export`) and `_history`, the log of changes: its first row is the import, with the tables' `create_table` ASTs (`json_ast`) and the `CREATE TABLE` statements run (`sql`). `_store_tables.created_by` and `_store_columns.edited_by` reference the `_history` row of the request that created the table / last changed the column (the import, row 1, for now). It's written in one transaction, and only if every file can be rebuilt from it;
 - `original.db`: a copy of `session.db` taken right after the import.
 
@@ -130,6 +135,9 @@ tests/
 ## Tests
 
 No test calls a model: they use stubs and the PoC cases in `tests/fixtures/cases/`.
+`tests/test_hard_csv_workflows.py` also runs 20 representative CSV byte cases through the CLI, all import phases,
+SQLite and export, plus a related-file import and an import → message → undo → exit flow. External model judgments
+are fixed in those tests; the suite checks workflow behavior and data preservation, not live model accuracy.
 
 ```bash
 uv run python -m pytest

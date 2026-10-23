@@ -8,6 +8,7 @@ import csv
 import hashlib
 import json
 import os
+import shutil
 import signal
 import sqlite3
 import sys
@@ -17,12 +18,14 @@ from typesafe_sdk import TypeSafeError
 
 from orbitrows.pipeline.prompt import coref
 from orbitrows.pipeline.store import run
+from orbitrows.pipeline import incoming as incoming_pipeline
 from orbitrows.services.cli.crash import report
-from orbitrows.services.csv.reader import read_table
+from orbitrows.services.csv.reader import EncodingNeeded, read_table
 from orbitrows.services import questions
 from orbitrows.services.model.client import Recorded, connect
 from orbitrows.services.session import client as session
 from orbitrows.services.storage import export as exporting
+from orbitrows.services.storage import incoming as incoming_storage
 from orbitrows.services.storage import registry
 from orbitrows.services.storage import store as storage
 from orbitrows.sql.ddl import sql_name
@@ -47,12 +50,14 @@ def need_key() -> None:
         need("TYPESAFE_API_KEY")
 
 
-def read(path: Path) -> dict:
+def read(path: Path, encoding: str | None = None) -> dict:
     """The file as read_table reads it (Sniffer's header guess), or a refusal."""
     if not path.is_file():
         raise Refusal(f"File not found: {path}")
     try:
-        table = read_table(path)
+        table = read_table(path, encoding=encoding) if encoding is not None else read_table(path)
+    except EncodingNeeded:
+        raise
     except (ValueError, csv.Error, OSError) as e:
         raise Refusal(f"Cannot read {path.name}: {e}") from None
     except IndexError:                                        # not one non-empty row
@@ -136,7 +141,8 @@ def importing(store: tuple[str, str | None], progress: dict) -> int:
 
     async def ask_model():
         async with Recorded(connect(), progress["calls"], saved=save) as model:
-            return await run.classify(model, paths, step=step, names=progress.get("names", {}))
+            kwargs = {"encodings": progress["encodings"]} if progress.get("encodings") else {}
+            return await run.classify(model, paths, step=step, names=progress.get("names", {}), **kwargs)
 
     try:
         registry.set_status(store_id, registry.IMPORTING)
@@ -149,7 +155,7 @@ def importing(store: tuple[str, str | None], progress: dict) -> int:
             save()
             registry.set_status(store_id, registry.WAITING)
             return paused(store, progress, notices)
-        rows = run.rows(paths, saved)
+        rows = run.rows(paths, saved, progress.get("encodings"))
         built = run.build(saved, progress.get("names", {}))
         for w in unseen(progress, built["warnings"]):        # before writing, so a refusal shows them too
             print(warning(w))
@@ -169,29 +175,46 @@ def importing(store: tuple[str, str | None], progress: dict) -> int:
     return 0
 
 
-def store(paths: list[Path], name: str | None) -> int:
-    # Every file is checked first, so a bad one refuses the store before anything is registered.
+def store(paths: list[Path], name: str | None, encoding: str | None = None) -> int:
+    # Check certain files before registration; ambiguous ones are validated after the user's answer.
     unique = {}
     for p in paths:                                           # the same file twice is read once
         unique.setdefault(p.resolve(), p)
     paths = list(unique.values())
+    uncertain, encodings = [], {}
     for path in paths:
-        read(path)
+        try:
+            table = read(path, encoding)
+            if encoding is not None:
+                encodings[path.name] = table["encoding"]
+        except EncodingNeeded as e:
+            if not e.options:
+                raise Refusal(f"Cannot read {path.name}: no usable text encoding found. Try --encoding.") from None
+            question_id = "q_" + hashlib.sha256(path.name.encode()).hexdigest()[:8]
+            uncertain.append({"id": question_id, "file": path.name, "step": "encoding", "column": None,
+                              "problem": "This file's encoding isn't certain. Which reading is right?",
+                              "question": {"type": "choice", "options": [o | {"value": o["answer"]}
+                                                               for o in e.options]}})
     tables = {}
     for p in paths:
         tables.setdefault(sql_name(p.stem), []).append(p)
     for table, files in tables.items():
         if len(files) > 1:                                    # order-lines.csv and order_lines.csv are one table
             raise Refusal(f"{', '.join(str(f) for f in files)} would all be the table {table}. Rename one of them.")
-    need_key()
+    if not uncertain:
+        need_key()
     store_id = registry.create(name)
-    progress = {"files": [p.name for p in paths], "calls": {}, "names": {}, "open": [], "answered": [], "shown": []}
+    progress = {"files": [p.name for p in paths], "calls": {}, "names": {}, "encodings": encodings,
+                "open": uncertain, "answered": [], "shown": [], "step": "encoding" if uncertain else None}
     try:                                                      # the import runs on the copies: a resume needs no path
         storage.copy_files(store_id, paths)
         storage.save_import(store_id, progress)
     except BaseException:
         registry.set_status(store_id, registry.FAILED)
         raise
+    if uncertain:
+        registry.set_status(store_id, registry.WAITING)
+        return paused((store_id, name), progress, [])
     return importing((store_id, name), progress)
 
 
@@ -200,6 +223,8 @@ def answer(question: str | None, given: str | None, ref: str | None) -> int:
     message's question (m_…) is its session's."""
     if question and question.startswith("m_"):
         return answered(question, given, ref)
+    if question and question.startswith("i_"):
+        return answer_incoming(question, given, ref)
     store_id = resolve(ref, registry.WAITING)[0]
     with storage.locked(store_id):                            # to the end: a parallel answer waits, so none is lost
         return record(resolve(store_id, registry.WAITING), question, given)   # again: the one it waited for may be done
@@ -224,6 +249,10 @@ def record(target: tuple[str, str | None], question: str | None, given: str | No
                 raise Refusal(f"{given} can't name this table: {match} is another table's name. Give another name, "
                               "or skip.")
             names[question] = match
+        if q["step"] == "encoding":
+            file = q["file"]
+            table = read(storage.folder(target[0]) / "files" / file, match)
+            progress.setdefault("encodings", {})[file] = table["encoding"]
         questions.record(progress, q, match, QUESTION, nulls=True)
         storage.save_import(target[0], progress)
     if progress["open"]:
@@ -233,12 +262,126 @@ def record(target: tuple[str, str | None], question: str | None, given: str | No
     return importing(target, progress)
 
 
-def incoming(path: Path, ref: str | None) -> None:
+def incoming_paused(target: tuple[str, str | None], upload_id: str, progress: dict, notices: list) -> int:
+    print(json.dumps({"store": target[0], "name": target[1], "upload": upload_id}
+                     | questions.asking(progress, notices, QUESTION, nulls=True), ensure_ascii=False))
+    return PAUSED
+
+
+def inspect_incoming(path: Path, encoding: str | None = None) -> None:
+    """Check readability without guessing whether its first row is a header."""
+    if not path.is_file():
+        raise Refusal(f"File not found: {path}")
+    try:
+        rows = read_table(path, has_header=False, encoding=encoding)["rows"]
+    except EncodingNeeded:
+        raise
+    except (ValueError, csv.Error, OSError) as e:
+        raise Refusal(f"Cannot read {path.name}: {e}") from None
+    except IndexError:
+        raise Refusal(f"Cannot read {path.name}: empty file") from None
+    if not rows:
+        raise Refusal(f"Cannot read {path.name}: empty file")
+
+
+def resume_incoming(target: tuple[str, str | None], upload_id: str, progress: dict) -> int:
+    store_id = target[0]
+    try:
+        incoming_storage.check_session(store_id)
+    except incoming_storage.SessionActive as e:
+        raise Refusal(str(e)) from None
+    path = incoming_storage.pending_path(store_id, upload_id, progress)
+    save = lambda: incoming_storage.save_pending(store_id, upload_id, progress)
+
+    async def classify():
+        async with Recorded(connect(), progress["calls"], saved=save) as model:
+            return await incoming_pipeline.classify(model, path, progress["encoding"], store_id)
+
+    try:
+        result = asyncio.run(classify())
+    except run.Paused as p:
+        token = upload_id.removeprefix("up_")
+        progress["open"] = [q | {"id": f"i_{token}_{q['id'].removeprefix('q_')}"} for q in p.questions]
+        progress["step"] = p.phase
+        notices = unseen(progress, p.notices)
+        save()
+        return incoming_paused(target, upload_id, progress, notices)
+    table = result["table"]
+    if not table["rows"]:
+        raise Refusal(f"Cannot read {progress['file']}: no data rows")
+    for number, row in enumerate(table["rows"], 2 if table["has_header"] else 1):
+        if len(row) != len(table["header"]):
+            raise Refusal(f"Cannot read {progress['file']}: row {number} has {len(row)} cells; "
+                          f"expected {len(table['header'])}.")
+    for notice in unseen(progress, result["notices"]):
+        print(warning(notice))
+    save()
+    try:
+        written = incoming_storage.upload(store_id, path, table, result["saved"])
+    except incoming_storage.SessionActive as e:
+        raise Refusal(str(e)) from None
+    shutil.rmtree(incoming_storage.pending_dir(store_id, upload_id))
+    print(f"{progress['file']}: {written['rows']} rows · {written['columns']} columns, incoming for store "
+          f"{label(target)} as {written['table']}")
+    for match in result["saved"].get("matching", {}).get("matches", []):
+        print(f"  {match['incoming_header']} → {match['store_table']}.{match['store_header']} "
+              f"({match['relation']}, {match['confidence']:.0%})")
+    return 0
+
+
+def answer_incoming(question: str, given: str | None, ref: str | None) -> int:
+    parts = question.split("_", 2)
+    if len(parts) != 3 or not parts[1]:
+        raise Refusal(f"Invalid incoming question: {question}")
+    upload_id = "up_" + parts[1]
+    candidates = registry.find(ref, registry.READY)
+    found = [(sid, name) for sid, name in candidates
+             if (incoming_storage.pending_dir(sid, upload_id) / "progress.json").is_file()]
+    if not found:
+        raise Refusal(f"No pending incoming upload has question {question}.")
+    target = found[0]
+    with storage.locked(target[0]):
+        progress = incoming_storage.load_pending(target[0], upload_id)
+        try:
+            asked = questions.find(progress, question, given, f" for {progress['file']}",
+                                   f"No open question for incoming upload {upload_id}.")
+            matched = questions.match(asked, given)
+        except questions.Invalid as e:
+            raise Refusal(str(e)) from None
+        if asked["step"] == "encoding":
+            inspect_incoming(incoming_storage.pending_path(target[0], upload_id, progress), matched)
+            progress["encoding"] = matched
+        questions.record(progress, asked, matched, QUESTION, nulls=True)
+        incoming_storage.save_pending(target[0], upload_id, progress)
+        if progress["open"]:
+            return incoming_paused(target, upload_id, progress, [])
+        need_key()
+        return resume_incoming(target, upload_id, progress)
+
+
+def incoming(path: Path, ref: str | None, encoding: str | None = None) -> int:
     target = resolve(ref)
-    table = read(path)
-    # ponytail: not saved anywhere yet; the file is only checked
-    print(f"{path.name}: {len(table['rows'])} rows · {len(table['header'])} columns, incoming for store {label(target)}")
-    print("Incoming files aren't saved yet, so nothing else uses it.")
+    try:
+        incoming_storage.check_session(target[0])
+    except incoming_storage.SessionActive as e:
+        raise Refusal(str(e)) from None
+    try:
+        inspect_incoming(path, encoding)
+    except EncodingNeeded as e:
+        if not e.options:
+            raise Refusal(f"Cannot read {path.name}: no usable text encoding found. Try --encoding.") from None
+        upload_id, progress = incoming_storage.start(target[0], path)
+        token = upload_id.removeprefix("up_")
+        progress["step"] = "encoding"
+        progress["open"] = [{"id": f"i_{token}_encoding", "file": path.name, "step": "encoding", "column": None,
+                             "problem": "This file's encoding isn't certain. Which reading is right?",
+                             "question": {"type": "choice", "options": [o | {"value": o["answer"]}
+                                                                      for o in e.options]}}]
+        incoming_storage.save_pending(target[0], upload_id, progress)
+        return incoming_paused(target, upload_id, progress, [])
+    need_key()
+    upload_id, progress = incoming_storage.start(target[0], path, encoding)
+    return resume_incoming(target, upload_id, progress)
 
 
 def ask(target: tuple[str, str | None], request: dict, launch: bool = True) -> dict | None:
@@ -335,6 +478,7 @@ def parser() -> argparse.ArgumentParser:
     s = commands.add_parser("store", help="create a store from its CSV files; prints its id, or its questions")
     s.add_argument("files", nargs="+", type=Path, metavar="csv")
     s.add_argument("-n", "--name", help="a name for the store (optional)")
+    s.add_argument("--encoding", help="encoding of all uploaded files, when known (for example cp1252)")
     a = commands.add_parser("answer", help="answer a question of an import or a message; then it resumes")
     a.add_argument("question", nargs="?", help="the question's id, from the questions JSON")
     a.add_argument("answer", nargs="?", help="one of its options' answers, or yes/no; for a table's name, "
@@ -343,6 +487,7 @@ def parser() -> argparse.ArgumentParser:
                                          "message's question, m_…, the latest ready store with an open session)")
     i = commands.add_parser("incoming", help="add a supplier file to a store")
     i.add_argument("file", type=Path, metavar="csv")
+    i.add_argument("--encoding", help="encoding of this file, when known")
     m = commands.add_parser("message", help="send a request about the store's data")
     m.add_argument("text", nargs="+")
     u = commands.add_parser("undo", help="revert the session's last change")
@@ -361,11 +506,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         match args.command:
             case "store":
-                return store(args.files, args.name)
+                return store(args.files, args.name, args.encoding)
             case "answer":
                 return answer(args.question, args.answer, args.store)
             case "incoming":
-                incoming(args.file, args.store)
+                return incoming(args.file, args.store, args.encoding)
             case "message":
                 return message(" ".join(args.text), args.store)
             case "undo":

@@ -95,12 +95,14 @@ def unnamed(saved: dict, names: dict | None) -> list[dict]:
     return [question(g) for g in schema.groups(saved) if g["id"] not in (names or {})]
 
 
-async def classify(jev, paths: list, step=lambda text: None, names: dict | None = None) -> dict[str, dict]:
+async def classify(jev, paths: list, step=lambda text: None, names: dict | None = None,
+                   encodings: dict | None = None) -> dict[str, dict]:
     """{"<file name>": {"read", "schema", "profile", "context", "roles", "keys", "joins"}} for the store files.
     The rows are not kept: read them again with read_table(path, has_header=saved[file]["read"]["has_header"]).
     Raises Paused after the first phase whose warnings carry a question; last, "naming" for every table split out
     of a file that `names` ({question id: name}) has no answer for."""
     saved, tables, notices, jev = {}, {}, [], _Ordered(jev)
+    encodings = encodings or {}
 
     def pause(phase):
         found = [w for f, s in saved.items() for w in _warnings(f, s, SECTION.get(phase, phase))]
@@ -111,11 +113,11 @@ async def classify(jev, paths: list, step=lambda text: None, names: dict | None 
 
     for path in paths:
         step(f"{path.name}: header row")
-        saved[path.name] = {"read": await header.detect(jev, path)}
+        saved[path.name] = {"read": await header.detect(jev, path, encoding=encodings.get(path.name))}
     pause("header")
     for path in paths:
         f, s = path.name, saved[path.name]
-        tables[f] = table = read_table(path, has_header=s["read"]["has_header"])
+        tables[f] = table = read_table(path, has_header=s["read"]["has_header"], encoding=encodings.get(f))
         step(f"{f}: column types")
         s["read"] = {"header": table["header"]} | s["read"]
         s["schema"], s["profile"] = await types.classify(jev, table, NO_CONTEXT), profile.profile(table)
@@ -160,9 +162,11 @@ def _warnings(f: str, s: dict, name: str) -> list[dict]:
     return out
 
 
-def rows(paths: list, saved: dict) -> dict[str, list]:
+def rows(paths: list, saved: dict, encodings: dict | None = None) -> dict[str, list]:
     """{"<file name>": its data rows}, read with the header decision of the import."""
-    return {p.name: read_table(p, has_header=saved[p.name]["read"]["has_header"])["rows"] for p in paths}
+    encodings = encodings or {}
+    return {p.name: read_table(p, has_header=saved[p.name]["read"]["has_header"],
+                               encoding=encodings.get(p.name))["rows"] for p in paths}
 
 
 def build(saved: dict, names: dict | None = None) -> dict:

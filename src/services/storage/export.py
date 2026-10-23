@@ -28,11 +28,13 @@ def export(db, store: Path, out: Path, force: bool = False) -> list[dict]:
         raise FileExistsError(f"Already there: {', '.join(taken)}. Nothing was written; add --force to replace.")
     out.mkdir(parents=True, exist_ok=True)
     written = []
+    progress = store / "import.json"
+    encodings = json.loads(progress.read_text()).get("encodings", {}) if progress.exists() else {}
     for file, has_header, root, spec in files:
         spec = json.loads(spec)
         rows = rebuild(db, tables[root], [([columns[k] for k in c["via"]], columns[c["column_id"]]) for c in spec])
         upload = store / "files" / file
-        read = read_table(upload, bool(has_header))
+        read = read_table(upload, bool(has_header), encoding=encodings.get(file))
         ending = "\r\n" if "\r\n" in upload.read_bytes().decode(read["encoding"]) else "\n"
         fd, tmp = tempfile.mkstemp(dir=out, prefix=f".{file}.", suffix=".tmp")
         try:

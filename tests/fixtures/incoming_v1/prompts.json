@@ -1,0 +1,102 @@
+[
+  {
+    "id": "P01", "prompt": "Which SKUs in supplier_offer.csv already exist in our store?",
+    "kind": "compare", "reads": ["incoming.supplier_offer", "store.variants"], "writes": [],
+    "expected": {"skus": ["MUG-WHT", "MUG-BLU", "TOTE-NAT", "LAMP-BLK", "TEA-GRN", "TEE-BLK-M", "TEE-BLK-L"]}
+  },
+  {
+    "id": "P02", "prompt": "Show the supplier_offer.csv SKUs that are not in the store yet.",
+    "kind": "compare", "reads": ["incoming.supplier_offer", "store.variants"], "writes": [],
+    "expected": {"skus": ["NEW-CUP"]}
+  },
+  {
+    "id": "P03", "prompt": "Which store variants are missing from supplier_offer.csv?",
+    "kind": "compare", "reads": ["store.variants", "incoming.supplier_offer"], "writes": [],
+    "expected": {"skus": ["BOTTLE-750"]}
+  },
+  {
+    "id": "P04", "prompt": "For matching SKUs, show our price beside the supplier's recommended price, including blanks.",
+    "kind": "compare", "reads": ["store.variants", "incoming.supplier_offer"], "writes": [],
+    "expected": {"rows": 7, "blank_recommended_price": ["LAMP-BLK"]}
+  },
+  {
+    "id": "P05", "prompt": "Which matched SKUs have a supplier recommended price below our current price?",
+    "kind": "compare", "reads": ["store.variants", "incoming.supplier_offer"], "writes": [],
+    "expected": {"skus": ["TEA-GRN"], "prices_mad": {"TEA-GRN": {"store": 59, "supplier": 55}}}
+  },
+  {
+    "id": "P06", "prompt": "Find barcode disagreements between supplier_offer.csv and our variants for the same SKU.",
+    "kind": "compare", "reads": ["incoming.supplier_offer", "store.variants"], "writes": [],
+    "expected": {"skus": ["TEE-BLK-L"], "barcodes": {"store": "6110000000052", "supplier": "6110000000999"}}
+  },
+  {
+    "id": "P07", "prompt": "For each store SKU, compare current stock with the total counted across warehouses.",
+    "kind": "compare", "reads": ["store.variants", "incoming.warehouse_counts"], "writes": [],
+    "expected": {"rows": 8, "counted_stock": {"MUG-WHT": 14, "BOTTLE-750": 1}}
+  },
+  {
+    "id": "P08", "prompt": "Which SKUs in warehouse_counts.csv have no matching store variant?",
+    "kind": "compare", "reads": ["incoming.warehouse_counts", "store.variants"], "writes": [],
+    "expected": {"skus": ["UNKNOWN-SKU"]}
+  },
+  {
+    "id": "P09", "prompt": "Which store variants have zero total counted stock in the warehouses?",
+    "kind": "compare", "reads": ["store.variants", "incoming.warehouse_counts"], "writes": [],
+    "expected": {"skus": ["MUG-BLU"]}
+  },
+  {
+    "id": "P10", "prompt": "Show our price and the cheapest competitor quote for every store SKU.",
+    "kind": "compare", "reads": ["store.variants", "incoming.competitor_prices"], "writes": [],
+    "expected": {"rows": 8, "minimum_competitor_price_mad": {"MUG-WHT": 92, "LAMP-BLK": 389}}
+  },
+  {
+    "id": "P11", "prompt": "Which SKUs are priced more than 10 MAD above their cheapest competitor quote?",
+    "kind": "compare", "reads": ["store.variants", "incoming.competitor_prices"], "writes": [],
+    "expected": {"skus": ["TOTE-NAT", "TEE-BLK-M"]}
+  },
+  {
+    "id": "P12", "prompt": "For SKUs already in the store, show supplier recommended prices above the cheapest competitor quote.",
+    "kind": "compare", "reads": ["store.variants", "incoming.supplier_offer", "incoming.competitor_prices"], "writes": [],
+    "expected": {"skus": ["MUG-WHT", "TOTE-NAT", "TEE-BLK-M", "TEE-BLK-L"]}
+  },
+  {
+    "id": "P13", "prompt": "For store SKUs in both incoming files, compare supplier availability with total warehouse count and show differences.",
+    "kind": "compare", "reads": ["store.variants", "incoming.supplier_offer", "incoming.warehouse_counts"], "writes": [],
+    "expected": {"skus": ["MUG-WHT", "MUG-BLU", "TOTE-NAT", "LAMP-BLK", "TEA-GRN", "TEE-BLK-M", "TEE-BLK-L"]}
+  },
+  {
+    "id": "P14", "prompt": "Set the store price of MUG-WHT to its recommended price in supplier_offer.csv.",
+    "kind": "update", "reads": ["store.variants", "incoming.supplier_offer"], "writes": ["store.variants"],
+    "expected": {"price_mad": {"MUG-WHT": 99}}
+  },
+  {
+    "id": "P15", "prompt": "Update prices of existing store SKUs from supplier_offer.csv; skip blank recommendations and do not add new SKUs.",
+    "kind": "update", "reads": ["store.variants", "incoming.supplier_offer"], "writes": ["store.variants"],
+    "expected": {"price_mad": {"MUG-WHT": 99, "MUG-BLU": 99, "TOTE-NAT": 129, "TEA-GRN": 55, "TEE-BLK-M": 159, "TEE-BLK-L": 159}, "unchanged": ["LAMP-BLK", "BOTTLE-750"], "not_inserted": ["NEW-CUP"]}
+  },
+  {
+    "id": "P16", "prompt": "Replace stock for existing store SKUs with the sum of qty_counted across warehouses; ignore unknown SKUs.",
+    "kind": "update", "reads": ["store.variants", "incoming.warehouse_counts"], "writes": ["store.variants"],
+    "expected": {"stock": {"MUG-WHT": 14, "MUG-BLU": 0, "TOTE-NAT": 6, "LAMP-BLK": 3, "TEA-GRN": 22, "TEE-BLK-M": 9, "TEE-BLK-L": 5, "BOTTLE-750": 1}, "not_inserted": ["UNKNOWN-SKU"]}
+  },
+  {
+    "id": "P17", "prompt": "For existing SKUs with supplier availability above zero and warehouse count above zero, set store stock to the warehouse total.",
+    "kind": "update", "reads": ["store.variants", "incoming.supplier_offer", "incoming.warehouse_counts"], "writes": ["store.variants"],
+    "expected": {"stock": {"MUG-WHT": 14, "TOTE-NAT": 6, "TEA-GRN": 22, "TEE-BLK-M": 9, "TEE-BLK-L": 5}, "unchanged": ["MUG-BLU", "LAMP-BLK", "BOTTLE-750"]}
+  },
+  {
+    "id": "P18", "prompt": "Add NEW-CUP from supplier_offer.csv as a new active product and red variant, priced at its recommendation, with store stock zero.",
+    "kind": "insert", "reads": ["incoming.supplier_offer", "store.products", "store.variants"], "writes": ["store.products", "store.variants"],
+    "expected": {"product_id": "P106", "sku": "NEW-CUP", "status": "active", "price_mad": 79, "stock": 0}
+  },
+  {
+    "id": "P19", "prompt": "Set our store prices to the incoming prices.",
+    "kind": "clarify", "reads": [], "writes": [],
+    "expected": {"question": "Which incoming file and price column: supplier_offer.recommended_price_mad or competitor_prices.price_mad?", "candidates": ["incoming.supplier_offer", "incoming.competitor_prices"], "no_change": true}
+  },
+  {
+    "id": "P20", "prompt": "Delete store variants absent from supplier_offer.csv.",
+    "kind": "delete", "reads": ["store.variants", "incoming.supplier_offer"], "writes": ["store.variants"],
+    "expected": {"affected_skus": ["BOTTLE-750"], "preview_and_explicit_approval": true, "no_change_before_approval": true}
+  }
+]

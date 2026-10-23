@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "babel>=2.18.0",
+    "charset-normalizer>=3.5.1",
     "en-core-web-sm",
     "fr-core-news-sm",
     "gliner2[local]>=2.0.0",

@@ -1,4 +1,5 @@
 import copy
+import fcntl
 import json
 import os
 import shutil
@@ -13,6 +14,7 @@ from typesafe_sdk import TypeSafeError
 
 import saved_cases
 from orbitrows.pipeline.store.schema import _same_number
+from orbitrows.pipeline.prompt import pipeline as prompt_pipeline
 from orbitrows.services.cli import main as cli
 from orbitrows.services.csv.reader import read_table
 from orbitrows.services.model.client import Model, call_id
@@ -29,6 +31,76 @@ SAVED = saved_cases.tables("shop") | saved_cases.tables("joins_chain")   # what 
 REAL_MISSING = cli.coref.missing
 
 
+class IncomingModel(Model):
+    """Certain answers for incoming classification; store imports use saved fixture sections."""
+
+    async def answer(self, state, questions):
+        answers = {}
+        for key, question in questions.items():
+            if question["type"] == "noul":
+                answers[key] = 1.0 if key == "header" else 0.0
+                continue
+            options = question["criteria"]
+            if "dedicated_context" in options:
+                choice = "none"
+            elif "record_reference" in options:
+                header = state["columns"][key].lower()
+                choice = "record_reference" if any(word in header for word in ("ref", "sku", "id")) else "value_or_text"
+            elif "individual_record" in options:
+                choice = "individual_record"
+            elif key == "a" and "a1" in options:
+                choice = "a1"
+            else:
+                choice = "none" if "none" in options else next(iter(options))
+            answers[key] = (choice, {choice: 1.0})
+        return answers, (None, None)
+
+
+class UncertainIncomingModel(IncomingModel):
+    async def answer(self, state, questions):
+        answers, usage = await super().answer(state, questions)
+        for key, question in questions.items():
+            if key == "k1" and question["type"] == "choice" and "record_reference" in question["criteria"]:
+                answers[key] = ("record_reference", {"record_reference": 0.55, "name": 0.45})
+        return answers, usage
+
+
+class UnitIncomingModel(IncomingModel):
+    async def answer(self, state, questions):
+        answers, usage = await super().answer(state, questions)
+        for key, question in questions.items():
+            if question["type"] == "choice" and "header_context" in question["criteria"]:
+                if "MAD" in state["columns"][key]:
+                    answers[key] = ("header_context", {"header_context": 1.0})
+        return answers, usage
+
+
+class ManyMatchModel(IncomingModel):
+    async def answer(self, state, questions):
+        answers, usage = await super().answer(state, questions)
+        for key, question in questions.items():
+            if not key.startswith("i") or "store_column" not in question.get("instructions", {}):
+                continue
+            source = question["instructions"]["incoming_column"]["header"]
+            target = question["instructions"]["store_column"]["header"]
+            relation = {("sku", "sku"): "direct", ("Product Label", "name"): "partial",
+                        ("Product Label", "brand"): "partial", ("Vendor", "brand"): "direct"}.get((source, target), "none")
+            answers[key] = (relation, {relation: 1.0})
+        return answers, usage
+
+
+class UncertainMatchModel(ManyMatchModel):
+    async def answer(self, state, questions):
+        answers, usage = await super().answer(state, questions)
+        for key, question in questions.items():
+            if "store_column" in question.get("instructions", {}):
+                source = question["instructions"]["incoming_column"]["header"]
+                target = question["instructions"]["store_column"]["header"]
+                if (source, target) == ("sku", "sku"):
+                    answers[key] = ("direct", {"direct": 0.55, "none": 0.45})
+        return answers, usage
+
+
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     """Registry, stores and crash logs in tmp_path; the model is a stub and its steps are replaced by the fixtures'
@@ -38,8 +110,10 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("MODEL", "orbitrows.services.model.client:Model")
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
     monkeypatch.setattr(cli.coref, "missing", lambda: None)   # CorPipe is not set up here, and never started
+    monkeypatch.setattr(cli, "connect", IncomingModel)
+    monkeypatch.setattr(cli.incoming_pipeline.context, "declaration", lambda header, kind=None: None)
 
-    async def fake_classify(jev, paths, step=lambda text: None, names=None):
+    async def fake_classify(jev, paths, step=lambda text: None, names=None, encodings=None):
         step("classifying")
         return {p.name: copy.deepcopy(SAVED[p.name]) for p in paths}
 
@@ -72,6 +146,231 @@ def test_a_file_without_data_rows_refuses_the_store(env, capsys):
     assert code == 1 and "Cannot read header.csv: no data rows" in err and stores() == []
 
 
+def test_legacy_encoding_waits_for_a_choice_then_exports_the_original_letters(env, capsys):
+    path = env / "customers.csv"
+    raw = path.read_text().encode("cp1252")
+    path.write_bytes(raw)
+    code, out, err = run(capsys, "store", "customers.csv")
+    assert code == 3 and not err
+    [(store_id, _, status)] = stores()
+    assert status == registry.WAITING and not (storage.folder(store_id) / "session.db").exists()
+    payload = json.loads(out)
+    assert payload["step"] == "encoding" and len(payload["questions"]) == 1
+    [q] = payload["questions"]
+    assert q["file"] == "customers.csv" and q["type"] == "choice"
+    assert any(o["answer"] == "cp1252" and "Chloé" in o["preview"] for o in q["options"])
+    assert run(capsys, "answer", q["id"], "not-a-codec")[0] == 1
+    assert storage.load_import(store_id)["encodings"] == {}
+
+    code, out, err = run(capsys, "answer", q["id"], "cp1252")
+    assert code == 0, err
+    assert storage.load_import(store_id)["encodings"] == {"customers.csv": "cp1252"}
+    assert stores()[0][2] == registry.READY
+    code, out, err = run(capsys, "export", "-o", "out")
+    assert code == 0, err
+    assert (env / "out" / "customers.csv").read_bytes() == raw
+
+
+def test_known_encoding_can_be_given_to_store(env, capsys):
+    path = env / "customers.csv"
+    path.write_bytes(path.read_text().encode("cp1252"))
+    code, out, err = run(capsys, "store", "customers.csv", "--encoding", "cp1252")
+    assert code == 0, err
+    assert stores()[0][2] == registry.READY
+    assert storage.load_import(stores()[0][0])["encodings"] == {"customers.csv": "cp1252"}
+
+
+def test_incoming_legacy_file_shows_readings_and_accepts_encoding(env, capsys):
+    assert run(capsys, "store", "customers.csv")[0] == 0
+    path = env / "supplier.csv"
+    path.write_bytes("ref,nom\n001,Café\n".encode("cp1252"))
+    code, out, err = run(capsys, "incoming", "supplier.csv")
+    assert code == 3 and not err
+    question = json.loads(out)["questions"][0]
+    assert question["step"] == "encoding"
+    assert any(option["answer"] == "cp1252" and "Café" in option["preview"] for option in question["options"])
+    code, out, err = run(capsys, "answer", question["id"], "cp1252")
+    assert code == 0, err
+    assert "supplier.csv: 1 rows" in out
+
+
+def test_two_incoming_uploads_with_same_filename_are_independent_snapshots(env, capsys):
+    assert run(capsys, "store", "customers.csv")[0] == 0
+    store_id = stores()[0][0]
+    path = env / "supplier.csv"
+    first = path.read_bytes()
+    assert run(capsys, "incoming", "supplier.csv")[0] == 0
+    path.write_text("ref,prix\n001,15\n")
+    assert run(capsys, "incoming", "supplier.csv")[0] == 0
+
+    root = storage.folder(store_id)
+    with closing(sqlite3.connect(root / "session.db")) as db:
+        tables = db.execute("SELECT id, sql_name, source_file FROM _incoming_tables ORDER BY id").fetchall()
+        assert [t[1] for t in tables] == ["in_supplier_1", "in_supplier_2"]
+        assert db.execute("SELECT ref, prix FROM in_supplier_1").fetchall() == [("001", "10")]
+        assert db.execute("SELECT ref, prix FROM in_supplier_2").fetchall() == [("001", "15")]
+        assert db.execute("SELECT sql_name, sql_type, source_header, position FROM _incoming_columns "
+                          "WHERE table_id = 1 ORDER BY position").fetchall() == [
+                              ("ref", "TEXT", "ref", 0), ("prix", "TEXT", "prix", 1)]
+        assert (root / tables[0][2]).read_bytes() == first
+        assert (root / tables[1][2]).read_bytes() == path.read_bytes()
+        for statement in ("INSERT INTO in_supplier_1 VALUES ('002', '22')",
+                          "UPDATE in_supplier_1 SET prix = '22' WHERE ref = '001'",
+                          "DELETE FROM in_supplier_1 WHERE ref = '001'"):
+            with pytest.raises(sqlite3.IntegrityError, match="Incoming tables are read-only"):
+                db.execute(statement)
+        assert db.execute("SELECT ref, prix FROM in_supplier_1").fetchall() == [("001", "10")]
+    with closing(sqlite3.connect(root / "session.db")) as db:
+        assert db.execute("SELECT COUNT(*) FROM _export").fetchone()[0] == 1
+        assert db.execute("SELECT COUNT(*) FROM _store_tables").fetchone()[0] == 1
+        assert {n["definition"]["sql_name"] for n in prompt_pipeline.store_of(db)} == {"customers"}
+    assert run(capsys, "export", "-o", "out")[0] == 0
+    assert {p.name for p in (env / "out").iterdir()} == {"customers.csv"}
+
+
+def test_first_single_database_upload_discards_old_incoming_database(env, capsys):
+    assert run(capsys, "store", "customers.csv")[0] == 0
+    root = storage.folder(stores()[0][0])
+    old_file = root / "incoming" / "1" / "old.csv"
+    old_file.parent.mkdir(parents=True)
+    old_file.write_text("old\nvalue\n")
+    with sqlite3.connect(root / "incoming.db") as legacy:
+        legacy.execute("CREATE TABLE old_upload (value TEXT)")
+    code, output, error = run(capsys, "incoming", "supplier.csv")
+    assert code == 0, error
+    assert "in_supplier_2" in output
+    assert not (root / "incoming.db").exists()
+    assert old_file.read_text() == "old\nvalue\n"
+
+
+def test_incoming_classification_question_resumes_before_upload(env, capsys, monkeypatch):
+    assert run(capsys, "store", "customers.csv")[0] == 0
+    store_id = stores()[0][0]
+    monkeypatch.setattr(cli, "connect", UncertainIncomingModel)
+    code, output, error = run(capsys, "incoming", "supplier.csv")
+    assert code == 3 and not error
+    payload = json.loads(output)
+    assert payload["step"] == "roles" and payload["questions"][0]["type"] == "choice"
+    with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
+        assert db.execute("SELECT 1 FROM sqlite_schema WHERE name = '_incoming_tables'").fetchone() is None
+    question = payload["questions"][0]
+    code, output, error = run(capsys, "answer", question["id"], "record_reference")
+    assert code == 0, error
+    with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
+        role, kind, extra = db.execute("SELECT role, kind, extra_json FROM _incoming_columns "
+                                       "WHERE source_header = 'ref'").fetchone()
+        assert role == storage.ROLES.index("dedicated_key")
+        assert kind == storage.KINDS.index("record_reference")
+        assert json.loads(extra)["profile"]["distinct"] == 1
+        assert db.execute("PRAGMA table_info(in_supplier_1)").fetchall()[0][5] == 1
+
+
+def test_repeating_incoming_key_keeps_all_rows(env, capsys):
+    assert run(capsys, "store", "customers.csv")[0] == 0
+    (env / "supplier.csv").write_text("ref,warehouse,qty\n001,A,4\n001,B,8\n")
+    code, _, error = run(capsys, "incoming", "supplier.csv")
+    assert code == 0, error
+    with closing(sqlite3.connect(storage.folder(stores()[0][0]) / "session.db")) as db:
+        assert db.execute("SELECT ref, warehouse, qty FROM in_supplier_1").fetchall() == [
+            ("001", "A", "4"), ("001", "B", "8")]
+        assert all(row[5] == 0 for row in db.execute("PRAGMA table_info(in_supplier_1)"))
+
+
+def test_incoming_context_unit_is_saved_with_the_profile(env, capsys, monkeypatch):
+    assert run(capsys, "store", "customers.csv")[0] == 0
+    # A semicolon export keeps the decimal comma inside one cell.
+    (env / "supplier.csv").write_text("ref;Price (MAD)\n001;12,50\n")
+    monkeypatch.setattr(cli, "connect", UnitIncomingModel)
+    monkeypatch.setattr(cli.incoming_pipeline.context, "declaration",
+                        lambda header, kind=None: {"kind": "currency", "unit": "MAD"} if "MAD" in header else None)
+    code, _, error = run(capsys, "incoming", "supplier.csv")
+    assert code == 0, error
+    with closing(sqlite3.connect(storage.folder(stores()[0][0]) / "session.db")) as db:
+        unit_id, sql_type, extra = db.execute("SELECT unit_id, sql_type, extra_json FROM _incoming_columns "
+                                              "WHERE source_header = 'Price (MAD)'").fetchone()
+        assert sql_type == "TEXT" and json.loads(extra)["profile"]["distinct"] == 1
+        assert db.execute("SELECT unit, unit_kind, unit_from FROM _column_context WHERE id = ?", (unit_id,)).fetchone() \
+            == ("MAD", "currency", "header")
+        assert db.execute("SELECT price_mad FROM in_supplier_1").fetchone()[0] == "12,50"
+
+
+def test_incoming_matches_are_many_to_many(env, capsys, monkeypatch):
+    assert run(capsys, "store", "products.csv")[0] == 0
+    store_id = stores()[0][0]
+    (env / "supplier.csv").write_text("sku,Product Label,Vendor\nA-1001,Logitech Wireless Mouse,Logitech\n")
+    monkeypatch.setattr(cli, "connect", ManyMatchModel)
+    code, output, error = run(capsys, "incoming", "supplier.csv")
+    assert code == 0, error
+    assert "Product Label → products.name (partial, 100%)" in output
+    root = storage.folder(store_id)
+    with closing(sqlite3.connect(root / "session.db")) as db:
+        rows = db.execute("SELECT ic.source_header, sc_id.store_column_id, sc_id.relation "
+                           "FROM _incoming_store_matches sc_id JOIN _incoming_columns ic "
+                           "ON ic.id = sc_id.incoming_column_id ORDER BY ic.position, sc_id.store_column_id").fetchall()
+        names = dict(db.execute("SELECT id, source_header FROM _store_columns"))
+        assert [(source, names[target], relation) for source, target, relation in rows] == [
+            ("sku", "sku", "direct"), ("Product Label", "name", "partial"),
+            ("Product Label", "brand", "partial"), ("Vendor", "brand", "direct")]
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute("PRAGMA foreign_keys = ON")
+            db.execute("INSERT INTO _incoming_store_matches VALUES (?, ?, 'direct', 1.0, 'now')",
+                       (db.execute("SELECT id FROM _incoming_columns LIMIT 1").fetchone()[0], 999999))
+
+
+def test_two_incoming_files_can_match_one_store_table(env, capsys, monkeypatch):
+    assert run(capsys, "store", "products.csv")[0] == 0
+    store_id = stores()[0][0]
+    monkeypatch.setattr(cli, "connect", ManyMatchModel)
+    for filename in ("supplier.csv", "supplier_other.csv"):
+        (env / filename).write_text("sku,Vendor\nA-1001,Logitech\n")
+        assert run(capsys, "incoming", filename)[0] == 0
+    with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
+        assert db.execute("SELECT COUNT(DISTINCT t.id) FROM _incoming_store_matches m "
+                          "JOIN _incoming_columns c ON c.id = m.incoming_column_id "
+                          "JOIN _incoming_tables t ON t.id = c.table_id").fetchone()[0] == 2
+        assert db.execute("SELECT COUNT(*) FROM _incoming_tables").fetchone()[0] == 2
+
+
+def test_incoming_refuses_while_a_store_session_owns_the_writer(env, capsys):
+    assert run(capsys, "store", "customers.csv")[0] == 0
+    root = storage.folder(stores()[0][0])
+    with open(root / "session.lock", "a") as session_lock:
+        fcntl.flock(session_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        code, _, error = run(capsys, "incoming", "supplier.csv")
+    assert code == 1 and "Run `orbitrows exit`" in error
+    assert not (root / "incoming_pending").exists()
+    with closing(sqlite3.connect(root / "session.db")) as db:
+        assert db.execute("SELECT 1 FROM sqlite_schema WHERE name = '_incoming_tables'").fetchone() is None
+
+
+def test_uncertain_incoming_match_waits_for_user_answer(env, capsys, monkeypatch):
+    assert run(capsys, "store", "products.csv")[0] == 0
+    store_id = stores()[0][0]
+    (env / "supplier.csv").write_text("sku,Vendor\nA-1001,Logitech\n")
+    monkeypatch.setattr(cli, "connect", UncertainMatchModel)
+    code, output, error = run(capsys, "incoming", "supplier.csv")
+    assert code == 3 and not error
+    payload = json.loads(output)
+    assert payload["step"] == "matching"
+    with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
+        assert db.execute("SELECT 1 FROM sqlite_schema WHERE name = '_incoming_tables'").fetchone() is None
+    question = payload["questions"][0]
+    assert "sku" in question["problem"]
+    code, _, error = run(capsys, "answer", question["id"], "direct")
+    assert code == 0, error
+    with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
+        assert db.execute("SELECT COUNT(*) FROM _incoming_store_matches").fetchone()[0] == 2
+
+
+def test_incoming_rejects_ragged_rows_without_saving_an_upload(env, capsys):
+    assert run(capsys, "store", "customers.csv")[0] == 0
+    (env / "supplier.csv").write_text("ref,prix\n001,10\n002,20,extra\n")
+    code, _, error = run(capsys, "incoming", "supplier.csv")
+    assert code == 1 and "row 3 has 3 cells; expected 2" in error
+    with closing(sqlite3.connect(storage.folder(stores()[0][0]) / "session.db")) as db:
+        assert db.execute("SELECT 1 FROM sqlite_schema WHERE name = '_incoming_tables'").fetchone() is None
+
+
 def test_store_incoming_message(env, capsys, monkeypatch):
     code, out, err = run(capsys, "message", "hi")
     assert code == 1 and "No store yet" in err
@@ -92,7 +391,8 @@ def test_store_incoming_message(env, capsys, monkeypatch):
     assert code == 0 and out.splitlines()[-1] == f"Store {second} (Orbitrow shop)"
 
     code, out, err = run(capsys, "incoming", "supplier.csv")  # the latest store by default
-    assert code == 0 and f"supplier.csv: 1 rows · 2 columns, incoming for store {second} (Orbitrow shop)" in out
+    assert code == 0, err
+    assert f"supplier.csv: 1 rows · 2 columns, incoming for store {second} (Orbitrow shop)" in out
     code, out, err = run(capsys, "incoming", "supplier.csv", "--store", first)
     assert code == 0 and f"incoming for store {first}" in out
     assert run(capsys, "incoming", "missing.csv")[2].startswith("File not found")
