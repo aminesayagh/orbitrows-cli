@@ -6,6 +6,8 @@ session: the journal says what was lost.
 
 A message runs the prompt pipeline (prompt()). One that pauses on questions waits in memory (one at a time, a new
 message replaces it) until each is answered (op "answer", ids m_…), then runs again, its model answers replayed.
+An incoming upload, classified by the CLI, is written as a change too (op "incoming"): its CSV stays in its pending
+folder until the COMMIT moves it under incoming/, and an undo removes that folder.
 
     session.sock   the Unix socket: one JSON request line in, one JSON reply line out, one client at a time
     journal.jsonl  each change applied ({"n", "prompt", "sql", "at"}) or undone ({"undo": n}), fsynced; removed by a
@@ -20,6 +22,7 @@ import importlib
 import json
 import os
 import re
+import shutil
 import signal
 import socket
 import sqlite3
@@ -114,6 +117,7 @@ class Session:
         self.pending = None                                   # the message waiting for answers: {"prompt", "calls",
                                                               # "open", "answered", "step", "shown"}, in memory only
         self.count = 0                                        # the last change's n
+        self.uploads = {}                                     # {n: (pending folder, source_file)}: placed on COMMIT
         self.db = sqlite3.connect(f"file:{self.dir / 'session.db'}?mode=rw", uri=True, isolation_level=None)
         for pragma in ("foreign_keys = ON", "synchronous = FULL", "journal_mode = DELETE"):   # per connection
             self.db.execute(f"PRAGMA {pragma}")
@@ -286,6 +290,25 @@ class Session:
         self.forget()
         return reply | {"n": n}
 
+    def incoming(self, folder: Path) -> dict:
+        """A classified upload written in savepoint c<n> (the server's own DDL: not a message's, so not refused), its
+        _history row and its journal line. → the written table."""
+        from orbitrows.services.storage import incoming     # here: its imports a message doesn't need
+        n = self.count + 1
+        self.db.execute(f"SAVEPOINT c{n}")
+        try:
+            written = incoming.upload(self.db, self.dir, folder)
+            self.write({"n": n, "prompt": written["name"], "sql": written["sql"], "at": registry.now()})
+        except (sqlite3.Error, OSError, ValueError, KeyError) as e:   # ValueError: a bad AST, bad JSON too
+            return self.cancel(n, f"The upload couldn't be written: {type(e).__name__}: {e}")
+        except BaseException:
+            self.drop(n)
+            raise
+        self.count = n
+        self.changes.append((n, written["name"]))
+        self.uploads[n] = (folder, written["source_file"])
+        return {"ok": True, "n": n} | {k: written[k] for k in ("id", "table", "source_file", "rows", "columns")}
+
     def undo(self) -> dict:
         if not self.changes:
             return {"ok": False, "error": "Nothing to undo: no change since the session started."}
@@ -296,7 +319,10 @@ class Session:
         self.db.execute(f"ROLLBACK TO c{n}")
         self.db.execute(f"RELEASE c{n}")
         self.changes.pop()
-        self.forget()
+        if upload := self.uploads.pop(n, None):              # its CSV, never placed, goes with it
+            shutil.rmtree(upload[0], ignore_errors=True)
+        else:
+            self.forget()
         return {"ok": True, "undone": n, "prompt": prompt}
 
     def end(self) -> str | None:
@@ -306,6 +332,13 @@ class Session:
             self.db.execute("COMMIT")
         except (sqlite3.Error, OSError) as e:
             return f"{type(e).__name__}: {e}"
+        for folder, source_file in self.uploads.values():     # saved: each upload's CSV moved under incoming/
+            from orbitrows.services.storage import incoming
+            try:
+                incoming.place(self.dir, folder, source_file)
+            except OSError as e:                              # only its CSV copy is missing from incoming/
+                log(f"{source_file} not placed, its CSV is still in {folder}: {e}")
+        self.uploads = {}
         self.close()
         try:
             if (ok := self.db.execute("PRAGMA quick_check").fetchone()[0]) != "ok":
@@ -331,6 +364,8 @@ class Session:
                     reply = self.message(str(request["text"]))
                 case "answer":
                     reply = self.answer(str(request["id"]), request.get("answer"))
+                case "incoming":
+                    reply = self.incoming(Path(request["folder"]))
                 case "undo":
                     reply = self.undo()
                 case "status":

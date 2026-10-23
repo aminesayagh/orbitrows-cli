@@ -1,11 +1,11 @@
 import asyncio
 import copy
-import fcntl
 import json
 import os
 import shutil
 import signal
 import sqlite3
+import tempfile
 import threading
 from contextlib import closing
 from pathlib import Path
@@ -105,8 +105,10 @@ class UncertainMatchModel(ManyMatchModel):
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     """Registry, stores and crash logs in tmp_path; the model is a stub and its steps are replaced by the fixtures'
-    saved sections, so no model is ever asked."""
-    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "share"))
+    saved sections, so no model is ever asked. Stores are in a short folder (an upload starts the store's session
+    server: a Unix socket's path has 107 bytes at most); every session still open is ended after the test."""
+    home = Path(tempfile.mkdtemp(prefix="or"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(home))
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     monkeypatch.setenv("MODEL", "orbitrows.services.model.client:Model")
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
@@ -128,6 +130,17 @@ def env(tmp_path, monkeypatch):
     handler = signal.getsignal(signal.SIGTERM)
     yield tmp_path
     signal.signal(signal.SIGTERM, handler)                    # main() makes SIGTERM a Ctrl+C
+    for sock in registry.home().glob("stores/*/session.sock"):
+        pid = cli.session.send(sock, {"op": "status"})["pid"]
+        cli.session.send(sock, {"op": "exit"})
+        os.waitpid(pid, 0)                                    # the CLI's servers are this process's children
+    shutil.rmtree(home)
+
+
+def leave(capsys) -> None:
+    """orbitrows exit: the session's uploads committed, so a separate connection sees them."""
+    code, out, err = run(capsys, "exit")
+    assert code == 0 and out == "Saved.\n", err
 
 
 def run(capsys, *argv) -> tuple[int, str, str]:
@@ -203,6 +216,7 @@ def test_two_incoming_uploads_with_same_filename_are_independent_snapshots(env, 
     assert run(capsys, "incoming", "supplier.csv")[0] == 0
     path.write_text("ref,prix\n001,15\n")
     assert run(capsys, "incoming", "supplier.csv")[0] == 0
+    leave(capsys)
 
     root = storage.folder(store_id)
     with closing(sqlite3.connect(root / "session.db")) as db:
@@ -240,6 +254,7 @@ def test_first_single_database_upload_discards_old_incoming_database(env, capsys
     code, output, error = run(capsys, "incoming", "supplier.csv")
     assert code == 0, error
     assert "in_supplier_2" in output
+    leave(capsys)
     assert not (root / "incoming.db").exists()
     assert old_file.read_text() == "old\nvalue\n"
 
@@ -257,6 +272,7 @@ def test_incoming_classification_question_resumes_before_upload(env, capsys, mon
     question = payload["questions"][0]
     code, output, error = run(capsys, "answer", question["id"], "record_reference")
     assert code == 0, error
+    leave(capsys)
     with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
         role, kind, extra = db.execute("SELECT role, kind, extra_json FROM _incoming_columns "
                                        "WHERE source_header = 'ref'").fetchone()
@@ -271,6 +287,7 @@ def test_repeating_incoming_key_keeps_all_rows(env, capsys):
     (env / "supplier.csv").write_text("ref,warehouse,qty\n001,A,4\n001,B,8\n")
     code, _, error = run(capsys, "incoming", "supplier.csv")
     assert code == 0, error
+    leave(capsys)
     with closing(sqlite3.connect(storage.folder(stores()[0][0]) / "session.db")) as db:
         assert db.execute("SELECT ref, warehouse, qty FROM in_supplier_1").fetchall() == [
             ("001", "A", "4"), ("001", "B", "8")]
@@ -286,6 +303,7 @@ def test_incoming_context_unit_is_saved_with_the_profile(env, capsys, monkeypatc
                         lambda header, kind=None: {"kind": "currency", "unit": "MAD"} if "MAD" in header else None)
     code, _, error = run(capsys, "incoming", "supplier.csv")
     assert code == 0, error
+    leave(capsys)
     with closing(sqlite3.connect(storage.folder(stores()[0][0]) / "session.db")) as db:
         unit_id, sql_type, extra = db.execute("SELECT unit_id, sql_type, extra_json FROM _incoming_columns "
                                               "WHERE source_header = 'Price (MAD)'").fetchone()
@@ -303,6 +321,7 @@ def test_incoming_matches_are_many_to_many(env, capsys, monkeypatch):
     code, output, error = run(capsys, "incoming", "supplier.csv")
     assert code == 0, error
     assert "Product Label → products.name (partial, 100%)" in output
+    leave(capsys)
     root = storage.folder(store_id)
     with closing(sqlite3.connect(root / "session.db")) as db:
         rows = db.execute("SELECT ic.source_header, sc_id.store_column_id, sc_id.relation "
@@ -325,6 +344,7 @@ def test_two_incoming_files_can_match_one_store_table(env, capsys, monkeypatch):
     for filename in ("supplier.csv", "supplier_other.csv"):
         (env / filename).write_text("sku,Vendor\nA-1001,Logitech\n")
         assert run(capsys, "incoming", filename)[0] == 0
+    leave(capsys)
     with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
         assert db.execute("SELECT COUNT(DISTINCT t.id) FROM _incoming_store_matches m "
                           "JOIN _incoming_columns c ON c.id = m.incoming_column_id "
@@ -332,16 +352,42 @@ def test_two_incoming_files_can_match_one_store_table(env, capsys, monkeypatch):
         assert db.execute("SELECT COUNT(*) FROM _incoming_tables").fetchone()[0] == 2
 
 
-def test_incoming_refuses_while_a_store_session_owns_the_writer(env, capsys):
+def test_an_upload_is_a_change_of_the_open_session(env, capsys, monkeypatch):
+    """With a session running, the upload is written through it: unsaved until exit, undone like a message."""
+    monkeypatch.setenv("ORBITROWS_HANDLER", "session_stub:handle")   # a message is its SQL: no model
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(filter(None, [str(Path(__file__).parent),
+                                                                   os.environ.get("PYTHONPATH")])))
     assert run(capsys, "store", "customers.csv")[0] == 0
     root = storage.folder(stores()[0][0])
-    with open(root / "session.lock", "a") as session_lock:
-        fcntl.flock(session_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        code, _, error = run(capsys, "incoming", "supplier.csv")
-    assert code == 1 and "Run `orbitrows exit`" in error
-    assert not (root / "incoming_pending").exists()
-    with closing(sqlite3.connect(root / "session.db")) as db:
-        assert db.execute("SELECT 1 FROM sqlite_schema WHERE name = '_incoming_tables'").fetchone() is None
+    assert run(capsys, "message", "SELECT 1")[0] == 0        # the session runs
+
+    def through(sql):                                         # the rows the session sees
+        code, out, err = run(capsys, "message", sql)
+        assert code == 0, err
+        return json.loads(out)["applied"][0]["rows"]
+
+    def outside(sql):
+        with closing(sqlite3.connect(root / "session.db")) as db:
+            return db.execute(sql).fetchall()
+
+    tables = "SELECT name FROM sqlite_schema WHERE name LIKE 'in_supplier%' OR name = '_incoming_tables'"
+    code, out, err = run(capsys, "incoming", "supplier.csv")
+    assert code == 0 and " as in_supplier_1\n" in out, err
+    assert "saved by orbitrows exit" in err
+    assert through("SELECT h.name, h.prompt FROM _incoming_tables t JOIN _history h ON h.id = t.created_by") \
+        == [["Upload supplier.csv", None]]
+    assert through("SELECT ref, prix FROM in_supplier_1") == [["001", "10"]]
+    assert outside(tables) == [] and not (root / "incoming").exists()
+    assert run(capsys, "undo")[1] == "Undone: change 1 (Upload supplier.csv).\n"
+    assert through(tables) == [] and through("SELECT COUNT(*) FROM _history") == [[1]]
+    assert not any((root / "incoming_pending").iterdir())    # its CSV copy went with it
+
+    assert run(capsys, "incoming", "supplier.csv")[0] == 0
+    leave(capsys)
+    assert outside("SELECT t.sql_name, h.name FROM _incoming_tables t JOIN _history h ON h.id = t.created_by") \
+        == [("in_supplier_1", "Upload supplier.csv")]
+    assert (root / "incoming" / "1" / "supplier.csv").read_bytes() == (env / "supplier.csv").read_bytes()
+    assert not any((root / "incoming_pending").iterdir())
 
 
 def test_uncertain_incoming_match_waits_for_user_answer(env, capsys, monkeypatch):
@@ -359,6 +405,7 @@ def test_uncertain_incoming_match_waits_for_user_answer(env, capsys, monkeypatch
     assert "sku" in question["problem"]
     code, _, error = run(capsys, "answer", question["id"], "direct")
     assert code == 0, error
+    leave(capsys)
     with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
         assert db.execute("SELECT COUNT(*) FROM _incoming_store_matches").fetchone()[0] == 2
 

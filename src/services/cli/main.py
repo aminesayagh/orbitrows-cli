@@ -8,7 +8,6 @@ import csv
 import hashlib
 import json
 import os
-import shutil
 import signal
 import sqlite3
 import sys
@@ -286,11 +285,7 @@ def inspect_incoming(path: Path, encoding: str | None = None) -> None:
 
 def resume_incoming(target: tuple[str, str | None], upload_id: str, progress: dict) -> int:
     store_id = target[0]
-    try:
-        incoming_storage.check_session(store_id)
-    except incoming_storage.SessionActive as e:
-        raise Refusal(str(e)) from None
-    path = incoming_storage.pending_path(store_id, upload_id, progress)
+    path =incoming_storage.pending_path(store_id, upload_id, progress)
     save = lambda: incoming_storage.save_pending(store_id, upload_id, progress)
 
     async def classify():
@@ -316,16 +311,15 @@ def resume_incoming(target: tuple[str, str | None], upload_id: str, progress: di
     for notice in unseen(progress, result["notices"]):
         print(warning(notice))
     save()
-    try:
-        written = incoming_storage.upload(store_id, path, table, result["saved"])
-    except incoming_storage.SessionActive as e:
-        raise Refusal(str(e)) from None
-    shutil.rmtree(incoming_storage.pending_dir(store_id, upload_id))
+    folder = incoming_storage.save_classified(store_id, upload_id, table, result["saved"])
+    written = ask(target, {"op": "incoming", "folder": str(folder)})   # the session writes it, started if needed
     print(f"{progress['file']}: {written['rows']} rows · {written['columns']} columns, incoming for store "
           f"{label(target)} as {written['table']}")
     for match in result["saved"].get("matching", {}).get("matches", []):
         print(f"  {match['incoming_header']} → {match['store_table']}.{match['store_header']} "
               f"({match['relation']}, {match['confidence']:.0%})")
+    print(f"Change {written['n']} made in store {label(target)}: saved by orbitrows exit, reverted by orbitrows undo.",
+          file=sys.stderr)
     return 0
 
 
@@ -361,10 +355,6 @@ def answer_incoming(question: str, given: str | None, ref: str | None) -> int:
 
 def incoming(path: Path, ref: str | None, encoding: str | None = None) -> int:
     target = resolve(ref)
-    try:
-        incoming_storage.check_session(target[0])
-    except incoming_storage.SessionActive as e:
-        raise Refusal(str(e)) from None
     try:
         inspect_incoming(path, encoding)
     except EncodingNeeded as e:
