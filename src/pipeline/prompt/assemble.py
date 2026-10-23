@@ -171,8 +171,9 @@ def _fill_outer(node, outer_alias):
     return node
 
 
-def shown(key, main, main_alias, schema, names, warnings, rid):
-    """A column to show or sort by: on the main table, or a one-row subquery along many-to-one keys."""
+def shown(key, main, main_alias, schema, names, warnings, rid, expression=None):
+    """A column to show or sort by: on the main table, or a one-row subquery along many-to-one keys. expression: an
+    expression on that column's table (an update's value from another table) taken in its place."""
     table, cid = key.split(".")
     if table == main:
         return col(main_alias, cid)
@@ -183,9 +184,10 @@ def shown(key, main, main_alias, schema, names, warnings, rid):
     value = col(main_alias, chain[0][1])
     for i, (t_from, c_from, t_to, c_to, _) in enumerate(chain):
         a = names.alias(t_to)
-        out = chain[i + 1][1] if i + 1 < len(chain) else cid
+        out = col(a, chain[i + 1][1]) if i + 1 < len(chain) else \
+            rewrite(expression, {table: a}) if expression else col(a, cid)
         value = {"type": "subquery",
-                 "query": select(names, t_to, a, [col(a, out)],
+                 "query": select(names, t_to, a, [out],
                                  {"type": "comparison", "operator": "=", "left": col(a, c_to), "right": value}, 1)}
     return value
 
@@ -242,9 +244,25 @@ def statement(r, st, main, schema, src, part, cond6, group6, built, warnings):
                 return {**v, "branches": [{"when": lift(b["when"], main, a, schema, names, warnings, rid),
                                            "then": cases(b["then"])} for b in v["branches"]], "else": cases(v["else"])}
             return {k: cases(x) for k, x in v.items()}
-        return {"id": rid, "type": "update", "target": target, "scope": scope,
-                "assignments": [{"column": col(a, x["column"].split(".")[1]), "value": rewrite(cases(x["value"]), {main: a})}
-                                for x in part["assignments"]]}
+        sets, reached = [], []
+        for x in part["assignments"]:
+            v = rewrite(cases(x["value"]), {main: a})
+            if x["value"].get("type") != "case" and (others := tables_in(x["value"]) - {main}):
+                (other,) = others if len(others) == 1 else (None,)  # a value from another table (an upload's
+                v = other and shown(f"{other}.", main, a, schema, names, warnings, rid, v)   # price): its subquery
+                if v is None:
+                    warnings.append({"request": rid, "problem": f"value of {x['column']}: not one value per record"})
+                    continue
+                reached.append(other)
+            sets.append({"column": col(a, x["column"].split(".")[1]), "value": v})
+        if not sets:
+            return None
+        ast = {"id": rid, "type": "update", "target": target, "scope": scope, "assignments": sets}
+        for other in dict.fromkeys(reached):           # only the records with a value there: never SET … NULL
+            key = path(schema, main, other)[-1][3]
+            with_condition(ast, lift({"type": "null_check", "expression": col(other, key), "operator": "is_not_null"},
+                                     main, a, schema, names, warnings, rid))
+        return ast
     if st == "delete":
         return {"id": rid, "type": "delete", "target": target, "scope": scope}
     # select

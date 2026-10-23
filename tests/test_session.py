@@ -335,3 +335,77 @@ def test_a_select_sends_back_at_most_rows_rows(piped, monkeypatch):
     count = "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 5) SELECT i FROM n"
     ran = piped.session.apply("count", [{"request": "r1", "sql": [count]}], [])["ran"][0]
     assert ran["rows"] == [(1,), (2,)] and ran["more"] is True
+
+
+async def _now(value):
+    return value
+
+
+@pytest.fixture
+def supplied(served, monkeypatch):
+    """products(sku, price in MAD) and an upload supplier.csv(ref, prix in EUR) linked ref → sku (the key) and
+    prix → price; the prompt pipeline in an in-process Session, every step stubbed: r1 changes products.price."""
+    from orbitrows.pipeline.prompt import (conditions, formula, grouping, operation, parts, request_graph,
+                                           source_route, sources, values)
+    from orbitrows.services.storage import incoming
+    with closing(sqlite3.connect(served.folder / "session.db")) as db:
+        db.executescript(incoming.SCHEMA + """
+            DROP TABLE products;
+            CREATE TABLE products (sku TEXT PRIMARY KEY, price REAL);
+            INSERT INTO products VALUES ('A1', 10), ('B2', 20), ('C3', 30);
+            INSERT INTO _history VALUES (1, 'now', 'import', NULL, '[]', '[]', NULL, 1);
+            INSERT INTO _store_tables VALUES (1, 'products', NULL, 'now', 1);
+            INSERT INTO _column_context VALUES (1, 'MAD', 'currency', 'header'), (2, 'EUR', 'currency', 'header');
+            INSERT INTO _store_columns (id, table_id, sql_name, sql_type, source_header, unit_id, edited_by)
+                VALUES (1, 1, 'sku', 'TEXT', 'SKU', NULL, 1), (2, 1, 'price', 'REAL', 'Prix (DH)', 1, 1);
+            INSERT INTO _incoming_tables VALUES (1, 'in_supplier_1', 'incoming/1/supplier.csv', 'now', 1);
+            INSERT INTO _incoming_columns (id, table_id, sql_name, sql_type, source_header, position, unit_id,
+                                           extra_json)
+                VALUES (1, 1, 'ref', 'TEXT', 'Ref', 0, NULL, '{"primary_key_candidate": true}'),
+                       (2, 1, 'prix', 'TEXT', 'Prix (€)', 1, 2, '{}');
+            CREATE TABLE in_supplier_1 (ref TEXT, prix TEXT);
+            INSERT INTO in_supplier_1 VALUES ('A1', '1.5'), ('B2', '2'), ('Z9', '9');
+            INSERT INTO _incoming_store_matches VALUES (1, 1, 'direct', 1, 'now'), (2, 2, 'direct', 1, 'now');""")
+    prompt = "update the prices from supplier.csv"
+    sections = {request_graph: {"requests": [{"id": "r1", "text": prompt, "start": 0, "end": len(prompt)}],
+                                "references": [], "warnings": []},
+                operation: {"requests": {"r1": {"statement": "update"}}, "warnings": []},
+                values: {"values": [], "warnings": []},
+                sources: {"requests": {"r1": {"target": {"type": "database_table", "reference": "t_products"}}},
+                          "warnings": []},
+                parts: {"requests": {"r1": {"assignments": [{"column": "t_products.c_price", "value": None,
+                                                             "pending": "formula"}]}}, "warnings": []},
+                conditions: {"requests": {}, "parameters": {}, "warnings": []},
+                grouping: {"requests": {}, "warnings": []}, formula: {"requests": {}, "warnings": []}}
+    for module, section in sections.items():
+        monkeypatch.setattr(module, "run", lambda *a, section=section, **k: _now(json.loads(json.dumps(section))))
+    monkeypatch.setattr(source_route, "run", lambda model, prompt, db: _now(
+        {"store": True, "incoming": source_route.available(db), "warnings": []}))
+    monkeypatch.setattr(pipeline.extractor, "connect", lambda: "gliner2")
+    monkeypatch.setattr(coref, "mentions", lambda prompts, name: [[]])
+    monkeypatch.setattr(coref, "missing", lambda: None)
+    monkeypatch.delenv("ORBITROWS_HANDLER")
+    s = sessions.Session(served.id, sessions.handler())
+    yield s
+    s.end()
+    s.db.close()
+
+
+def test_an_update_from_an_upload_takes_its_values_through_the_key_converted(supplied):
+    from orbitrows.pipeline.merge import convert
+    convert.save(supplied.db, 2, "EUR", "MAD", "x * 10")
+    reply = supplied.message("update the prices from supplier.csv")
+    [ran] = reply["ran"]
+    assert ran["sql"].startswith("UPDATE") and "in_supplier_1" in ran["sql"] and ran["changed"] == 2, reply
+    assert supplied.db.execute("SELECT sku, price FROM products ORDER BY sku").fetchall() == [
+        ("A1", 15.0), ("B2", 20.0), ("C3", 30.0)]                # C3 is not in the file: unchanged
+
+
+def test_a_missing_conversion_is_asked_then_applied(supplied):
+    reply = supplied.message("update the prices from supplier.csv")
+    [q] = reply["questions"]
+    assert q["id"].startswith("m_c_") and q["type"] == "formula" and "EUR" in q["problem"], reply
+    assert supplied.db.execute("SELECT price FROM products ORDER BY sku").fetchall() == [(10.0,), (20.0,), (30.0,)]
+    reply = supplied.answer(q["id"], "x * 10")
+    assert reply["ran"][0]["changed"] == 2, reply
+    assert supplied.db.execute("SELECT price FROM products ORDER BY sku").fetchall() == [(15.0,), (20.0,), (30.0,)]

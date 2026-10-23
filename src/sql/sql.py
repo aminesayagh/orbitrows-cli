@@ -85,6 +85,8 @@ class Compiler:
                 return exp.Coalesce(this=args[0], expressions=args[1:])
             if n.name == "replace":
                 return exp.func("REPLACE", *args)
+            if n.name == "real":
+                return exp.cast(args[0], "REAL")
             if n.name == "date":                            # SQLite's date(value, modifier)
                 return exp.Anonymous(this="date", expressions=args)
             if n.name == "substr":                          # SQLite's substr(text, start[, length])

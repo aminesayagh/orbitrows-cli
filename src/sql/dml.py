@@ -58,7 +58,8 @@ class DerivedReference(Node):
 # write a guard: "lower by 10% but never below cost + 10" = greatest(price * 0.9, cost + 10)
 ARITY = {"trim": (1, 1), "length": (1, 1), "lower": (1, 1), "upper": (1, 1), "abs": (1, 1), "round": (1, 2),
          "replace": (3, 3), "coalesce": (2, None), "greatest": (2, None), "least": (2, None),
-         "date": (2, 2), "substr": (2, 3)}                                      # date(col, '+7 days'): a date moved (2026-10-16)
+         "date": (2, 2), "substr": (2, 3),                                      # date(col, '+7 days'): a date moved (2026-10-16)
+         "real": (1, 1)}                                                        # CAST(x AS REAL): an upload's TEXT cell
 
 
 class FunctionCall(Node):

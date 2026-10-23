@@ -194,6 +194,9 @@ class Session:
             self.pending = None
             return {"ok": True, "ran": [], "notices": [{"step": "assembly", "request": q.get("request"),
                                                         "problem": "not applied: you answered no"}]}
+        if save := q["question"].get("save"):                 # a unit conversion: kept, the message's rerun reads it
+            from orbitrows.pipeline.merge import convert
+            convert.save(self.db, *save, match)
         questions.record(p, q, match, QUESTION, nulls=False)
         if confirm and not p["open"]:
             self.pending = None
