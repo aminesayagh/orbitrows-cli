@@ -196,6 +196,8 @@ class Session:
                                                         "problem": "not applied: you answered no"}]}
         if save := q["question"].get("save"):                 # a unit conversion: kept, the message's rerun reads it
             from orbitrows.pipeline.merge import convert
+            # Kept knowledge, not a change: no savepoint c<n> of its own, so nothing to undo. It is written inside
+            # the open savepoints of the changes before it, which an undo rolls back: undo() puts it back after.
             convert.save(self.db, *save, match)
         questions.record(p, q, match, QUESTION, nulls=False)
         if confirm and not p["open"]:
@@ -319,8 +321,14 @@ class Session:
             return {"ok": False, "error": "A message is waiting for answers: answer it or send another message first."}
         n, prompt = self.changes[-1]
         self.write({"undo": n, "at": registry.now()})         # first: a crash now loses the change anyway
+        kept = self.db.execute("SELECT * FROM _conversions").fetchall() if self.db.execute(
+            "SELECT 1 FROM sqlite_schema WHERE name = '_conversions'").fetchone() else []
         self.db.execute(f"ROLLBACK TO c{n}")
         self.db.execute(f"RELEASE c{n}")
+        if kept:                                              # the formulas given since c<n> began: not the change's
+            from orbitrows.pipeline.merge import convert
+            convert.ensure(self.db)
+            self.db.executemany("INSERT OR REPLACE INTO _conversions VALUES (?, ?, ?, ?, ?)", kept)
         self.changes.pop()
         if upload := self.uploads.pop(n, None):              # its CSV, never placed, goes with it
             shutil.rmtree(upload[0], ignore_errors=True)

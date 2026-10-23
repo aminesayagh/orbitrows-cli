@@ -5,6 +5,7 @@ user prepares that column differently. The formula becomes an expression of the 
 
 import ast
 import hashlib
+import math
 import sqlite3
 from pathlib import Path
 
@@ -25,24 +26,33 @@ SCHEMA = """CREATE TABLE IF NOT EXISTS _conversions (
 
 
 def parse(text: str):
-    """The formula as an AST expression, X standing for the value. Only x, numbers, + - * / and parentheses: a
-    whitelist over Python's parser, never eval. Else ValueError."""
+    """The formula as an AST expression, X standing for the value. Only x, finite numbers, + - * / and parentheses,
+    with x at least once and no division by a literal 0: a whitelist over Python's parser, never eval. Else
+    ValueError."""
     try:
         tree = ast.parse(text.strip(), mode="eval").body
     except SyntaxError:
         raise ValueError(f"{text!r} isn't a formula. Give one from x, e.g. {EXAMPLE}") from None
-    return _expression(tree, text)
+    out = _expression(tree, text)
+    if not any(isinstance(n, ast.Name) and n.id == "x" for n in ast.walk(tree)):
+        raise ValueError(f"{text!r} doesn't use x: every value would become the same. Give one from x, e.g. {EXAMPLE}")
+    return out
 
 
 def _expression(node: ast.AST, text: str):
     if isinstance(node, ast.Name) and node.id == "x":
         return X
     if isinstance(node, ast.Constant) and type(node.value) in (int, float):   # not a bool, str or complex
+        if not math.isfinite(node.value):                     # 1e999
+            raise ValueError(f"{text!r}: {ast.unparse(node)} isn't a finite number. Give one from x, e.g. {EXAMPLE}")
         return Lit(type="literal", value=node.value)
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
         operand = _expression(node.operand, text)
         return Negate(type="negate", operand=operand) if isinstance(node.op, ast.USub) else operand
     if isinstance(node, ast.BinOp) and type(node.op) in OPERATORS:
+        divisor = node.right.operand if isinstance(node.right, ast.UnaryOp) else node.right
+        if isinstance(node.op, ast.Div) and isinstance(divisor, ast.Constant) and divisor.value == 0:
+            raise ValueError(f"{text!r}: a division by 0. Give one from x, e.g. {EXAMPLE}")
         return Arithmetic(type="arithmetic", operator=OPERATORS[type(node.op)],
                           left=_expression(node.left, text), right=_expression(node.right, text))
     what = f"name {node.id}" if isinstance(node, ast.Name) else ast.unparse(node)
@@ -99,8 +109,9 @@ def plan(db: sqlite3.Connection, upload_id: int) -> dict:
         pair = (i, s)
         if i_id is None and s_id is None and i_ctx is None and s_ctx is None:
             continue                                          # no unit on either side: nothing to convert
-        if why := _side(i_id, i_unit, i_from, i_ctx) or _side(s_id, s_unit, s_from, s_ctx):
-            side = "the incoming column" if _side(i_id, i_unit, i_from, i_ctx) else "the store column"
+        mine, theirs = _side(i_id, i_unit, i_from, i_ctx), _side(s_id, s_unit, s_from, s_ctx)
+        if why := mine or theirs:
+            side = "the incoming column" if mine else "the store column"
             found["refused"].append({"pair": pair, "reason": f"{side}: {why}. A merge needs one unit per column: "
                                      "split it by unit, or convert it with a script, then upload it again."})
         elif i_unit == s_unit:

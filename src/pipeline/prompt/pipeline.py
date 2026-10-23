@@ -12,7 +12,7 @@ A model answer below a step's threshold is a question for the user (asking.py): 
 has one (Paused, as the store import); once answered (client.settle), it runs again from the start, replaying the
 recorded answers (client.Recorded). Every other warning is a notice: shown, and the pipeline goes on.
 """
-import json
+import re
 
 from orbitrows.pipeline.merge import convert
 from orbitrows.pipeline.store.run import Paused, _Ordered, first_questions
@@ -21,6 +21,9 @@ from orbitrows.services.storage.store import ROLES
 from orbitrows.sql.ddl import schema_from_sqlite
 
 from . import assemble, conditions, coref, formula, grouping, operation, parts, request_graph, source_route, sources, values
+
+NUMBER = re.compile(r"[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)")    # an upload's number cell: a . for decimals, no unit
+WHOLE = re.compile(r"[+-]?[0-9]+(\.0*)?")                     # into an INTEGER column without a formula
 
 
 def store_of(db) -> list[dict]:
@@ -42,16 +45,9 @@ def with_incoming(db, store: list[dict], incoming: list[dict]) -> tuple[list[dic
     → (schema, None), or (store, why) when an upload has no such key link: never guessed."""
     by_name = {n.definition.sql_name: n.model_dump() for n in schema_from_sqlite(db)}
     tables = {n["definition"]["sql_name"]: n["definition"] for n in store}
-    matched = db.execute("SELECT 1 FROM sqlite_schema WHERE name = '_incoming_store_matches'").fetchone()
     out = list(store)
     for t in incoming:
-        links = matched and db.execute(
-            "SELECT ic.sql_name, st.sql_name, sc.sql_name, sc.role FROM _incoming_columns ic "
-            "JOIN _incoming_store_matches m ON m.incoming_column_id = ic.id AND m.relation = 'direct' "
-            "JOIN _store_columns sc ON sc.id = m.store_column_id JOIN _store_tables st ON st.id = sc.table_id "
-            "WHERE ic.table_id = ? AND json_extract(ic.extra_json, '$.primary_key_candidate')", (t["id"],)).fetchall()
-        links = [(key, table, column) for key, table, column, role in links or [] if table in tables and (
-            role == ROLES.index("dedicated_key") or tables[table]["primary_key"] == [f"c_{column}"])]
+        links = keyed(db, t["id"], tables)
         if not links:
             return store, (f"{t['sql_name']} ({t['source_file']}) has no key column linked to a store key (a table's "
                            "primary key or reference code), so its rows can't be matched to the store's records; "
@@ -66,23 +62,72 @@ def with_incoming(db, store: list[dict], incoming: list[dict]) -> tuple[list[dic
     return out, None
 
 
+def keyed(db, upload: int, tables: dict) -> list[tuple]:
+    """The upload's key links [(its key column, store table, store column)]: a primary_key_candidate column directly
+    matched to a store key (its table's primary key or a dedicated_key column). The update (with_incoming) and the
+    insert (insert_from) read the same ones."""
+    if not db.execute("SELECT 1 FROM sqlite_schema WHERE name = '_incoming_store_matches'").fetchone():
+        return []
+    links = db.execute(
+        "SELECT ic.sql_name, st.sql_name, sc.sql_name, sc.role FROM _incoming_columns ic "
+        "JOIN _incoming_store_matches m ON m.incoming_column_id = ic.id AND m.relation = 'direct' "
+        "JOIN _store_columns sc ON sc.id = m.store_column_id JOIN _store_tables st ON st.id = sc.table_id "
+        "WHERE ic.table_id = ? AND json_extract(ic.extra_json, '$.primary_key_candidate')", (upload,)).fetchall()
+    return [(key, table, column) for key, table, column, role in links if table in tables and (
+        role == ROLES.index("dedicated_key") or tables[table]["primary_key"] == [f"c_{column}"])]
+
+
+def repeated(db, table: str, key: str) -> str | None:
+    """Why the upload can't be matched on `key`: a key value on several rows (the store's tables don't enforce
+    their keys, so an insert would add the record twice and an update would take one row of them), or None."""
+    found = [v for (v,) in db.execute(f'SELECT "{key}" FROM "{table}" WHERE TRIM(COALESCE("{key}", \'\')) <> \'\' '
+                                      f'GROUP BY "{key}" HAVING COUNT(*) > 1 LIMIT 3')]
+    return found and (f"{key} of {table} repeats {', '.join(map(repr, found))}: each record's key must be on one row "
+                      "only, so its rows can't be matched to the store's records; nothing is guessed. Remove the "
+                      "repeated rows, then upload it again.") or None
+
+
+def _put(node, value):
+    """The formula's AST with its x (convert.X) replaced by the upload's value."""
+    if node == convert.X.model_dump(by_alias=True):
+        return value
+    if isinstance(node, dict):
+        return {k: _put(v, value) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_put(v, value) for v in node]
+    return node
+
+
 def from_incoming(db, store: list[dict], incoming: list[dict], reqs: list[dict], parts_: dict,
                   sources_: dict) -> tuple[list, list]:
     """An update's changed column directly matched to a (non-key) column of a selected upload takes that column's
-    value, which assembly reaches through the key: as is (cast to REAL for a number column: incoming cells are TEXT),
-    or converted by the user's formula (convert.py). → (questions: a formula to give, errors: a unit varying row by
-    row); each assignment so built is set (from: incoming), no longer pending. An insert takes the upload's new
-    records (insert_from)."""
+    value, which assembly reaches through the key: as is (an empty cell is NULL, never written over a value; cast to
+    REAL for a number column: incoming cells are TEXT), or converted by the user's formula (convert.py). → (questions:
+    a formula to give, errors: a unit varying row by row, a key repeated, a number cell that isn't a plain number);
+    each assignment so built is set (from: incoming), no longer pending. An insert takes the upload's new records
+    (insert_from)."""
     asked, errors = [], []
     plans = {t["id"]: convert.plan(db, t["id"]) for t in incoming}
     names = {t["id"]: t["sql_name"] for t in incoming}
     types = {f"{n['definition']['table_id']}.{c['column_id']}": c["sql_type"] for n in store
              for c in n["definition"]["columns"]}
+    tables = {n["definition"]["sql_name"]: n["definition"] for n in store}
+    keys = {t["id"]: keyed(db, t["id"], tables) for t in incoming}
+    checked = {}                                              # upload → why its keys repeat, or None: checked once
 
     def taken(rid, upload, i, s, name, typ):
         """Upload column i's value for store column s, converted; None when asked or refused."""
         plan = plans[upload]
-        value = {"type": "column", "source": f"t_{names[upload]}", "reference": f"c_{name}"}
+        if upload not in checked:
+            checked[upload] = next(filter(None, (repeated(db, names[upload], k) for k in dict.fromkeys(
+                k for k, *_ in keys[upload]))), None)
+            if checked[upload]:
+                errors.append({"request": rid, "stage": "key", "error": checked[upload]})
+        if checked[upload]:
+            return None
+        cell = {"type": "column", "source": f"t_{names[upload]}", "reference": f"c_{name}"}
+        value = {"type": "function", "name": "nullif", "arguments": [
+            {"type": "function", "name": "trim", "arguments": [cell]}, {"type": "literal", "value": ""}]}
         if typ in ("INTEGER", "REAL"):
             value = {"type": "function", "name": "real", "arguments": [value]}
         if refused := next((x for x in plan["refused"] if x["pair"] == (i, s)), None):
@@ -93,17 +138,29 @@ def from_incoming(db, store: list[dict], incoming: list[dict], reqs: list[dict],
             asked.append({"request": rid} | q | {"question": q["question"] | {
                 "save": [s, need["from"], need["to"]]}})         # the session keeps the answer (convert.save)
             return None
-        if formula := next((x["formula"] for x in plan["known"] if x["pair"] == (i, s)), None):
-            value = json.loads(json.dumps(convert.parse(formula).model_dump(by_alias=True))
-                               .replace(json.dumps(convert.X.model_dump()), json.dumps(value)))
-            if typ == "INTEGER":
+        formula = next((x["formula"] for x in plan["known"] if x["pair"] == (i, s)), None)
+        if typ in ("INTEGER", "REAL"):                        # CAST('$5' AS REAL) is 0: checked here, never guessed
+            whole = typ == "INTEGER" and not formula          # 12.5 into an INTEGER column: refused, not rounded
+            bad = [v for (v,) in db.execute(f'SELECT DISTINCT TRIM("{name}") FROM "{names[upload]}" '
+                                            f'WHERE TRIM(COALESCE("{name}", \'\')) <> \'\'')
+                   if not (WHOLE if whole else NUMBER).fullmatch(v)]
+            if bad:
+                errors.append({"request": rid, "stage": "conversion", "error": (
+                    f"{name} of {names[upload]} has cells that aren't plain {'whole ' * whole}numbers "
+                    f"({', '.join(map(repr, bad[:3]))}), and its store column takes "
+                    f"{'whole numbers' if whole else 'numbers'}: nothing is guessed. Write them as "
+                    f"{'12' if whole else '12.5 (a . for decimals, no unit)'}, then upload it again.")})
+                return None
+        if formula:
+            value = _put(convert.parse(formula).model_dump(by_alias=True), value)
+            if typ == "INTEGER":                              # the formula's result: rounded to the whole number
                 value = {"type": "function", "name": "round", "arguments": [value]}
         return value
 
     for r in reqs:
         if r["statement"] == "insert":
             insert_from(db, r["id"], parts.main_table(reqs, sources_, r["id"]), plans, names, types, taken,
-                        parts_.setdefault(r["id"], {}), errors)
+                        parts_.setdefault(r["id"], {}), errors, keys)
         if r["statement"] != "update":
             continue
         for a in parts_.get(r["id"], {}).get("assignments", []):
@@ -125,20 +182,21 @@ def from_incoming(db, store: list[dict], incoming: list[dict], reqs: list[dict],
     return asked, errors
 
 
-def insert_from(db, rid, main, plans, names, types, taken, part, errors):
-    """An insert into `main` from the first selected upload whose key is linked to it: the store's columns directly
+def insert_from(db, rid, main, plans, names, types, taken, part, errors, keys):
+    """An insert into `main` from the first selected upload whose key is linked to it (keys: keyed()'s links, as
+    with_incoming chose them): the store's columns directly
     linked to that upload (the key included; only those step 5 says the request gives, when it names some), each
     value converted (taken); assembly reads the upload's rows whose key is not empty and not in the store yet. Never
     guessed: a NOT NULL store column without default and without a link, or a linked column of a parent table (the
     record would need one there), stops the message."""
     table = main and main.split("_", 1)[1]
     links = [x for x in db.execute(
-        "SELECT ic.table_id, ic.id, sc.id, ic.sql_name, sc.sql_name, st.sql_name, "
-        "COALESCE(json_extract(ic.extra_json, '$.primary_key_candidate'), 0) FROM _incoming_store_matches m "
+        "SELECT ic.table_id, ic.id, sc.id, ic.sql_name, sc.sql_name, st.sql_name FROM _incoming_store_matches m "
         "JOIN _incoming_columns ic ON ic.id = m.incoming_column_id "
         "JOIN _store_columns sc ON sc.id = m.store_column_id JOIN _store_tables st ON st.id = sc.table_id "
         "WHERE m.relation = 'direct' ORDER BY ic.table_id, ic.id") if x[0] in plans]
-    upload = next((x[0] for x in links if x[5] == table and x[6]), None)
+    is_key = lambda x: x[5] == table and (x[3], x[5], x[4]) in keys[x[0]]
+    upload = next((x[0] for x in links if is_key(x)), None)
     if upload is None:
         errors.append({"request": rid, "stage": "insert", "error": f"no selected upload has a key linked to {table}: "
                                                                    "its new records can't be told; nothing is guessed."})
@@ -149,7 +207,7 @@ def insert_from(db, rid, main, plans, names, types, taken, part, errors):
                        f"{table} record would need its record there first, which is not built yet."})
         return
     gives = set((part.get("insert") or {}).get("gives") or [])
-    key = next(x for x in links if x[0] == upload and x[5] == table and x[6])
+    key = next(x for x in links if x[0] == upload and is_key(x))
     mine = {}                                                 # store column → its first linked upload column
     for x in links:
         if x[0] == upload and x[5] == table and x[4] not in mine and (
@@ -166,6 +224,8 @@ def insert_from(db, rid, main, plans, names, types, taken, part, errors):
     cols, vals = [], []
     for column, (_, i, s, name, *_) in mine.items():
         if (value := taken(rid, upload, i, s, name, types[f"t_{table}.c_{column}"])) is not None:
+            if column == key[4] and types[f"t_{table}.c_{column}"] == "TEXT":   # as compared with the store's keys:
+                value = {"type": "column", "source": f"t_{names[upload]}", "reference": f"c_{name}"}   # not trimmed
             cols.append(f"c_{column}")
             vals.append(value)
     part["insert"] = {"columns": cols, "values": vals, "from": f"t_{names[upload]}", "key": f"c_{key[3]}",

@@ -59,7 +59,8 @@ class DerivedReference(Node):
 ARITY = {"trim": (1, 1), "length": (1, 1), "lower": (1, 1), "upper": (1, 1), "abs": (1, 1), "round": (1, 2),
          "replace": (3, 3), "coalesce": (2, None), "greatest": (2, None), "least": (2, None),
          "date": (2, 2), "substr": (2, 3),                                      # date(col, '+7 days'): a date moved (2026-10-16)
-         "real": (1, 1)}                                                        # CAST(x AS REAL): an upload's TEXT cell
+         "real": (1, 1),                                                        # CAST(x AS REAL): an upload's TEXT cell
+         "nullif": (2, 2)}                                                      # NULLIF(TRIM(cell), ''): an empty cell
 
 
 class FunctionCall(Node):

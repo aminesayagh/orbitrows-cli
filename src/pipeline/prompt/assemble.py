@@ -171,9 +171,31 @@ def _fill_outer(node, outer_alias):
     return node
 
 
-def shown(key, main, main_alias, schema, names, warnings, rid, expression=None):
+def filled(node, table) -> list:
+    """An update's value from an upload: each of its cells there not empty, TRIM(COALESCE(cell, '')) <> '' (an
+    empty cell is no value: never written over the store's)."""
+    cells = []
+
+    def walk(n):
+        if isinstance(n, dict):
+            if n.get("type") == "column" and n["source"] == table and n not in cells:
+                cells.append(n)
+            for v in n.values():
+                walk(v)
+        elif isinstance(n, list):
+            for v in n:
+                walk(v)
+    walk(node)
+    return [{"type": "comparison", "operator": "!=", "right": {"type": "literal", "value": ""}, "left": {
+        "type": "function", "name": "trim", "arguments": [
+            {"type": "function", "name": "coalesce", "arguments": [c, {"type": "literal", "value": ""}]}]}}
+            for c in cells]
+
+
+def shown(key, main, main_alias, schema, names, warnings, rid, expression=None, also=()):
     """A column to show or sort by: on the main table, or a one-row subquery along many-to-one keys. expression: an
-    expression on that column's table (an update's value from another table) taken in its place."""
+    expression on that column's table (an update's value from another table) taken in its place; also: conditions
+    on that table its row meets too."""
     table, cid = key.split(".")
     if table == main:
         return col(main_alias, cid)
@@ -186,9 +208,10 @@ def shown(key, main, main_alias, schema, names, warnings, rid, expression=None):
         a = names.alias(t_to)
         out = col(a, chain[i + 1][1]) if i + 1 < len(chain) else \
             rewrite(expression, {table: a}) if expression else col(a, cid)
-        value = {"type": "subquery",
-                 "query": select(names, t_to, a, [out],
-                                 {"type": "comparison", "operator": "=", "left": col(a, c_to), "right": value}, 1)}
+        where = {"type": "comparison", "operator": "=", "left": col(a, c_to), "right": value}
+        if also and i + 1 == len(chain):
+            where = {"type": "all", "children": [where, *rewrite(list(also), {table: a})]}
+        value = {"type": "subquery", "query": select(names, t_to, a, [out], where, 1)}
     return value
 
 
@@ -254,23 +277,26 @@ def statement(r, st, main, schema, src, part, cond6, group6, built, warnings):
                 return {**v, "branches": [{"when": lift(b["when"], main, a, schema, names, warnings, rid),
                                            "then": cases(b["then"])} for b in v["branches"]], "else": cases(v["else"])}
             return {k: cases(x) for k, x in v.items()}
-        sets, reached = [], []
+        sets, reached = [], {}
         for x in part["assignments"]:
             v = rewrite(cases(x["value"]), {main: a})
             if x["value"].get("type") != "case" and (others := tables_in(x["value"]) - {main}):
                 (other,) = others if len(others) == 1 else (None,)  # a value from another table (an upload's
-                v = other and shown(f"{other}.", main, a, schema, names, warnings, rid, v)   # price): its subquery
+                also = filled(x["value"], other) if other and x.get("from") == "incoming" else []   # price): its
+                v = other and shown(f"{other}.", main, a, schema, names, warnings, rid, v, also)    # subquery
                 if v is None:
                     warnings.append({"request": rid, "problem": f"value of {x['column']}: not one value per record"})
                     continue
-                reached.append(other)
+                got = reached.setdefault(other, [])
+                got += [c for c in also if c not in got]
             sets.append({"column": col(a, x["column"].split(".")[1]), "value": v})
         if not sets:
             return None
         ast = {"id": rid, "type": "update", "target": target, "scope": scope, "assignments": sets}
-        for other in dict.fromkeys(reached):           # only the records with a value there: never SET … NULL
-            key = path(schema, main, other)[-1][3]
-            with_condition(ast, lift({"type": "null_check", "expression": col(other, key), "operator": "is_not_null"},
+        for other, also in reached.items():            # only the records with a value there: never SET … NULL
+            key = path(schema, main, other)[-1][3]     # (an upload's row with every value cell of it filled)
+            has = {"type": "null_check", "expression": col(other, key), "operator": "is_not_null"}
+            with_condition(ast, lift({"type": "all", "children": [has, *also]} if also else has,
                                      main, a, schema, names, warnings, rid))
         return ast
     if st == "delete":

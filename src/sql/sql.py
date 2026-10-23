@@ -87,6 +87,8 @@ class Compiler:
                 return exp.func("REPLACE", *args)
             if n.name == "real":
                 return exp.cast(args[0], "REAL")
+            if n.name == "nullif":
+                return exp.Nullif(this=args[0], expression=args[1])
             if n.name == "date":                            # SQLite's date(value, modifier)
                 return exp.Anonymous(this="date", expressions=args)
             if n.name == "substr":                          # SQLite's substr(text, start[, length])

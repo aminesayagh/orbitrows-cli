@@ -491,3 +491,21 @@ def test_an_insert_from_an_upload_stops_on_a_required_column_without_a_link(addi
     reply = s.message("add the new products from supplier.csv")
     assert not reply["ok"] and "stock" in reply["error"] and "nothing is guessed" in reply["error"], reply
     assert s.db.execute("SELECT sku FROM products ORDER BY sku").fetchall() == [("A1",), ("B2",)]
+
+
+def test_an_empty_cell_of_an_upload_leaves_the_store_s_value(supplied):
+    from orbitrows.pipeline.merge import convert
+    convert.save(supplied.db, 2, "EUR", "MAD", "x * 10")
+    supplied.db.execute("UPDATE in_supplier_1 SET prix = ' ' WHERE ref = 'B2'")   # CAST('' AS REAL) would be 0
+    reply = supplied.message("update the prices from supplier.csv")
+    assert reply["ran"][0]["changed"] == 1, reply
+    assert supplied.db.execute("SELECT sku, price FROM products ORDER BY sku").fetchall() == [
+        ("A1", 15.0), ("B2", 20.0), ("C3", 30.0)]
+
+
+def test_an_insert_from_an_upload_repeating_a_key_is_refused(adding):
+    s = adding()
+    s.db.execute("INSERT INTO in_supplier_1 VALUES ('C3', 'Mug v2', '5')")
+    reply = s.message("add the new products from supplier.csv")
+    assert not reply["ok"] and "ref of in_supplier_1 repeats 'C3'" in reply["error"], reply
+    assert s.db.execute("SELECT sku FROM products ORDER BY sku").fetchall() == [("A1",), ("B2",)]
