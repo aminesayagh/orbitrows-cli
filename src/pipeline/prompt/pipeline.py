@@ -22,7 +22,7 @@ import re
 from orbitrows.pipeline.merge import convert
 from orbitrows.pipeline.store.run import Paused, _Ordered, first_questions
 from orbitrows.services.extractor import client as extractor
-from orbitrows.services.storage.store import ROLES
+from orbitrows.services.storage.store import KINDS, ROLES
 from orbitrows.sql.ddl import schema_from_sqlite
 
 from . import assemble, conditions, coref, formula, grouping, operation, parts, request_graph, source_route, sources, values
@@ -85,7 +85,12 @@ def read_only(incoming: list[dict], reqs: list[dict], sources_: dict) -> str | N
 def cell_type(db, table: str, column: str) -> str:
     """An upload column's type as its cells show it (every cell is TEXT in the database: a raw snapshot): INTEGER
     when each non-empty cell is a whole number, REAL when each is a plain number, else TEXT (an empty column too).
-    The view's only: a step may then name it for a number change; its value is cast when read (from_uploads)."""
+    The view's only: a step may then name it for a number change; its value is cast when read (from_uploads). An
+    identifier written with digits (a barcode, a reference: the roles step's kind) stays TEXT: a code, not a number."""
+    kind = db.execute("SELECT ic.kind FROM _incoming_columns ic JOIN _incoming_tables t ON t.id = ic.table_id "
+                      "WHERE t.sql_name = ? AND ic.sql_name = ?", (table, column)).fetchone()
+    if kind and kind[0] is not None and KINDS[kind[0]] in ("record_reference", "model_reference"):
+        return "TEXT"
     cells = [str(v).strip() for (v,) in db.execute(f'SELECT DISTINCT "{column}" FROM "{table}" '
                                                    f'WHERE TRIM(COALESCE("{column}", \'\')) <> \'\'')]
     if not cells or not all(NUMBER.fullmatch(v) for v in cells):

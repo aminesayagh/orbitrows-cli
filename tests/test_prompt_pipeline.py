@@ -284,3 +284,19 @@ async def test_a_repeating_upload_key_is_linked_and_totalled_per_store_record(mo
     assert result["assembly"]["errors"] == [], result["assembly"]
     [ran] = result["assembly"]["program"]
     assert sorted(ran["returns"]) == [["A1", 10.0], ["B2", 3.0]], ran
+
+
+def test_an_identifier_written_with_digits_stays_text_in_the_view():
+    """A barcode's cells are all digits, but the roles step calls it a reference: a code to compare as text."""
+    import sqlite3
+    from orbitrows.services.storage import incoming
+    from orbitrows.services.storage.store import KINDS
+    db = sqlite3.connect(":memory:")
+    db.executescript(incoming.SCHEMA.replace("REFERENCES _store_columns(id)", "") + f"""
+        INSERT INTO _incoming_tables VALUES (1, 'in_offer_1', 'incoming/1/offer.csv', 'now', 1);
+        INSERT INTO _incoming_columns (id, table_id, sql_name, sql_type, position, kind)
+            VALUES (1, 1, 'barcode', 'TEXT', 0, {KINDS.index("record_reference")}), (2, 1, 'qty', 'TEXT', 1, NULL);
+        CREATE TABLE in_offer_1 (barcode TEXT, qty TEXT);
+        INSERT INTO in_offer_1 VALUES ('6110000000052', '3'), ('0610000000999', '12');""")
+    assert pipeline.cell_type(db, "in_offer_1", "barcode") == "TEXT"
+    assert pipeline.cell_type(db, "in_offer_1", "qty") == "INTEGER"
