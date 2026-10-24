@@ -389,6 +389,7 @@ def test_an_upload_is_a_change_of_the_open_session(env, capsys, monkeypatch):
     assert outside("SELECT t.sql_name, h.name FROM _incoming_tables t JOIN _history h ON h.id = t.created_by") \
         == [("in_supplier_1", "Upload supplier.csv")]
     assert (root / "incoming" / "1" / "supplier.csv").read_bytes() == (env / "supplier.csv").read_bytes()
+    assert "calls" in json.loads((root / "incoming" / "1" / "upload.json").read_text())   # its model answers kept
     assert not any((root / "incoming_pending").iterdir())
 
 

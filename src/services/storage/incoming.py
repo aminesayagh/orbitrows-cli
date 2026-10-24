@@ -174,9 +174,12 @@ def upload(db: sqlite3.Connection, root: Path, folder: Path) -> dict:
 
 
 def place(root: Path, folder: Path, source_file: str) -> None:
-    """Once the session committed the upload: its CSV moved from the pending folder to source_file, the folder
+    """Once the session committed the upload: its CSV moved from the pending folder to source_file, its progress
+    (every model answer with its probabilities, as the import keeps import.json) beside it as upload.json, the folder
     removed."""
     destination = root / source_file
     destination.parent.mkdir(parents=True, exist_ok=False)
     os.replace(folder / destination.name, destination)
+    if (folder / "progress.json").is_file():
+        os.replace(folder / "progress.json", destination.with_name("upload.json"))
     shutil.rmtree(folder)
