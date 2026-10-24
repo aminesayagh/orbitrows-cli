@@ -91,22 +91,21 @@ def _side(unit_id, unit, unit_from, context_column_id) -> str | None:
     return None
 
 
-def plan(db: sqlite3.Connection, upload_id: int, pair: tuple[int, int] | None = None) -> dict:
-    """The linked column pairs of the incoming table (_incoming_tables.id) with a unit on either side → {"needs":
-    [{"pair", "from", "to", "kind", "samples"}] (a formula to ask), "known": [{"pair", "formula"}] (asked before),
-    "refused": [{"pair", "reason"}] (row-varying units), "same": [pairs]}. pair: (incoming column, store column),
-    linked or not (a message naming the upload's column): that pair only."""
+def plan(db: sqlite3.Connection, upload_id: int, pair: tuple[int, int]) -> dict:
+    """A (incoming column, store column) pair of the incoming table (_incoming_tables.id), the one a message
+    resolved, with a unit on either side → {"needs": [{"pair", "from", "to", "kind", "samples"}] (a formula to ask),
+    "known": [{"pair", "formula"}] (asked before), "refused": [{"pair", "reason"}] (row-varying units), "same":
+    [pairs]}."""
     table = db.execute("SELECT sql_name FROM _incoming_tables WHERE id = ?", (upload_id,)).fetchone()[0]
-    pairs = "_incoming_store_matches m" if pair is None else \
-        "(SELECT ? AS incoming_column_id, ? AS store_column_id) m"
     rows = db.execute(
         "SELECT m.incoming_column_id, m.store_column_id, ic.sql_name, "
         "ic.unit_id, iu.unit, iu.unit_kind, iu.unit_from, ic.context_column_id, "
         "sc.unit_id, su.unit, su.unit_kind, su.unit_from, sc.context_column_id "
-        f"FROM {pairs} JOIN _incoming_columns ic ON ic.id = m.incoming_column_id "
+        "FROM (SELECT ? AS incoming_column_id, ? AS store_column_id) m "
+        "JOIN _incoming_columns ic ON ic.id = m.incoming_column_id "
         "JOIN _store_columns sc ON sc.id = m.store_column_id "
         "LEFT JOIN _column_context iu ON iu.id = ic.unit_id LEFT JOIN _column_context su ON su.id = sc.unit_id "
-        "WHERE ic.table_id = ? ORDER BY m.incoming_column_id, m.store_column_id", (*(pair or ()), upload_id)).fetchall()
+        "WHERE ic.table_id = ?", (*pair, upload_id)).fetchall()
     found = {"needs": [], "known": [], "refused": [], "same": []}
     for i, s, name, i_id, i_unit, i_kind, i_from, i_ctx, s_id, s_unit, s_kind, s_from, s_ctx in rows:
         pair = (i, s)

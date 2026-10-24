@@ -328,9 +328,12 @@ def classify_incoming(target: tuple[str, str | None], upload_id: str, progress: 
     written = ask(target, {"op": "incoming", "folder": str(folder)})   # the session writes it, started if needed
     print(f"{progress['file']}: {written['rows']} rows · {written['columns']} columns, incoming for store "
           f"{label(target)} as {written['table']}")
-    for match in (links := result["saved"].get("matching", {}).get("matches", [])):
-        print(f"  key {match['incoming_header']} → {match['store_table']}.{match['store_header']} "
-              f"({match['confidence']:.0%} of its values)")
+    keys = {k["id"]: k | {"sql_type": k["sql_type"].upper()} for k in progress["catalog"]["keys"]}
+    for pos, column in (links := result["saved"].get("matching", {}).get("keys", {})).items():
+        share = incoming_pipeline.incoming_match.shares(incoming_pipeline.profile.values(table, pos), keys[column])
+        several = result["saved"]["profile"]["columns"][pos]["max_repeat"] > 1
+        print(f"  key {table['header'][pos]} → {keys[column]['table']}.{keys[column]['header']} "
+              f"({share:.0%} of its values)" + " (several rows per record)" * several)
     if not links:
         print("  no key linked to a store key: a message can't match its rows to the store's records")
     print(f"Change {written['n']} made in store {label(target)}: saved by orbitrows exit, reverted by orbitrows undo.",

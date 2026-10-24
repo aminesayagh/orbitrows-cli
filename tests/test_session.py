@@ -365,7 +365,7 @@ def supplied(served, monkeypatch):
                        (2, 1, 'prix', 'TEXT', 'Prix (€)', 1, 2, '{}');
             CREATE TABLE in_supplier_1 (ref TEXT, prix TEXT);
             INSERT INTO in_supplier_1 VALUES ('A1', '1.5'), ('B2', '2'), ('Z9', '9');
-            INSERT INTO _incoming_store_matches VALUES (1, 1, 'direct', 1, 'now'), (2, 2, 'direct', 1, 'now');""")
+            UPDATE _incoming_columns SET references_column_id = 1 WHERE id = 1;""")
     prompt = "update the prices from supplier.csv"
     sections = {request_graph: {"requests": [{"id": "r1", "text": prompt, "start": 0, "end": len(prompt)}],
                                 "references": [], "warnings": []},
@@ -442,8 +442,7 @@ def adding(served, monkeypatch):
                 CREATE TABLE in_supplier_1 (ref TEXT, nom TEXT, prix TEXT);
                 INSERT INTO in_supplier_1 VALUES ('A1', 'Tee v2', '1.5'), ('C3', 'Mug', '2'), ('D4', 'Bag', '3'),
                                                  ('', 'Blank', '4');
-                INSERT INTO _incoming_store_matches VALUES (1, 1, 'direct', 1, 'now'), (2, 2, 'direct', 1, 'now'),
-                                                           (3, 3, 'direct', 1, 'now');""")
+                UPDATE _incoming_columns SET references_column_id = 1 WHERE id = 1;""")
             convert.save(db, 3, "EUR", "MAD", "x * 10")
             db.commit()
         prompt = "add the new products from supplier.csv"
@@ -517,7 +516,6 @@ def test_an_upload_column_the_formula_step_names_sets_the_value_without_a_link(s
     formula step names it: read through the key, cast, an empty cell no write."""
     from orbitrows.pipeline.prompt import formula
     supplied.db.executescript("""
-        DELETE FROM _incoming_store_matches WHERE incoming_column_id = 2;
         INSERT INTO _incoming_columns (id, table_id, sql_name, sql_type, source_header, position, unit_id, extra_json)
             VALUES (3, 1, 'recommended', 'TEXT', 'Recommended (DH)', 2, 1, '{}');
         ALTER TABLE in_supplier_1 ADD COLUMN recommended TEXT;
@@ -540,11 +538,10 @@ def test_an_upload_column_the_formula_step_names_sets_the_value_without_a_link(s
 
 
 def test_an_update_without_a_named_source_asks_the_model_once_among_the_number_columns(supplied, monkeypatch):
-    """"update prices from the file", no saved pair for price: the upload's number columns are the candidates, one
-    choice among them; the chosen pair is kept, so the same message again asks nothing."""
+    """"update prices from the file": the upload's number columns are the candidates, one choice among them; the
+    choice isn't kept, so the same message again resolves its own source."""
     from orbitrows.services.model import client
     supplied.db.executescript("""
-        DELETE FROM _incoming_store_matches WHERE incoming_column_id = 2;
         UPDATE _incoming_columns SET sql_name = 'cost', source_header = 'Cost (DH)', unit_id = 1 WHERE id = 2;
         ALTER TABLE in_supplier_1 RENAME COLUMN prix TO cost;
         INSERT INTO _incoming_columns (id, table_id, sql_name, sql_type, source_header, position, unit_id, extra_json)
@@ -563,6 +560,4 @@ def test_an_update_without_a_named_source_asks_the_model_once_among_the_number_c
     assert reply.get("ran") and reply["ran"][0]["changed"] == 2, reply
     assert supplied.db.execute("SELECT sku, price FROM products ORDER BY sku").fetchall() == [
         ("A1", 12.5), ("B2", 25.0), ("C3", 30.0)]
-    assert supplied.db.execute("SELECT incoming_column_id, store_column_id, relation FROM _incoming_store_matches "
-                               "ORDER BY 1").fetchall() == [(1, 1, "direct"), (3, 2, "direct")]
-    assert supplied.message("update prices from the file")["ok"] and len(asked) == 1   # the kept pair: no call
+    assert supplied.message("update prices from the file")["ok"] and len(asked) == 2   # nothing kept: resolved again

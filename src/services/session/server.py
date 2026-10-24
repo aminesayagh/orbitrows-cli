@@ -70,8 +70,7 @@ def prompt(db, text: str, calls: dict) -> dict:
         return {"paused": {"step": p.phase, "questions": p.questions, "notices": p.notices}}
     a = out["assembly"]
     unsure = {w.get("request") for w in out.get("conditions", {}).get("warnings", [])}
-    return {"program": a["program"], "errors": a["errors"], "matched": out.get("matched", []),   # assembly's
-            # questions list its errors too: told apart
+    return {"program": a["program"], "errors": a["errors"],   # assembly's questions list its errors too: told apart
             "notices": [q for q in a["questions"] if "question" not in q and "error" not in q],
             # every row changed while the rows' step was unsure or failed: the user confirms first (user, 2026-10-21)
             "confirm": [q for q in a["questions"] if q.get("scope") == "all_rows" and q.get("request") in unsure]}
@@ -234,9 +233,6 @@ class Session:
             self.pending = None
             return {"ok": False, "error": "\n  ".join(["The request couldn't be built, so nothing was changed:"] + [
                 f"{e.get('request')} ({e.get('stage')}): {e.get('error')}" for e in errors])}
-        if result.get("matched"):                             # the upload columns it chose: the next message reuses
-            from orbitrows.pipeline.prompt import pipeline   # them. Kept knowledge, as a conversion's formula
-            pipeline.save_matches(self.db, result["matched"])
         if confirm := result.get("confirm"):                  # kept built: a yes applies it without running it again
             p["built"], p["step"] = result, "assembly"
             p["open"] = [{"id": f"m_all_{c['request']}", "request": c["request"], "step": "assembly",
@@ -327,18 +323,12 @@ class Session:
         self.write({"undo": n, "at": registry.now()})         # first: a crash now loses the change anyway
         kept = self.db.execute("SELECT * FROM _conversions").fetchall() if self.db.execute(
             "SELECT 1 FROM sqlite_schema WHERE name = '_conversions'").fetchone() else []
-        pairs = self.db.execute("SELECT * FROM _incoming_store_matches").fetchall() if self.db.execute(
-            "SELECT 1 FROM sqlite_schema WHERE name = '_incoming_store_matches'").fetchone() else []
         self.db.execute(f"ROLLBACK TO c{n}")
         self.db.execute(f"RELEASE c{n}")
         if kept:                                              # the formulas given since c<n> began: not the change's
             from orbitrows.pipeline.merge import convert
             convert.ensure(self.db)
             self.db.executemany("INSERT OR REPLACE INTO _conversions VALUES (?, ?, ?, ?, ?)", kept)
-        if pairs and self.db.execute("SELECT 1 FROM sqlite_schema WHERE name = '_incoming_store_matches'").fetchone():
-            self.db.executemany("INSERT OR IGNORE INTO _incoming_store_matches SELECT ?, ?, ?, ?, ? WHERE EXISTS "
-                                "(SELECT 1 FROM _incoming_columns WHERE id = ?)",   # the pairs messages chose, but
-                                [p + (p[0],) for p in pairs])                       # not an undone upload's
         self.changes.pop()
         if upload := self.uploads.pop(n, None):              # its CSV, never placed, goes with it
             shutil.rmtree(upload[0], ignore_errors=True)

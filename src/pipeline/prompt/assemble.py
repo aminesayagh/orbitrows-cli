@@ -260,6 +260,20 @@ def shown(key, main, main_alias, schema, names, warnings, rid, expression=None, 
     return value
 
 
+def totalled(output, main, main_alias, schema, names):
+    """An aggregate of a column on a table whose rows point to the main table's record (one-to-many: an upload's
+    rows per sku and warehouse), one total per record: a correlated subquery; None for any other path."""
+    table, cid = output["column"].split(".")
+    chain = path(schema, main, table)
+    if not chain or len(chain) != 1 or chain[0][4] != "down":
+        return None
+    _, c_from, _, c_to, _ = chain[0]
+    b = names.alias(table)
+    where = {"type": "comparison", "operator": "=", "left": col(b, c_to), "right": col(main_alias, c_from)}
+    return {"type": "subquery", "query": select(names, table, b, [{**output["expression"], "argument": col(b, cid)}],
+                                                where)}
+
+
 # ---- statements -----------------------------------------------------------------------------------------------
 
 def main_of(requests, sources, parts, rid):
@@ -365,6 +379,9 @@ def statement(r, st, main, schema, src, part, cond6, group6, built, warnings, nu
         for o in outs:
             if o["column"] is None:                         # count of records
                 columns.append({"expression": {"type": "aggregate", "function": "count"}, "alias": "count"})
+                continue
+            if o["aggregate"] != "value" and (e := totalled(o, main, a, schema, names)):
+                columns.append({"expression": e, "alias": f"{o['aggregate']}_{o['column'].split('.')[1][2:]}"})
                 continue
             v = shown(o["column"], main, a, schema, names, warnings, rid)
             if v is None:

@@ -41,10 +41,9 @@ def test_plan_asks_for_differing_units_and_refuses_row_varying_ones():
                    (3, 1, 'currency', 'TEXT', 'Currency', 2, NULL, NULL), (4, 1, 'cost', 'TEXT', 'Cost', 3, 5, 3);
         CREATE TABLE in_supplier_1 (price TEXT, weight TEXT, currency TEXT, cost TEXT);
         INSERT INTO in_supplier_1 VALUES ('', '1', 'USD', '3'), ('12.5', '2', 'EUR', '4'), ('7', '3', 'USD', '5');
-        INSERT INTO _incoming_store_matches VALUES (1, 1, 'direct', 1, 'now'), (2, 2, 'direct', 1, 'now'),
-            (4, 3, 'direct', 1, 'now');
     """)
-    found = convert.plan(db, 1)
+    plans = [convert.plan(db, 1, pair) for pair in ((1, 1), (2, 2), (4, 3))]   # the pairs a message resolved
+    found = {k: [x for p in plans for x in p[k]] for k in plans[0]}
     assert found["needs"] == [{"pair": (1, 1), "from": "EUR", "to": "MAD", "kind": "currency",
                                "samples": ["12.5", "7"]}]
     assert found["same"] == [(2, 2)]
@@ -52,4 +51,4 @@ def test_plan_asks_for_differing_units_and_refuses_row_varying_ones():
     asked = convert.question(db, found["needs"][0])
     assert asked["question"] == {"type": "formula"} and "Price (€) (supplier.csv) is in EUR" in asked["problem"]
     convert.save(db, 1, "EUR", "MAD", "x * 10.85")             # answered once: not asked again
-    assert convert.plan(db, 1)["known"] == [{"pair": (1, 1), "formula": "x * 10.85"}]
+    assert convert.plan(db, 1, (1, 1))["known"] == [{"pair": (1, 1), "formula": "x * 10.85"}]

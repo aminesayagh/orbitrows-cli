@@ -38,19 +38,10 @@ CREATE TABLE IF NOT EXISTS _incoming_columns (
     level INTEGER,
     unit_id INTEGER REFERENCES _column_context(id),
     context_column_id INTEGER REFERENCES _incoming_columns(id),
+    references_column_id INTEGER REFERENCES _store_columns(id),
     extra_json TEXT,
     UNIQUE (table_id, sql_name)
 ) STRICT;
-CREATE TABLE IF NOT EXISTS _incoming_store_matches (
-    incoming_column_id INTEGER NOT NULL REFERENCES _incoming_columns(id),
-    store_column_id INTEGER NOT NULL REFERENCES _store_columns(id),
-    relation TEXT NOT NULL CHECK (relation IN ('direct', 'partial')),
-    confidence REAL NOT NULL CHECK (confidence BETWEEN 0 AND 1),
-    created_at TEXT NOT NULL,
-    PRIMARY KEY (incoming_column_id, store_column_id)
-) STRICT;
-CREATE INDEX IF NOT EXISTS _incoming_store_matches_store_column
-    ON _incoming_store_matches(store_column_id);
 """
 
 
@@ -94,7 +85,7 @@ def save_classified(store_id: str, upload_id: str, table: dict, saved: dict) -> 
 
 def upload(db: sqlite3.Connection, root: Path, folder: Path) -> dict:
     """A classified pending upload (folder) written on the session's connection, inside its open savepoint: the
-    table, its rows, metadata, matches, read-only triggers and its _history row. The CSV stays in folder until the
+    table, its rows, metadata (its key's store column), read-only triggers and its _history row. The CSV stays in folder until the
     session commits (place()). → {"id", "table", "source_file", "rows", "columns", "name", "sql"}."""
     file = json.loads((folder / "progress.json").read_text())["file"]
     classified = json.loads((folder / "classified.json").read_text())
@@ -164,9 +155,11 @@ def upload(db: sqlite3.Connection, root: Path, folder: Path) -> dict:
         if source["from"] == "column":
             db.execute("UPDATE _incoming_columns SET context_column_id = ? WHERE id = ?",
                        (column_ids[source["column"]], column_ids[i]))
-    db.executemany("INSERT INTO _incoming_store_matches VALUES (?, ?, ?, ?, ?)",
-                   [(column_ids[m["incoming_position"]], m["store_column_id"], m["relation"],
-                     m["confidence"], registry.now()) for m in saved.get("matching", {}).get("matches", [])])
+    # The store key a linked key column references: metadata, never a FOREIGN KEY (the session enforces foreign
+    # keys, and an upload's rows may name records the store doesn't have).
+    for i, store_column in saved.get("matching", {}).get("keys", {}).items():
+        db.execute("UPDATE _incoming_columns SET references_column_id = ? WHERE id = ?",
+                   (store_column, column_ids[int(i)]))
     for trigger in statements[1:]:
         db.execute(trigger)
     return {"id": table_id, "table": name, "source_file": source_file, "rows": len(table["rows"]),

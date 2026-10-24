@@ -1,7 +1,7 @@
 """Incoming → store column matching, adapted from the pilotstore PoC's pairwise question.
 
-At upload, only the upload's key: its primary-key candidates against the store's keys, by their values first, the
-question asked only for an ambiguous key (link_keys). Every other column is matched by a message, for the store
+At upload, only the upload's key: its key columns (a dedicated_key or the primary-key candidate, unique or repeating)
+against the store's keys, by their values first, the question asked only for an ambiguous key (link_keys). Every other column is matched by a message, for the store
 columns it changes, among the upload's columns its type and unit fit (prompt/pipeline.py: resolve).
 """
 
@@ -91,8 +91,9 @@ def number(v) -> str:
 
 
 async def link_keys(model, table: dict, saved: dict, target: dict) -> dict:
-    """The upload's key links → {matches, warnings}, as classify() made them for every pair: each primary-key
-    candidate of the upload against the store's keys (target["keys"]), by values first. One store key holding at
+    """The upload's key links → {keys: {position: store column id}, warnings}: each key column of the upload (one
+    the roles step classified dedicated_key, or its primary-key candidate; unique or repeating: one row per sku and
+    warehouse) against the store's keys (target["keys"]), by values first. One store key holding at
     least SHARE of its values and no rival: linked, no call. Several at SHARE, or the best only above FLOOR: the
     matching question for those candidates; its best pair kept when direct, a question when below SURE. Below FLOOR:
     no link. Every other column is matched by a message, when it needs it (prompt/pipeline.py)."""
@@ -111,18 +112,15 @@ async def link_keys(model, table: dict, saved: dict, target: dict) -> dict:
     store_target = {"tables": target["tables"]}
     store_columns = {c["id"]: c | {"table": t["name"]} for t in target["tables"] for c in t["columns"]}
     state = {"incoming": {"columns": incoming, "rows": table["rows"][:5]}, "store": store_target}
-    matches, warnings = [], []
+    linked, warnings = {}, []
     for source in incoming:
         pos = source["position"]
-        if ids[pos] not in definition["primary_key"]:
+        if source["role"] != "dedicated_key" and ids[pos] not in definition["primary_key"]:
             continue
         found = sorted(((shares(profile.values(table, pos), k), k) for k in keys), key=lambda x: -x[0])
         high = [k for share, k in found if share >= SHARE]
         if len(high) == 1:
-            share = found[0][0]
-            matches.append({"incoming_position": pos, "store_column_id": high[0]["id"],
-                            "incoming_header": source["header"], "store_table": high[0]["table"],
-                            "store_header": high[0]["header"], "relation": "direct", "confidence": share})
+            linked[pos] = high[0]["id"]
             continue
         candidates = [store_columns[k["id"]] for share, k in found if share >= FLOOR and k["id"] in store_columns]
         if not candidates:
@@ -146,7 +144,5 @@ async def link_keys(model, table: dict, saved: dict, target: dict) -> dict:
                              "question": {"type": "choice", "call": answers.call, "key": key,
                                           "options": options(probabilities)}})
         elif best > 0.5 and max((r for r in CRITERIA if r != "none"), key=lambda r: probabilities.get(r, 0)) == "direct":
-            matches.append({"incoming_position": pos, "store_column_id": c["id"], "incoming_header": source["header"],
-                            "store_table": c["table"], "store_header": c["header"], "relation": "direct",
-                            "confidence": round(best, 3)})
-    return {"matches": matches, "warnings": warnings}
+            linked[pos] = c["id"]
+    return {"keys": linked, "warnings": warnings}

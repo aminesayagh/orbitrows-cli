@@ -331,9 +331,8 @@ def test_an_upload_s_key_is_linked_by_its_values_and_no_other_column_is_matched(
     assert "key ref → products.sku (100% of its values)" in output
     leave(capsys)
     with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
-        assert db.execute("SELECT ic.source_header, sc.source_header, m.relation FROM _incoming_store_matches m "
-                          "JOIN _incoming_columns ic ON ic.id = m.incoming_column_id "
-                          "JOIN _store_columns sc ON sc.id = m.store_column_id").fetchall() == [("ref", "sku", "direct")]
+        assert db.execute("SELECT ic.source_header, sc.source_header FROM _incoming_columns ic "
+                          "JOIN _store_columns sc ON sc.id = ic.references_column_id").fetchall() == [("ref", "sku")]
 
 
 def test_two_incoming_files_can_match_one_store_table(env, capsys, monkeypatch):
@@ -345,9 +344,8 @@ def test_two_incoming_files_can_match_one_store_table(env, capsys, monkeypatch):
         assert run(capsys, "incoming", filename)[0] == 0
     leave(capsys)
     with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
-        assert db.execute("SELECT COUNT(DISTINCT t.id) FROM _incoming_store_matches m "
-                          "JOIN _incoming_columns c ON c.id = m.incoming_column_id "
-                          "JOIN _incoming_tables t ON t.id = c.table_id").fetchone()[0] == 2
+        assert db.execute("SELECT COUNT(DISTINCT table_id) FROM _incoming_columns "
+                          "WHERE references_column_id IS NOT NULL").fetchone()[0] == 2
         assert db.execute("SELECT COUNT(*) FROM _incoming_tables").fetchone()[0] == 2
 
 
@@ -407,7 +405,8 @@ def test_uncertain_incoming_match_waits_for_user_answer(env, capsys, monkeypatch
     assert code == 0, error
     leave(capsys)
     with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
-        assert db.execute("SELECT COUNT(*) FROM _incoming_store_matches").fetchone()[0] == 1   # the key only
+        assert db.execute("SELECT COUNT(*) FROM _incoming_columns "
+                          "WHERE references_column_id IS NOT NULL").fetchone()[0] == 1   # the key only
 
 
 def test_incoming_rejects_ragged_rows_without_saving_an_upload(env, capsys):

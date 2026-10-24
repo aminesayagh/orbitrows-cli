@@ -34,7 +34,7 @@ async def test_run_returns_every_step_and_the_program(monkeypatch):
     model = Model()
     out = await pipeline.run(saved["prompt"], model, baseline(), steps.append)
     assert list(out) == ["prompt", "requests", "operation", "values", "sources", "parts", "conditions", "grouping",
-                         "formula", "assembly", "matched"]
+                         "formula", "assembly"]
     assert json.loads(json.dumps(out["assembly"], default=str)) == saved["assembly"]
     assert [s for s, *_ in seen] == ["requests", "operation", "values", "sources", "parts", "conditions", "grouping",
                                      "formula"]
@@ -174,7 +174,7 @@ def offered(monkeypatch, statement, parts_, grouping_=None):
             VALUES (1, 1, 'sku', 'TEXT', 0, '{"primary_key_candidate": true}'), (2, 1, 'recommended', 'TEXT', 1, '{}');
         CREATE TABLE in_offer_1 (sku TEXT, recommended TEXT);
         INSERT INTO in_offer_1 VALUES ('A1', '99.00'), ('B2', '129.00'), ('C3', '55.00');
-        INSERT INTO _incoming_store_matches VALUES (1, 1, 'direct', 1, 'now');""")
+        UPDATE _incoming_columns SET references_column_id = 1 WHERE id = 1;""")
     sections = {request_graph: {"requests": [{"id": "r1", "text": "m", "start": 0, "end": 1}], "references": [],
                                 "warnings": []},
                 operation: {"requests": {"r1": {"statement": statement}}, "warnings": []},
@@ -221,3 +221,66 @@ async def test_a_write_to_an_upload_is_refused_as_read_only(monkeypatch):
     assert result["assembly"]["program"] == []
     assert db.execute("SELECT recommended FROM in_offer_1 ORDER BY sku").fetchall() == [
         ("99.00",), ("129.00",), ("55.00",)]
+
+
+async def test_a_repeating_upload_key_is_linked_and_totalled_per_store_record(monkeypatch):
+    """warehouse.csv has one row per sku and warehouse: its sku, a dedicated_key that repeats, is linked to
+    variants.sku by its values (references_column_id), and a read of variants totals its qty per variant."""
+    import sqlite3
+    from orbitrows.pipeline import incoming_match
+    from orbitrows.pipeline.prompt import source_route
+    from orbitrows.services.storage import incoming, store
+    table = {"header": ["sku", "warehouse", "qty"], "rows": [["A1", "Rabat", "4"], ["A1", "Fes", "6"],
+                                                             ["B2", "Rabat", "1"], ["B2", "Fes", "2"]]}
+    saved = {"schema": {"create_table": {"definition": {"columns": [{"column_id": f"c_{h}"} for h in table["header"]],
+                                                        "primary_key": []}}},
+             "context": {"context_columns": {}, "source_context": {}},
+             "roles": {"columns": {0: {"role": "dedicated_key"}}},
+             "profile": {"columns": {0: {"max_repeat": 2}, 1: {"max_repeat": 2}, 2: {"max_repeat": 1}}}}
+    keys = [{"id": 1, "table": "variants", "header": "SKU", "sql_type": "TEXT", "values": ["A1", "B2", "C3"]}]
+    linked = await incoming_match.link_keys(None, table, saved, {"tables": [], "keys": keys})
+    assert linked == {"keys": {0: 1}, "warnings": []}
+    db = sqlite3.connect(":memory:")
+    db.executescript(store.SCHEMA + incoming.SCHEMA + """
+        CREATE TABLE variants (sku TEXT PRIMARY KEY, stock INTEGER);
+        INSERT INTO variants VALUES ('A1', 10), ('B2', 5);
+        INSERT INTO _history VALUES (1, 'now', 'import', NULL, '[]', '[]', NULL, 1);
+        INSERT INTO _store_tables VALUES (1, 'variants', NULL, 'now', 1);
+        INSERT INTO _store_columns (id, table_id, sql_name, sql_type, edited_by)
+            VALUES (1, 1, 'sku', 'TEXT', 1), (2, 1, 'stock', 'INTEGER', 1);
+        INSERT INTO _incoming_tables VALUES (1, 'in_warehouse_1', 'incoming/1/warehouse.csv', 'now', 1);
+        INSERT INTO _incoming_columns (id, table_id, sql_name, sql_type, position, extra_json)
+            VALUES (1, 1, 'sku', 'TEXT', 0, '{"profile": {"max_repeat": 2}}'), (2, 1, 'warehouse', 'TEXT', 1, '{}'),
+                   (3, 1, 'qty', 'TEXT', 2, '{}');
+        CREATE TABLE in_warehouse_1 (sku TEXT, warehouse TEXT, qty TEXT);""")
+    db.executemany("INSERT INTO in_warehouse_1 VALUES (?, ?, ?)", table["rows"])
+    for pos, column in linked["keys"].items():                # as incoming.upload() writes it
+        db.execute("UPDATE _incoming_columns SET references_column_id = ? WHERE position = ?", (column, pos))
+    total = {"type": "aggregate", "function": "sum"}
+    sections = {request_graph: {"requests": [{"id": "r1", "text": "m", "start": 0, "end": 1}], "references": [],
+                                "warnings": []},
+                operation: {"requests": {"r1": {"statement": "select"}}, "warnings": []},
+                values: {"values": [], "warnings": []},
+                sources: {"requests": {"r1": {"from": {"type": "database_table", "reference": "t_variants"}}},
+                          "warnings": []},
+                parts: {"requests": {"r1": {"outputs": [
+                    {"column": "t_variants.c_sku", "aggregate": "value", "expression": {}},
+                    {"column": "t_in_warehouse_1.c_qty", "aggregate": "sum", "expression": total}]}}, "warnings": []},
+                conditions: {"requests": {}, "parameters": {}, "warnings": []},
+                grouping: {"requests": {"r1": {"group_by": [{"source": "t_variants", "reference": "c_sku"}]}},
+                           "warnings": []},
+                formula: {"requests": {}, "warnings": []}}
+    for module, section in sections.items():
+        async def run(*a, section=section, **k):
+            return json.loads(json.dumps(section))
+        monkeypatch.setattr(module, "run", run)
+
+    async def selected(model, prompt, db):
+        return {"store": True, "incoming": source_route.available(db), "warnings": []}
+    monkeypatch.setattr(source_route, "run", selected)
+    monkeypatch.setattr(pipeline.extractor, "connect", lambda: "gliner2")
+    monkeypatch.setattr(coref, "mentions", lambda prompts, name: [[]])
+    result = await pipeline.run("total warehouse quantity per variant", Model(), db)
+    assert result["assembly"]["errors"] == [], result["assembly"]
+    [ran] = result["assembly"]["program"]
+    assert sorted(ran["returns"]) == [["A1", 10.0], ["B2", 3.0]], ran
