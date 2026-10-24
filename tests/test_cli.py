@@ -1,4 +1,3 @@
-import asyncio
 import copy
 import json
 import os
@@ -18,7 +17,7 @@ from orbitrows.pipeline.store.schema import _same_number
 from orbitrows.pipeline.prompt import pipeline as prompt_pipeline
 from orbitrows.services.cli import main as cli
 from orbitrows.services.csv.reader import read_table
-from orbitrows.services.model.client import Model, Recorded, call_id, settle
+from orbitrows.services.model.client import Model, call_id
 from orbitrows.services.storage import registry
 from orbitrows.services.storage import store as storage
 
@@ -315,28 +314,26 @@ def test_incoming_context_unit_is_saved_with_the_profile(env, capsys, monkeypatc
         assert db.execute("SELECT price_mad FROM in_supplier_1").fetchone()[0] == "12,50"
 
 
-def test_incoming_matches_are_many_to_many(env, capsys, monkeypatch):
+def test_an_upload_s_key_is_linked_by_its_values_and_no_other_column_is_matched(env, capsys, monkeypatch):
+    """Every ref is a products.sku: the key link without a model call; cost and Vendor wait for a message."""
     assert run(capsys, "store", "products.csv")[0] == 0
     store_id = stores()[0][0]
-    (env / "supplier.csv").write_text("sku,Product Label,Vendor\nA-1001,Logitech Wireless Mouse,Logitech\n")
-    monkeypatch.setattr(cli, "connect", ManyMatchModel)
+    (env / "supplier.csv").write_text("ref,cost,Vendor\nA-1001,12.5,Logitech\nA-1002,90,Corsair\n")
+
+    class NoMatching(IncomingModel):
+        async def answer(self, state, questions):
+            assert not any("store_column" in q.get("instructions", {}) for q in questions.values()), questions
+            return await super().answer(state, questions)
+
+    monkeypatch.setattr(cli, "connect", NoMatching)
     code, output, error = run(capsys, "incoming", "supplier.csv")
     assert code == 0, error
-    assert "Product Label → products.name (partial, 100%)" in output
+    assert "key ref → products.sku (100% of its values)" in output
     leave(capsys)
-    root = storage.folder(store_id)
-    with closing(sqlite3.connect(root / "session.db")) as db:
-        rows = db.execute("SELECT ic.source_header, sc_id.store_column_id, sc_id.relation "
-                           "FROM _incoming_store_matches sc_id JOIN _incoming_columns ic "
-                           "ON ic.id = sc_id.incoming_column_id ORDER BY ic.position, sc_id.store_column_id").fetchall()
-        names = dict(db.execute("SELECT id, source_header FROM _store_columns"))
-        assert [(source, names[target], relation) for source, target, relation in rows] == [
-            ("sku", "sku", "direct"), ("Product Label", "name", "partial"),
-            ("Product Label", "brand", "partial"), ("Vendor", "brand", "direct")]
-        with pytest.raises(sqlite3.IntegrityError):
-            db.execute("PRAGMA foreign_keys = ON")
-            db.execute("INSERT INTO _incoming_store_matches VALUES (?, ?, 'direct', 1.0, 'now')",
-                       (db.execute("SELECT id FROM _incoming_columns LIMIT 1").fetchone()[0], 999999))
+    with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
+        assert db.execute("SELECT ic.source_header, sc.source_header, m.relation FROM _incoming_store_matches m "
+                          "JOIN _incoming_columns ic ON ic.id = m.incoming_column_id "
+                          "JOIN _store_columns sc ON sc.id = m.store_column_id").fetchall() == [("ref", "sku", "direct")]
 
 
 def test_two_incoming_files_can_match_one_store_table(env, capsys, monkeypatch):
@@ -396,7 +393,7 @@ def test_an_upload_is_a_change_of_the_open_session(env, capsys, monkeypatch):
 def test_uncertain_incoming_match_waits_for_user_answer(env, capsys, monkeypatch):
     assert run(capsys, "store", "products.csv")[0] == 0
     store_id = stores()[0][0]
-    (env / "supplier.csv").write_text("sku,Vendor\nA-1001,Logitech\n")
+    (env / "supplier.csv").write_text("sku,Vendor\nA-1001,Logitech\nZ-9999,Acme\n")   # half its skus: asked
     monkeypatch.setattr(cli, "connect", UncertainMatchModel)
     code, output, error = run(capsys, "incoming", "supplier.csv")
     assert code == 3 and not error
@@ -410,67 +407,7 @@ def test_uncertain_incoming_match_waits_for_user_answer(env, capsys, monkeypatch
     assert code == 0, error
     leave(capsys)
     with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
-        assert db.execute("SELECT COUNT(*) FROM _incoming_store_matches").fetchone()[0] == 2
-
-
-def test_settled_best_match_is_not_asked_again_beside_a_close_uncertain_runner_up(env, capsys, monkeypatch):
-    assert run(capsys, "store", "products.csv")[0] == 0
-    (env / "supplier.csv").write_text("sku,Vendor\nA-1001,Logitech\n")
-
-    class NearTie(ManyMatchModel):                            # sku → sku .95, sku → name .92: both uncertain
-        async def answer(self, state, questions):
-            answers, usage = await super().answer(state, questions)
-            for key, question in questions.items():
-                pair = (question["instructions"].get("incoming_column", {}).get("header"),
-                        question["instructions"].get("store_column", {}).get("header"))
-                if pair == ("sku", "sku"):
-                    answers[key] = ("direct", {"direct": 0.75, "partial": 0.2, "none": 0.05})
-                elif pair == ("sku", "name"):
-                    answers[key] = ("direct", {"direct": 0.5, "partial": 0.42, "none": 0.08})
-            return answers, usage
-
-    monkeypatch.setattr(cli, "connect", NearTie)
-    code, output, error = run(capsys, "incoming", "supplier.csv")
-    assert code == 3, error
-    [question] = json.loads(output)["questions"]
-    assert question["problem"].endswith("products.sku?")
-    code, output, error = run(capsys, "answer", question["id"], "direct")
-    assert code == 0, output + error                          # settled: 1.0, the runner-up only a notice
-
-
-def test_uncertain_incoming_matches_ask_one_question_per_column_at_once(env, capsys):
-    assert run(capsys, "store", "products.csv")[0] == 0
-    store_id = stores()[0][0]
-    targets = [c["header"] for t in cli.incoming_pipeline.incoming_match.catalog(store_id)["tables"]
-               for c in t["columns"]][:4]
-
-    class ManyUncertain(IncomingModel):                       # every pair with the first 4 store columns: below SURE
-        async def answer(self, state, questions):
-            answers, usage = await super().answer(state, questions)
-            for key, question in questions.items():
-                if (target := question["instructions"].get("store_column", {}).get("header")) in targets:
-                    i, j = question["instructions"]["incoming_column"]["position"], targets.index(target)
-                    direct = 0.3 + 0.1 * ((i + j) % 4)          # the best: (i + j) % 4 == 3, P(match) .7
-                    answers[key] = ("direct", {"direct": direct, "partial": 0.1, "none": 0.9 - direct})
-            return answers, usage
-
-    def best(i):
-        return targets[(3 - i) % 4]
-
-    path = env / "supplier.csv"
-    path.write_text("a,b,c\n1,2,3\n")
-    calls, catalog = {}, cli.incoming_pipeline.incoming_match.catalog(store_id)
-    with pytest.raises(cli.run.Paused) as paused:
-        asyncio.run(cli.incoming_pipeline.classify(Recorded(ManyUncertain(), calls), path, catalog=catalog))
-    asked, notices = paused.value.questions, paused.value.notices
-    assert paused.value.phase == "matching"
-    assert [q["problem"].rsplit(".", 1)[-1] for q in asked] == [f"{best(i)}?" for i in range(3)]
-    assert sum("also possibly" in n["problem"] for n in notices) == 3
-    for q in asked:
-        settle(calls, q["question"]["call"], q["question"]["key"], "direct")
-    result = asyncio.run(cli.incoming_pipeline.classify(Recorded(Model(), calls), path, catalog=catalog))
-    assert {(m["incoming_position"], m["store_header"]) for m in result["saved"]["matching"]["matches"]
-            if m["confidence"] == 1} == {(i, best(i)) for i in range(3)}
+        assert db.execute("SELECT COUNT(*) FROM _incoming_store_matches").fetchone()[0] == 1   # the key only
 
 
 def test_incoming_rejects_ragged_rows_without_saving_an_upload(env, capsys):

@@ -34,7 +34,7 @@ async def test_run_returns_every_step_and_the_program(monkeypatch):
     model = Model()
     out = await pipeline.run(saved["prompt"], model, baseline(), steps.append)
     assert list(out) == ["prompt", "requests", "operation", "values", "sources", "parts", "conditions", "grouping",
-                         "formula", "assembly"]
+                         "formula", "assembly", "matched"]
     assert json.loads(json.dumps(out["assembly"], default=str)) == saved["assembly"]
     assert [s for s, *_ in seen] == ["requests", "operation", "values", "sources", "parts", "conditions", "grouping",
                                      "formula"]

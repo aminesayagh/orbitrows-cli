@@ -537,3 +537,32 @@ def test_an_upload_column_the_formula_step_names_sets_the_value_without_a_link(s
     assert reply["ran"][0]["changed"] == 1, reply
     assert supplied.db.execute("SELECT sku, price FROM products ORDER BY sku").fetchall() == [
         ("A1", 12.5), ("B2", 20.0), ("C3", 30.0)]                # B2's cell is empty; C3 is not in the file
+
+
+def test_an_update_without_a_named_source_asks_the_model_once_among_the_number_columns(supplied, monkeypatch):
+    """"update prices from the file", no saved pair for price: the upload's number columns are the candidates, one
+    choice among them; the chosen pair is kept, so the same message again asks nothing."""
+    from orbitrows.services.model import client
+    supplied.db.executescript("""
+        DELETE FROM _incoming_store_matches WHERE incoming_column_id = 2;
+        UPDATE _incoming_columns SET sql_name = 'cost', source_header = 'Cost (DH)', unit_id = 1 WHERE id = 2;
+        ALTER TABLE in_supplier_1 RENAME COLUMN prix TO cost;
+        INSERT INTO _incoming_columns (id, table_id, sql_name, sql_type, source_header, position, unit_id, extra_json)
+            VALUES (3, 1, 'recommended', 'TEXT', 'Recommended (DH)', 2, 1, '{}');
+        ALTER TABLE in_supplier_1 ADD COLUMN recommended TEXT;
+        UPDATE in_supplier_1 SET recommended = CASE ref WHEN 'A1' THEN '12.5' WHEN 'B2' THEN '25' ELSE '7' END;""")
+    asked = []
+
+    class Choosing(client.Model):
+        async def answer(self, state, questions):
+            asked.append({k: sorted(q["criteria"]) for k, q in questions.items()})
+            return {k: ("recommended", {"recommended": 0.9, "cost": 0.1}) for k in questions}, (None, None)
+    monkeypatch.setattr(client, "connect", lambda name=None: Choosing())
+    reply = supplied.message("update prices from the file")
+    assert asked == [{"r1_s2": ["cost", "none", "recommended"]}], asked
+    assert reply.get("ran") and reply["ran"][0]["changed"] == 2, reply
+    assert supplied.db.execute("SELECT sku, price FROM products ORDER BY sku").fetchall() == [
+        ("A1", 12.5), ("B2", 25.0), ("C3", 30.0)]
+    assert supplied.db.execute("SELECT incoming_column_id, store_column_id, relation FROM _incoming_store_matches "
+                               "ORDER BY 1").fetchall() == [(1, 1, "direct"), (3, 2, "direct")]
+    assert supplied.message("update prices from the file")["ok"] and len(asked) == 1   # the kept pair: no call

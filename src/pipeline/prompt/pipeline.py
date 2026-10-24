@@ -4,10 +4,13 @@ its order, each step fed the previous steps' outputs. Paid: the model; local: Co
     store   the store's tables read back from SQLite (ddl.schema_from_sqlite), without the CLI's own tables (`_…`);
             with the selected uploads' tables, keyed and linked in that view only (with_incoming): an update takes
             a linked upload column's value through the key, converted by the user's formula (from_incoming), or
-            the upload column a step names (its type the one its cells show: cell_type; read the same: from_uploads);
-            an insert takes the upload's records whose key the store doesn't have (insert_from)
-    out     {prompt, requests, operation, values, sources, parts, conditions, grouping, formula, assembly}; assembly is
-            {"program", "questions", "errors"}: step 7 runs the program in a savepoint, rolled back (nothing is changed)
+            the upload column a step names (its type the one its cells show: cell_type; read the same: from_uploads),
+            else the one that fits it (resolve: by type and unit, the model choosing among several); an insert takes
+            the upload's records whose key the store doesn't have (insert_from), each column resolved the same way
+    out     {prompt, requests, operation, values, sources, parts, conditions, grouping, formula, assembly, matched};
+            assembly is {"program", "questions", "errors"}: step 7 runs the program in a savepoint, rolled back
+            (nothing is changed); matched: the (upload column, store column) pairs used, for the session to keep
+            (save_matches) so the next message reuses them
 
 A model answer below a step's threshold is a question for the user (asking.py): run stops after the first step that
 has one (Paused, as the store import); once answered (client.settle), it runs again from the start, replaying the
@@ -168,15 +171,84 @@ def reader(db, store: list[dict], incoming: list[dict], asked: list, errors: lis
     return taken
 
 
-def from_incoming(db, store: list[dict], incoming: list[dict], reqs: list[dict], parts_: dict,
-                  sources_: dict) -> tuple[list, list]:
+def candidates(db, upload: int, s: int, typ: str) -> list[tuple]:
+    """The upload's columns that may supply store column s (typ its type), by code: not its key, not a context
+    column, not already matched to another store column; number cells for a number column (cell_type); the same
+    kind of unit when both have one (a currency for a currency: the units themselves are converted, convert.py).
+    → [(incoming column id, sql name, header)], in file order."""
+    (kind,) = db.execute("SELECT cc.unit_kind FROM _store_columns sc LEFT JOIN _column_context cc "
+                         "ON cc.id = sc.unit_id WHERE sc.id = ?", (s,)).fetchone()
+    (table,) = db.execute("SELECT sql_name FROM _incoming_tables WHERE id = ?", (upload,)).fetchone()
+    found = db.execute(
+        "SELECT ic.id, ic.sql_name, ic.source_header, cc.unit_kind FROM _incoming_columns ic "
+        "LEFT JOIN _column_context cc ON cc.id = ic.unit_id WHERE ic.table_id = ? "
+        "AND NOT COALESCE(json_extract(ic.extra_json, '$.primary_key_candidate'), 0) "
+        "AND json_extract(ic.extra_json, '$.context') IS NULL AND NOT EXISTS (SELECT 1 FROM _incoming_store_matches m "
+        "WHERE m.incoming_column_id = ic.id AND m.store_column_id <> ?) ORDER BY ic.position", (upload, s)).fetchall()
+    return [(i, name, header) for i, name, header, k in found
+            if (typ not in ("INTEGER", "REAL") or cell_type(db, table, name) != "TEXT")
+            and (kind is None or k is None or k == kind)]
+
+
+async def choose(model, db, prompt: str, wanted: list[tuple], warnings: list) -> dict:
+    """One model call for every store column a message needs a source for among several candidates (wanted:
+    [(key, store column s, upload, [candidates()])]): the matching question's criteria and rules (incoming_match),
+    as one choice among the candidates or none. → {key: (incoming column id, sql name), or None (none: no source)};
+    a key below SURE is left out, its question in `warnings` (step "matching")."""
+    from orbitrows.pipeline import incoming_match
+    from orbitrows.services.model.client import SURE, ask, choice, options
+    questions, upload, labels = {}, None, {}
+    for key, s, upload, found in wanted:
+        table, column, header, typ = db.execute(
+            "SELECT st.sql_name, sc.sql_name, sc.source_header, sc.sql_type FROM _store_columns sc "
+            "JOIN _store_tables st ON st.id = sc.table_id WHERE sc.id = ?", (s,)).fetchone()
+        labels[key] = f"{table}.{column}"
+        questions[key] = choice(
+            "Map an incoming CSV to an existing store catalog.",
+            "Which incoming column supplies this store column for the message?",
+            {name: f"{h}: {incoming_match.CRITERIA['direct']}" for _, name, h in found}
+            | {"none": incoming_match.CRITERIA["none"]}, incoming_match.RULES[1:],
+            message=prompt, store_column={"table": table, "column": column, "header": header, "type": typ})
+    if not questions:
+        return {}
+    (name,) = db.execute("SELECT sql_name FROM _incoming_tables WHERE id = ?", (upload,)).fetchone()
+    columns = sorted({c for *_, found in wanted for c in found})
+    cells = ", ".join(f'"{c[1]}"' for c in columns)
+    rows = db.execute(f'SELECT {cells} FROM "{name}" LIMIT 5').fetchall()
+    state = {"incoming": {"table": name, "columns": [{"name": c[1], "header": c[2]} for c in columns],
+                          "rows": [list(r) for r in rows]}}
+    answers = await ask(model, state, questions)
+    out = {}
+    for key, s, upload, found in wanted:
+        selected, probabilities = answers[key]
+        if probabilities.get(selected, 0) >= SURE:
+            out[key] = next(((i, n) for i, n, _ in found if n == selected), None)
+            continue
+        warnings.append({"request": key.rsplit("_s", 1)[0],
+                         "problem": f"Which column of {name} supplies {labels[key]}?",
+                         "probability": round(probabilities.get(selected, 0), 2),
+                         "question": {"type": "choice", "call": answers.call, "key": key,
+                                      "options": options(probabilities)}})
+    return out
+
+
+def save_matches(db, pairs: list) -> None:
+    """The (incoming column, store column) pairs a message chose, kept for the next one (relation direct)."""
+    from orbitrows.services.storage import registry
+    db.executemany("INSERT OR IGNORE INTO _incoming_store_matches VALUES (?, ?, 'direct', 1.0, ?)",
+                   [(i, s, registry.now()) for i, s in pairs])
+
+
+async def from_incoming(model, prompt, db, store: list[dict], incoming: list[dict], reqs: list[dict], parts_: dict,
+                        sources_: dict, matched: list) -> tuple[list, list, list]:
     """An update's changed column directly matched to a (non-key) column of a selected upload takes that column's
     value, which assembly reaches through the key: as is (an empty cell is NULL, never written over a value; cast to
     REAL for a number column: incoming cells are TEXT), or converted by the user's formula (convert.py). → (questions:
-    a formula to give, errors: a unit varying row by row, a key repeated, a number cell that isn't a plain number);
-    each assignment so built is set (from: incoming), no longer pending. An insert takes the upload's new records
-    (insert_from)."""
-    asked, errors = [], []
+    a formula to give, errors: a unit varying row by row, a key repeated, a number cell that isn't a plain number,
+    matching: an insert's uncertain source column); each assignment so built is set (from: incoming), no longer
+    pending. An update's column without a saved pair is resolved after step 9 (resolve); an insert takes the upload's
+    new records (insert_from)."""
+    asked, errors, matching = [], [], []
     plans = {t["id"]: convert.plan(db, t["id"]) for t in incoming}
     names = {t["id"]: t["sql_name"] for t in incoming}
     taken = reader(db, store, incoming, asked, errors)
@@ -186,8 +258,8 @@ def from_incoming(db, store: list[dict], incoming: list[dict], reqs: list[dict],
     keys = {t["id"]: keyed(db, t["id"], tables) for t in incoming}
     for r in reqs:
         if r["statement"] == "insert":
-            insert_from(db, r["id"], parts.main_table(reqs, sources_, r["id"]), plans, names, types, taken,
-                        parts_.setdefault(r["id"], {}), errors, keys)
+            await insert_from(model, prompt, db, r["id"], parts.main_table(reqs, sources_, r["id"]), plans, names,
+                              types, taken, parts_.setdefault(r["id"], {}), errors, keys, matching, matched)
         if r["statement"] != "update":
             continue
         for a in parts_.get(r["id"], {}).get("assignments", []):
@@ -206,7 +278,48 @@ def from_incoming(db, store: list[dict], incoming: list[dict], reqs: list[dict],
                 continue
             a.update({"value": value, "from": "incoming"})
             a.pop("pending", None)
-    return asked, errors
+    return asked, errors, matching
+
+
+async def resolve(model, prompt, db, store: list[dict], incoming: list[dict], open_: list, warnings: list) -> list:
+    """An update's assignments (open_: [(request, assignment)]) still without a value after step 9 (no saved pair,
+    no column named by the message): the upload's column that supplies it, by code (candidates: 0 a stop, 1 taken),
+    else the model's choice among them (choose), uncertain a question. The assignment then reads the chosen column:
+    from_uploads converts it and keeps its pair for the next message. → errors."""
+    tables = {n["definition"]["sql_name"]: n["definition"] for n in store}
+    names = {t["id"]: t["sql_name"] for t in incoming}
+    errors, wanted, chosen, todo = [], [], {}, []
+    for rid, a in open_:
+        table, column = (x.split("_", 1)[1] for x in a["column"].split("."))
+        upload = next((t["id"] for t in incoming if any(x[1] == table for x in keyed(db, t["id"], tables))),
+                      incoming[0]["id"])
+        (s,) = db.execute("SELECT sc.id FROM _store_columns sc JOIN _store_tables st ON st.id = sc.table_id "
+                          "WHERE st.sql_name = ? AND sc.sql_name = ?", (table, column)).fetchone()
+        typ = next(c["sql_type"] for c in tables[table]["columns"] if c["sql_name"] == column)
+        found, key = candidates(db, upload, s, typ), f"{rid}_s{s}"
+        if not found:
+            errors.append({"request": rid, "stage": "matching", "error": (
+                f"no column of {names[upload]} can supply {table}.{column} (none holds "
+                f"{'numbers' if typ in ('INTEGER', 'REAL') else 'values'} of its kind) and the message names none: "
+                "nothing is guessed. Name the column to take it from.")})
+            continue
+        if len(found) == 1:
+            chosen[key] = found[0][:2]
+        else:
+            wanted.append((key, s, upload, found))
+        todo.append((rid, a, key, upload, s, f"{table}.{column}"))
+    chosen |= await choose(model, db, prompt, wanted, warnings)
+    for rid, a, key, upload, s, label in todo:
+        if key not in chosen:
+            continue
+        if chosen[key] is None:
+            errors.append({"request": rid, "stage": "matching", "error": f"no column of {names[upload]} supplies "
+                           f"{label}: nothing is guessed. Name the column to take it from."})
+            continue
+        a.update({"value": {"type": "column", "source": f"t_{names[upload]}", "reference": f"c_{chosen[key][1]}"},
+                  "from": "formula"})
+        a.pop("pending", None)
+    return errors
 
 
 def reads(value, incoming: list[dict]) -> bool:
@@ -217,12 +330,14 @@ def reads(value, incoming: list[dict]) -> bool:
     return isinstance(value, list) and any(reads(v, incoming) for v in value)
 
 
-def from_uploads(db, store: list[dict], incoming: list[dict], reqs: list[dict], parts_: dict) -> tuple[list, list]:
+def from_uploads(db, store: list[dict], incoming: list[dict], reqs: list[dict], parts_: dict,
+                 matched: list) -> tuple[list, list]:
     """An update's value that reads an upload's column, whichever step chose it (step 5's parts, step 9's formula:
-    "set the price to the recommended price of supplier_offer.csv"), each cell read as a link's is (reader): trimmed,
-    an empty one NULL and no write (assembly, from: incoming), cast for a number column, converted by the units of
-    that (upload column, store column) pair. A value from a saved link (from_incoming) is not read twice.
-    → (questions, errors), as from_incoming's."""
+    "set the price to the recommended price of supplier_offer.csv", resolve), each cell read as a link's is (reader):
+    trimmed, an empty one NULL and no write (assembly, from: incoming), cast for a number column, converted by the
+    units of that (upload column, store column) pair. A value that is the upload's column as is: its pair goes into
+    `matched`, kept for the next message (a formula's is not: "recommended * 0.9" doesn't supply the column). A value
+    from a saved link (from_incoming) is not read twice. → (questions, errors), as from_incoming's."""
     asked, errors = [], []
     taken = reader(db, store, incoming, asked, errors)
     ids = {f"t_{t['sql_name']}": t["id"] for t in incoming}
@@ -253,19 +368,27 @@ def from_uploads(db, store: list[dict], incoming: list[dict], reqs: list[dict], 
                         failed.append(n)
                     return v
                 return {k: put(v) for k, v in n.items()}
+            bare = a["value"].get("type") == "column" and a["value"]
             value = put(a["value"])
             if not failed:
                 a.update({"value": value, "from": "incoming"})
+                if bare and s:
+                    matched.append((db.execute("SELECT id FROM _incoming_columns WHERE table_id = ? AND sql_name = ?",
+                                               (ids[bare["source"]], bare["reference"].removeprefix("c_"))
+                                               ).fetchone()[0], s[0]))
     return asked, errors
 
 
-def insert_from(db, rid, main, plans, names, types, taken, part, errors, keys):
+async def insert_from(model, prompt, db, rid, main, plans, names, types, taken, part, errors, keys, matching,
+                      matched):
     """An insert into `main` from the first selected upload whose key is linked to it (keys: keyed()'s links, as
     with_incoming chose them): the store's columns directly
     linked to that upload (the key included; only those step 5 says the request gives, when it names some), each
-    value converted (taken); assembly reads the upload's rows whose key is not empty and not in the store yet. Never
-    guessed: a NOT NULL store column without default and without a link, or a linked column of a parent table (the
-    record would need one there), stops the message."""
+    value converted (taken); assembly reads the upload's rows whose key is not empty and not in the store yet. A
+    column of `main` without a saved pair: the upload's column that supplies it (candidates; several: choose, an
+    uncertain choice a question in `matching`), its pair into `matched`. Never guessed: a NOT NULL store column
+    without default and without a source, or a linked column of a parent table (the record would need one there),
+    stops the message."""
     table = main and main.split("_", 1)[1]
     links = [x for x in db.execute(
         "SELECT ic.table_id, ic.id, sc.id, ic.sql_name, sc.sql_name, st.sql_name FROM _incoming_store_matches m "
@@ -291,7 +414,26 @@ def insert_from(db, rid, main, plans, names, types, taken, part, errors, keys):
                 x is key or not gives or f"t_{table}.c_{x[4]}" in gives):
             mine[x[4]] = x
     mine = {key[4]: key} | mine
-    required = [n for _, n, typ, nn, default, pk in db.execute(f'PRAGMA table_info("{table}")')
+    info = db.execute(f'PRAGMA table_info("{table}")').fetchall()
+    ids = dict(db.execute("SELECT sc.sql_name, sc.id FROM _store_columns sc JOIN _store_tables st "
+                          "ON st.id = sc.table_id WHERE st.sql_name = ?", (table,)))
+    wanted, one = [], {}
+    for _, n, typ, nn, default, pk in info:                   # the table's other columns: resolved here
+        if n in mine or n not in ids or pk and typ.upper() == "INTEGER" or gives and f"t_{table}.c_{n}" not in gives:
+            continue
+        if len(found := candidates(db, upload, ids[n], typ.upper())) == 1:
+            one[f"{rid}_s{ids[n]}"] = found[0][:2]
+        elif found:
+            wanted.append((f"{rid}_s{ids[n]}", ids[n], upload, found))
+    asked = len(matching)
+    for k, chosen in (one | await choose(model, db, prompt, wanted, matching)).items():
+        if chosen:
+            column = next(n for n, s in ids.items() if f"{rid}_s{s}" == k)
+            mine[column] = (upload, chosen[0], ids[column], chosen[1], column, table)
+            matched.append((chosen[0], ids[column]))
+    if len(matching) > asked:                                 # a source to choose: asked first
+        return
+    required = [n for _, n, typ, nn, default, pk in info
                 if (nn or pk and typ.upper() != "INTEGER") and default is None and n not in mine]
     if required:
         errors.append({"request": rid, "stage": "insert", "error": f"{', '.join(required)} of {table} must have a "
@@ -384,10 +526,13 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
             raise Paused("conversion", asked, [{"step": k} | w for k, ws in warned.items() for w in ws
                                                if "question" not in w])
 
+    matched = []                                              # (upload column, store column) pairs chosen: kept
     if incoming:
-        asked, errors = from_incoming(db, store, incoming, reqs, s5["requests"], s4["requests"])
+        asked, errors, matching = await from_incoming(model, prompt, db, store, incoming, reqs, s5["requests"],
+                                                      s4["requests"], matched)
         s5["warnings"] = [w for w in s5["warnings"] if not ((s5["requests"].get(w.get("request")) or {}).get(
             "insert", {}).get("from") and w.get("problem", "").startswith("value of "))]   # the upload gives them
+        pause("matching", matching={"warnings": matching})
         if stopped := converted(asked, errors):
             return stopped
     step("step 6 · conditions")
@@ -397,10 +542,14 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
     g = await grouping.run(model, prompt, reqs, store, s4["requests"], s6, s6.get("parameters", {}))
     pause("grouping", grouping=g)
     step("step 5 · numeric changes")
-    linked = []                                               # (request, a saved link's assignment, step 9's copy)
+    linked, unlinked = [], []                                 # (request, a saved link's / a pending assignment of
+    updates = {r["id"] for r in reqs if r["statement"] == "update"}   # an update from an upload, step 9's copy)
 
     def mine(rid, x):                                         # step 9 sees a copy: the link's value stays unless the
-        if x.get("from") != "incoming":                       # message names an upload's column for it
+        if incoming and x.get("pending") and rid in updates:  # message names an upload's column for it; a pending
+            unlinked.append((rid, x, copy := dict(x)))        # one is resolved after it, unless the message's words
+            return copy                                       # give its value
+        if x.get("from") != "incoming":
             return x
         linked.append((rid, x, copy := {"column": x["column"], "value": x["value"]}))
         return copy
@@ -414,8 +563,22 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
         else:                                                 # the link's value: step 9's doubts about it don't apply
             f5["warnings"] = [w for w in f5["warnings"] if not (w.get("request") == rid and w.get(
                 "problem", "").startswith(f"formula of {x['column']}"))]
+    open_ = []                                                # no value from the message's words: resolved below
+    for rid, x, copy in unlinked:
+        about = lambda w: w.get("request") == rid and x["column"] in w.get("problem", "")
+        if copy.get("from") == "formula":
+            x.update({"value": copy["value"], "from": "formula"})
+            x.pop("pending", None)
+        elif not any("question" in w for w in f5["warnings"] if about(w)):   # step 9 had nothing to ask: no words
+            f5["warnings"] = [w for w in f5["warnings"] if not about(w)]
+            open_.append((rid, x))
     pause("formula", formula=f5)
-    if incoming and (stopped := converted(*from_uploads(db, store, incoming, reqs, s5["requests"]),
+    if open_:
+        matching = []
+        if errors := await resolve(model, prompt, db, store, incoming, open_, matching):
+            return converted([], errors, conditions=s6, grouping=g, formula=f5)
+        pause("matching", matching={"warnings": matching})
+    if incoming and (stopped := converted(*from_uploads(db, store, incoming, reqs, s5["requests"], matched),
                                           conditions=s6, grouping=g, formula=f5)):
         return stopped
     step("step 7 · assembly")
@@ -426,4 +589,4 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
                                           ("grouping", g["warnings"]), ("formula", f5["warnings"])],
                           order=s1.get("order"))
     return {"prompt": prompt, "requests": s1, "operation": s2, "values": s3, "sources": s4, "parts": s5,
-            "conditions": s6, "grouping": g, "formula": f5, "assembly": a}
+            "conditions": s6, "grouping": g, "formula": f5, "assembly": a, "matched": sorted(set(matched))}

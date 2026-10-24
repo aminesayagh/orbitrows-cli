@@ -12,10 +12,11 @@ from orbitrows.services.csv.reader import read_table
 
 
 async def classify(model, path: Path, encoding: str | None = None, catalog: dict | None = None) -> dict:
-    """catalog: incoming_match.catalog() of the store to match against; None: no matching."""
+    """catalog: incoming_match.catalog() of the store to link the upload's key to; None: no matching. Its other
+    columns are matched by a message, when it needs them."""
     saved, notices, ordered = {}, [], run._Ordered(model)
 
-    def group(w):                                             # matching calls are independent: all asked at once
+    def group(w):                                             # each key's matching call: all asked at once
         return (w["step"], w["position"]) if w["step"] == "matching" else w["step"]
 
     def pause(phase: str):
@@ -39,6 +40,6 @@ async def classify(model, path: Path, encoding: str | None = None, catalog: dict
     saved["keys"] = {"warnings": result[table["path"]]["warnings"]}
     pause("keys")
     if catalog is not None:
-        saved["matching"] = await incoming_match.classify(ordered, table, saved, catalog)
+        saved["matching"] = await incoming_match.link_keys(ordered, table, saved, catalog)
         pause("matching")
     return {"table": table, "saved": saved, "notices": notices}
