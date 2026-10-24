@@ -249,6 +249,12 @@ def questions(requests, schema, sources) -> dict:
     return q
 
 
+def comparable(a: str, b: str) -> bool:
+    """Two columns a condition may compare: the same type, or both numbers (an INTEGER of whole prices, 99.00, against
+    a REAL price)."""
+    return a == b or {a, b} <= {"INTEGER", "REAL"}
+
+
 def build(requests, schema, sources, values, answers) -> dict:
     out, warnings = {}, []
 
@@ -391,11 +397,11 @@ def operands(db, schema, r, key, values, params, parts_req) -> dict:
         for i, t in enumerate(dict.fromkeys(t for t in pool if t.casefold() not in given and not DATE.fullmatch(t))):
             out[f"x{i}"] = (f"the text '{t}'", t)
     for other in columns_of(schema, [table]):
-        if other != key and column_info(schema, other)["sql_type"] == info["sql_type"]:
+        if other != key and comparable(column_info(schema, other)["sql_type"], info["sql_type"]):
             out[f"c:{other}"] = (f"the {other.split('.')[1][2:]} column", _col(other))
     names = {x["definition"]["table_id"]: x["definition"]["sql_name"] for x in schema}
     for other in columns_of(schema, list(linked(schema, table))):   # a linked table's: "below the recommended price"
-        if (o := column_info(schema, other))["sql_type"] == info["sql_type"]:
+        if comparable((o := column_info(schema, other))["sql_type"], info["sql_type"]):
             out[f"c:{other}"] = (f"the {o['sql_name']} column of {names[other.split('.')[0]]}", _col(other))
     return out
 

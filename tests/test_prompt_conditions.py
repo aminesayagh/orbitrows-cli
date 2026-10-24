@@ -13,7 +13,7 @@ def store(monkeypatch):
     monkeypatch.setattr(conditions, "header_unit", lambda header: None)    # GLiNER2: never loaded
     db = sqlite3.connect(":memory:")
     db.execute("CREATE TABLE variants (sku TEXT PRIMARY KEY, price REAL)")
-    db.execute("CREATE TABLE offer (sku TEXT PRIMARY KEY REFERENCES variants (sku), recommended REAL)")
+    db.execute("CREATE TABLE offer (sku TEXT PRIMARY KEY REFERENCES variants (sku), recommended INTEGER)")  # whole numbers
     db.executemany("INSERT INTO variants VALUES (?, ?)", [("A", 10), ("B", 20), ("C", 30), (None, 5)])
     db.executemany("INSERT INTO offer VALUES (?, ?)", [("A", 8), ("B", 25), ("C", 30), ("E", 1), ("F", 2)])
     return db, [n.model_dump() for n in schema_from_sqlite(db)]
