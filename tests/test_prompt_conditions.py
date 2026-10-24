@@ -46,6 +46,19 @@ def test_a_column_compared_with_a_linked_table_s(store):
     assert rows == [["A", 10.0]]                              # recommended 8 < 10; B (25 > 20), C (30 = 30) not
 
 
+def test_two_columns_compared_with_each_other_are_one_condition(store):
+    db, schema = store              # both chosen, each compared with the other, read reversed from the price (the
+    # real run's answers): the surer side, recommended < price, is kept once
+    a, b = "r1|t_variants.c_price", "r1|t_offer.c_recommended"
+    rows = built(db, schema, "variants whose offer recommended price is below the price", "t_variants",
+                 {"r1_all": 0.02, "r1_chooses_t_variants.c_price": 0.97, "r1_chooses_t_offer.c_recommended": 0.97},
+                 {f"{a}|op": ("<", {"<": 0.90}), f"{a}|upper": ("none", {"none": 0.95}), f"{a}|not": 0.02,
+                  f"{a}|value": ("c:t_offer.c_recommended", {"c:t_offer.c_recommended": 0.95}),
+                  f"{b}|op": ("<", {"<": 0.99}), f"{b}|upper": ("none", {"none": 0.95}), f"{b}|not": 0.02,
+                  f"{b}|value": ("c:t_variants.c_price", {"c:t_variants.c_price": 0.95})})
+    assert rows == [["A", 10.0]]                              # not [] (price < recommended AND recommended < price)
+
+
 def test_records_with_no_matching_record_in_a_linked_table(store):
     db, schema = store
     rows = built(db, schema, "offers not in variants", "t_offer",

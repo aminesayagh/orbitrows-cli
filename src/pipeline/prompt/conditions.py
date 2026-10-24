@@ -472,8 +472,12 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
       - a text column with no value step 3 found in it, compared to another column or set equal to a text: SQL
         searched it and found nothing ("name = brand" when SQL found "Volt" in brand); a missing value stays flagged;
       - in a request that starts from another's records ("those"), a condition its own words give no value for:
-        it is the other request's (r1's "heavier than 60 g" is not r2's)."""
+        it is the other request's (r1's "heavier than 60 g" is not r2's).
+    Two condition columns compared with each other ("recommended below our price") are one comparison: kept once,
+    from the column whose operator Jev was surer of (read from both, it may come out reversed, and the two together
+    would match nothing)."""
     out, warnings = section["requests"], section["warnings"]
+    compared = {}                                             # (request, {column, column}) → (its predicate, sureness)
 
     def drop(rid, key, why):
         out[rid]["columns"] = [c for c in out[rid]["columns"] if c != key]
@@ -521,6 +525,11 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                 if info["sql_type"] == "TEXT" and (str(v).startswith("c:") or (op == "=" and str(v).startswith("x"))):
                     drop(rid, key, "contradicts SQL: step 3 found the request's values elsewhere")
                     continue
+            other = None if proved else (str(v)[2:] if str(v).startswith("c:") else None)
+            sure_op = answers.get(f"{rid}|{key}|op", (None, {}))[1].get(op, 0)
+            if other and (seen := compared.get((rid, frozenset((key, other))))) and seen[1] >= sure_op:
+                drop(rid, key, f"the comparison with {other}, built from that column")
+                continue
             cond = predicate(op, _col(key), operand, upper, all_values, info["sql_type"] == "TEXT")
             cond = cond and through(schema, cond, key.split(".")[0])   # a linked table's column: through the keys
             if cond is None and rows_from(r):                    # the other request's condition
@@ -548,8 +557,14 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                 warnings.append({"request": rid, "problem": f"condition on {key} refused", "error": err})
             elif n == 0:
                 warnings.append({"request": rid, "problem": f"no record matches the condition on {key}"})
-            out[rid].setdefault("predicates", []).append({"column": key, "operator": op, "negated": negated,
-                                                          "condition": cond, "rows": n})
+            built = {"column": key, "operator": op, "negated": negated, "condition": cond, "rows": n}
+            if other and (seen := compared.get((rid, frozenset((key, other))))):   # the surer side replaces it
+                out[rid]["predicates"][out[rid]["predicates"].index(seen[0])] = built
+                out[rid]["columns"] = [c for c in out[rid]["columns"] if c != seen[0]["column"]]
+            else:
+                out[rid].setdefault("predicates", []).append(built)
+            if other:
+                compared[(rid, frozenset((key, other)))] = (built, sure_op)
         for h in stage1.get(rid, {}).get("linked", []):        # a matching record in a linked table, or none
             key, cond = existence(schema, h["of"], h["table"], h["has"])
             n, err = count(db, schema, key.split(".")[0], cond)
