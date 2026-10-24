@@ -47,7 +47,8 @@ def edges(schema):
             (c,), ref = fk["columns"], fk["references"]
             out.append((t, c, ref["table"], ref["columns"][0], "up"))
             out.append((ref["table"], ref["columns"][0], t, c, "down"))
-    return out
+    ups = {e[:4] for e in out if e[4] == "up"}                # a key both ways (an upload's, one-to-one): up each way
+    return [e for e in out if e[4] == "up" or e[:4] not in ups]
 
 
 def path(schema, src, dst):
@@ -98,6 +99,46 @@ def tables_in(node) -> set:
                 walk(v)
     walk(node)
     return out - own
+
+
+def numbers(db, schema) -> set:
+    """The (table, column) ids the view types as numbers that the database stores as TEXT: an upload's cells
+    (pipeline.cell_type)."""
+    out = set()
+    for t, d in defs(schema).items():
+        stored = {n: typ.upper() for _, n, typ, *_ in db.execute(f'PRAGMA table_info("{d["sql_name"]}")')}
+        out |= {(t, c["column_id"]) for c in d["columns"]
+                if c["sql_type"] in ("INTEGER", "REAL") and stored.get(c["sql_name"]) == "TEXT"}
+    return out
+
+
+def typed(node, numbers: set, aliases: dict):
+    """Each column of `numbers` the node reads as a value, read as a number: REAL(NULLIF(TRIM(cell), '')) (sorted
+    and totalled as numbers, an empty cell NULL); aliases: alias → table id, the node's own added. A value already
+    read so (an update's, pipeline.reader) is left as is."""
+    found = dict(aliases)
+
+    def walk(n):
+        if isinstance(n, dict):
+            if n.get("type") == "database_table" and "alias" in n:
+                found[n["alias"]] = n["reference"]
+            for v in n.values():
+                walk(v)
+        elif isinstance(n, list):
+            for v in n:
+                walk(v)
+    walk(node)
+
+    def put(n):
+        if isinstance(n, list):
+            return [put(v) for v in n]
+        if not isinstance(n, dict) or n.get("type") == "function" and n.get("name") == "real":
+            return n
+        if n.get("type") == "column" and (found.get(n["source"]), n["reference"]) in numbers:
+            return {"type": "function", "name": "real", "arguments": [{"type": "function", "name": "nullif", "arguments": [
+                {"type": "function", "name": "trim", "arguments": [n]}, {"type": "literal", "value": ""}]}]}
+        return {k: put(v) for k, v in n.items()}
+    return put(node)
 
 
 class Names:
@@ -233,8 +274,9 @@ def main_of(requests, sources, parts, rid):
     return None
 
 
-def statement(r, st, main, schema, src, part, cond6, group6, built, warnings):
-    """One request's AST, or None (with a warning)."""
+def statement(r, st, main, schema, src, part, cond6, group6, built, warnings, numbers=frozenset()):
+    """One request's AST, or None (with a warning); numbers: the columns read as numbers (typed): a read's and a
+    condition's, never an update's value (read by pipeline.reader) or an insert's."""
     rid, names = r["id"], Names(schema)
     if st == "drop_table":
         return {"id": rid, "type": "drop_table", "target": {"type": "database_table", "reference": main}}
@@ -266,7 +308,7 @@ def statement(r, st, main, schema, src, part, cond6, group6, built, warnings):
             return {"id": rid, "type": "insert", "target": target, "columns": ins["columns"],
                     "query": select(names, frm, b, [rewrite(v, {frm: b}) for v in ins["values"]], new)}
         return {"id": rid, "type": "insert", "target": target, "columns": ins["columns"], "values": [ins["values"]]}
-    where = lift((group6 or {}).get("where"), main, a, schema, names, warnings, rid)
+    where = typed(lift((group6 or {}).get("where"), main, a, schema, names, warnings, rid), numbers, {a: main})
     scope = {"type": "filtered", "where": where} if where else {"type": "all_rows"}
     if st == "update":
         part = {**part, "assignments": [x for x in part.get("assignments", []) if not x.get("pending")]}
@@ -344,7 +386,7 @@ def statement(r, st, main, schema, src, part, cond6, group6, built, warnings):
             sel["order_by"] = order
         if group6.get("limit") is not None:
             sel["limit"] = group6["limit"]
-    return sel
+    return typed(sel, numbers, {})
 
 
 def from_rows(ast, earlier, main, schema):
@@ -457,6 +499,7 @@ def assemble(db, schema, requests, operation, sources, parts, conditions, groupi
     order: step 1's execution order."""
     warnings, items = [], []
     store_name = {t: d["sql_name"] for t, d in defs(schema).items()}
+    typed_columns = numbers(db, schema)
     for r in run_order(requests, order):
         rid = r["id"]
         st = operation.get(rid, {}).get("statement")
@@ -466,7 +509,8 @@ def assemble(db, schema, requests, operation, sources, parts, conditions, groupi
             warnings.append({"request": rid, "problem": f"not built: statement {st}, table {main}"})
             continue
         g6, c6 = grouping.get(rid, {}), conditions.get(rid, {})
-        ast = statement(r, st, main, schema, sources.get(rid, {}), parts.get(rid, {}), c6, g6, items, warnings)
+        ast = statement(r, st, main, schema, sources.get(rid, {}), parts.get(rid, {}), c6, g6, items, warnings,
+                        typed_columns)
         if ast is None:
             warnings.append({"request": rid, "problem": "not built: a part is missing"})
             continue

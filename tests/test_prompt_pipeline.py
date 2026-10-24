@@ -153,3 +153,71 @@ def test_the_dry_runs_keep_the_session_s_transaction_open():
     assert assemble.execute(db, [], [], []) == [] and db.in_transaction
     db.execute("ROLLBACK")
     assert db.execute("SELECT COUNT(*) FROM t").fetchone() == (0,)   # the insert was never committed
+
+
+def offered(monkeypatch, statement, parts_, grouping_=None):
+    """variants(sku, price) and an upload offer.csv(sku, recommended: text cells) linked on sku; one request r1 on
+    the upload (its main table), every step stubbed. → the database."""
+    import sqlite3
+    from orbitrows.pipeline.prompt import source_route
+    from orbitrows.services.storage import incoming, store
+    db = sqlite3.connect(":memory:")
+    db.executescript(store.SCHEMA + incoming.SCHEMA + """
+        CREATE TABLE variants (sku TEXT PRIMARY KEY, price REAL);
+        INSERT INTO variants VALUES ('A1', 100), ('B2', 120), ('C3', 50);
+        INSERT INTO _history VALUES (1, 'now', 'import', NULL, '[]', '[]', NULL, 1);
+        INSERT INTO _store_tables VALUES (1, 'variants', NULL, 'now', 1);
+        INSERT INTO _store_columns (id, table_id, sql_name, sql_type, edited_by)
+            VALUES (1, 1, 'sku', 'TEXT', 1), (2, 1, 'price', 'REAL', 1);
+        INSERT INTO _incoming_tables VALUES (1, 'in_offer_1', 'incoming/1/offer.csv', 'now', 1);
+        INSERT INTO _incoming_columns (id, table_id, sql_name, sql_type, position, extra_json)
+            VALUES (1, 1, 'sku', 'TEXT', 0, '{"primary_key_candidate": true}'), (2, 1, 'recommended', 'TEXT', 1, '{}');
+        CREATE TABLE in_offer_1 (sku TEXT, recommended TEXT);
+        INSERT INTO in_offer_1 VALUES ('A1', '99.00'), ('B2', '129.00'), ('C3', '55.00');
+        INSERT INTO _incoming_store_matches VALUES (1, 1, 'direct', 1, 'now');""")
+    sections = {request_graph: {"requests": [{"id": "r1", "text": "m", "start": 0, "end": 1}], "references": [],
+                                "warnings": []},
+                operation: {"requests": {"r1": {"statement": statement}}, "warnings": []},
+                values: {"values": [], "warnings": []},
+                sources: {"requests": {"r1": {("from" if statement == "select" else "target"): {
+                    "type": "database_table", "reference": "t_in_offer_1"}}}, "warnings": []},
+                parts: {"requests": {"r1": parts_}, "warnings": []},
+                conditions: {"requests": {}, "parameters": {}, "warnings": []},
+                grouping: {"requests": {"r1": grouping_ or {}}, "warnings": []},
+                formula: {"requests": {}, "warnings": []}}
+    for module, section in sections.items():
+        async def run(*a, section=section, **k):
+            return json.loads(json.dumps(section))
+        monkeypatch.setattr(module, "run", run)
+
+    async def selected(model, prompt, db):
+        return {"store": True, "incoming": source_route.available(db), "warnings": []}
+    monkeypatch.setattr(source_route, "run", selected)
+    monkeypatch.setattr(pipeline.extractor, "connect", lambda: "gliner2")
+    monkeypatch.setattr(coref, "mentions", lambda prompts, name: [[]])
+    return db
+
+
+async def test_a_read_of_an_upload_shows_the_store_s_values_and_sorts_its_number_cells_as_numbers(monkeypatch):
+    """The upload's key is linked one-to-one: its row reaches the store record (variants.price shown); its
+    recommended cells are TEXT in the database, ordered as numbers (55, 99, 129), not as text."""
+    out = lambda c: {"column": c, "aggregate": "value", "expression": {}}
+    db = offered(monkeypatch, "select", {"outputs": [out("t_in_offer_1.c_sku"), out("t_variants.c_price"),
+                                                     out("t_in_offer_1.c_recommended")]},
+                 {"order_by": [{"expression": {"type": "column", "source": "t_in_offer_1",
+                                               "reference": "c_recommended"}, "direction": "asc"}]})
+    result = await pipeline.run("show the offer with our prices, by recommended price", Model(), db)
+    assert result["assembly"]["errors"] == [], result["assembly"]
+    [ran] = result["assembly"]["program"]
+    assert ran["returns"] == [["C3", 50.0, 55.0], ["A1", 100.0, 99.0], ["B2", 120.0, 129.0]], ran
+
+
+async def test_a_write_to_an_upload_is_refused_as_read_only(monkeypatch):
+    db = offered(monkeypatch, "update", {"assignments": [{"column": "t_in_offer_1.c_recommended",
+                                                          "value": {"type": "literal", "value": "1"}}]})
+    result = await pipeline.run("set the offer's recommended price to 1", Model(), db)
+    [error] = result["assembly"]["errors"]
+    assert error["error"] == "in_offer_1 is a read-only copy of incoming/1/offer.csv: it can't be changed.", error
+    assert result["assembly"]["program"] == []
+    assert db.execute("SELECT recommended FROM in_offer_1 ORDER BY sku").fetchall() == [
+        ("99.00",), ("129.00",), ("55.00",)]

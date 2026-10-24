@@ -62,8 +62,12 @@ async def test_store_only_prompt_needs_no_incoming_upload(db):
     assert result["store"] is True and result["incoming"] == [] and result["warnings"] == []
 
 
+class Viewed(Exception):
+    """The run reached the view of the selected uploads (with_incoming): the read goes on from there."""
+
+
 @pytest.mark.asyncio
-async def test_uncertain_source_asks_and_replays_answer(db):
+async def test_uncertain_source_asks_and_replays_answer(db, monkeypatch):
     inner, calls = Sources({"incoming_1": 0.6}), {}
     with pytest.raises(Paused) as paused:
         await pipeline.run("Show the supplier's prices", Recorded(inner, calls), db)
@@ -71,10 +75,13 @@ async def test_uncertain_source_asks_and_replays_answer(db):
     [question] = paused.value.questions
     assert question["question"]["type"] == "yes_no"
     settle(calls, question["question"]["call"], question["question"]["key"], "yes")
-    result = await pipeline.run("Show the supplier's prices", Recorded(inner, calls), db)
-    assert [t["id"] for t in result["source_selection"]["incoming"]] == [1]
-    assert result["assembly"]["program"] == []
-    assert "not implemented yet" in result["assembly"]["errors"][0]["error"]
+
+    def viewed(db, store, incoming):
+        raise Viewed([t["id"] for t in incoming])
+    monkeypatch.setattr(pipeline, "with_incoming", viewed)
+    with pytest.raises(Viewed) as reached:                     # a read of an upload: no stop, its view is built
+        await pipeline.run("Show the supplier's prices", Recorded(inner, calls), db)
+    assert reached.value.args == ([1],)
 
 
 @pytest.mark.asyncio

@@ -6,7 +6,8 @@ its order, each step fed the previous steps' outputs. Paid: the model; local: Co
             a linked upload column's value through the key, converted by the user's formula (from_incoming), or
             the upload column a step names (its type the one its cells show: cell_type; read the same: from_uploads),
             else the one that fits it (resolve: by type and unit, the model choosing among several); an insert takes
-            the upload's records whose key the store doesn't have (insert_from), each column resolved the same way
+            the upload's records whose key the store doesn't have (insert_from), each column resolved the same way;
+            a read runs on the uploads as on the store's tables, a write whose target is an upload is refused (read_only)
     out     {prompt, requests, operation, values, sources, parts, conditions, grouping, formula, assembly, matched};
             assembly is {"program", "questions", "errors"}: step 7 runs the program in a savepoint, rolled back
             (nothing is changed); matched: the (upload column, store column) pairs used, for the session to keep
@@ -42,31 +43,43 @@ def store_of(db) -> list[dict]:
     return [n.model_dump() for n in nodes]
 
 
-def with_incoming(db, store: list[dict], incoming: list[dict]) -> tuple[list[dict], str | None]:
+def with_incoming(db, store: list[dict], incoming: list[dict]) -> list[dict]:
     """The store's nodes and each selected upload's, linked in this view only (never in the database): the upload's
-    key is its primary_key_candidate column, and each store key directly matched to it (its table's primary key or a
-    dedicated_key column) references it, so a store record reaches the upload's row along a many-to-one ("up") key.
-    → (schema, None), or (store, why) when an upload has no such key link: never guessed."""
+    key is its primary_key_candidate column directly matched to a store key (its table's primary key or a
+    dedicated_key column; keyed). A key on one row each is followed both ways (one-to-one: the store record reaches
+    the upload's row and the row the store record, each along a many-to-one "up" key); a key that repeats (one row per
+    sku and warehouse) only from the upload to the store record (many-to-one: its rows grouped or totalled per record;
+    a write from it is refused, repeated); an upload without a key link is read alone. A non-key column is typed by
+    its cells (cell_type), read as a number where it holds numbers (assemble.typed)."""
     by_name = {n.definition.sql_name: n.model_dump() for n in schema_from_sqlite(db)}
     tables = {n["definition"]["sql_name"]: n["definition"] for n in store}
     out = list(store)
     for t in incoming:
         links = keyed(db, t["id"], tables)
-        if not links:
-            return store, (f"{t['sql_name']} ({t['source_file']}) has no key column linked to a store key (a table's "
-                           "primary key or reference code), so its rows can't be matched to the store's records; "
-                           "nothing is guessed. Reading an upload without such a link is not implemented yet.")
-        node = by_name[t["sql_name"]]
-        node["definition"]["primary_key"] = [f"c_{links[0][0]}"]
-        for c in node["definition"]["columns"]:               # a key keeps its type: as compared with the store's
+        mine = by_name[t["sql_name"]]["definition"]
+        for c in mine["columns"]:                             # a key keeps its type: as compared with the store's
             if c["sql_name"] not in {k for k, *_ in links}:
                 c["sql_type"] = cell_type(db, t["sql_name"], c["sql_name"])
         for key, table, column in links:
-            tables[table]["foreign_keys"] = tables[table].get("foreign_keys", []) + [
-                {"columns": [f"c_{column}"], "references": {"table": node["definition"]["table_id"],
-                                                            "columns": [f"c_{key}"]}}]
-        out.append(node)
-    return out, None
+            if not repeated(db, t["sql_name"], key):          # one-to-one: the store record reaches the row too
+                mine["primary_key"] = mine.get("primary_key") or [f"c_{key}"]
+                tables[table]["foreign_keys"] = tables[table].get("foreign_keys", []) + [
+                    {"columns": [f"c_{column}"], "references": {"table": mine["table_id"], "columns": [f"c_{key}"]}}]
+            mine["foreign_keys"] = mine.get("foreign_keys", []) + [
+                {"columns": [f"c_{key}"], "references": {"table": tables[table]["table_id"],
+                                                         "columns": [f"c_{column}"]}}]
+        out.append(by_name[t["sql_name"]])
+    return out
+
+
+def read_only(incoming: list[dict], reqs: list[dict], sources_: dict) -> str | None:
+    """Why the message can't run: a write (update, insert, delete, alter, create, drop) whose target is an upload, a
+    read-only copy of its file (the database refuses it too: triggers), or None. Every read runs."""
+    files = {f"t_{t['sql_name']}": t for t in incoming}
+    for r in reqs:
+        if r["statement"] != "select" and (t := files.get(parts.main_table(reqs, sources_, r["id"]))):
+            return f"{t['sql_name']} is a read-only copy of {t['source_file']}: it can't be changed."
+    return None
 
 
 def cell_type(db, table: str, column: str) -> str:
@@ -469,20 +482,15 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
     selected = await source_route.run(model, prompt, db)
     pause("source_selection", source_selection=selected)
     incoming = selected["incoming"]
-    named = ", ".join(t["sql_name"] for t in incoming)
 
     def stop(problem, stage="source_selection", **sections):
         return {"prompt": prompt, "source_selection": selected, **sections,
                 "assembly": {"program": [], "questions": [], "errors": [
                     {"request": "message", "stage": stage, "error": problem}]}}
-    if selected.get("error") or not selected["store"]:
-        return stop(selected.get("error") or (f"Selected incoming source(s): {named}. Reading an upload without the "
-                                              "store is not implemented yet." if named
-                                              else "No data source could be identified for this prompt."))
-    if incoming:                                              # the store's records updated from an upload
-        store, problem = with_incoming(db, store, incoming)
-        if problem:
-            return stop(problem)
+    if selected.get("error") or not (selected["store"] or incoming):
+        return stop(selected.get("error") or "No data source could be identified for this prompt.")
+    if incoming:                                              # one database: the store's tables and the uploads'
+        store = with_incoming(db, store, incoming)
 
     spans = extractor.connect()                                # GLiNER2 is needed only for the store compiler
 
@@ -501,9 +509,6 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
             step("step 2 · operation, after cutting a request with two actions")
             s2 = await operation.run(model, prompt, s1["requests"], store)
     pause("requests", "operation", requests=s1, operation=s2)  # after the recut: its cut and links are step 1's
-    if incoming and (other := {x["statement"] for x in s2["requests"].values()} - {"update", "insert"}):
-        return stop(f"Selected incoming source(s): {named}. Only an update or an insert of the store's records from "
-                    f"an upload is built yet, not {', '.join(sorted(other))}.", "operation", requests=s1, operation=s2)
     reqs = [r | {k: v for k, v in s2["requests"][r["id"]].items() if k in ("statement", "input")}
             for r in s1["requests"]]
     step("step 3 · values")
@@ -515,6 +520,8 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
     step("step 4 · sources")
     s4 = await sources.run(model, prompt, reqs, store, s1["references"], s3["values"])
     pause("sources", sources=s4)
+    if problem := read_only(incoming, reqs, s4["requests"]):  # the one rule for an upload: never written
+        return stop(problem, "sources", requests=s1, operation=s2, sources=s4)
     step("step 5 · parts")
     s5 = await parts.run(model, db, prompt, reqs, store, s4["requests"], s3["values"], numeric_by_formula=True)
     pause("parts", parts=s5)
