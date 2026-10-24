@@ -335,6 +335,24 @@ def test_an_upload_s_key_is_linked_by_its_values_and_no_other_column_is_matched(
                           "JOIN _store_columns sc ON sc.id = ic.references_column_id").fetchall() == [("ref", "sku")]
 
 
+async def test_an_upload_gets_one_key_link_per_store_table():
+    """sku and barcode both hold a store key of variants (every value found): only one is the link, sku (the upload's
+    own key), so barcode stays a column a condition can compare ("barcode disagreements")."""
+    from orbitrows.pipeline import incoming_match
+    table = {"header": ["sku", "barcode"], "rows": [["A", "1"], ["B", "2"], ["C", "9"]]}
+    saved = {"schema": {"create_table": {"definition": {"columns": [{"column_id": "c_sku"}, {"column_id": "c_barcode"}],
+                                                        "primary_key": ["c_sku"]}}},
+             "context": {"context_columns": {}, "source_context": {}},
+             "roles": {"columns": {1: {"role": "dedicated_key"}}},
+             "profile": {"columns": {0: {"max_repeat": 1}, 1: {"max_repeat": 1}}}}
+    target = {"tables": [], "keys": [{"id": 1, "table": "variants", "header": "sku", "sql_type": "TEXT",
+                                      "values": ["A", "B", "C"]},
+                                     {"id": 2, "table": "variants", "header": "barcode", "sql_type": "TEXT",
+                                      "values": ["1", "2", "9"]}]}
+    found = await incoming_match.link_keys(None, table, saved, target)   # no ambiguity: no model call
+    assert found["keys"] == {0: 1}
+
+
 def test_two_incoming_files_can_match_one_store_table(env, capsys, monkeypatch):
     assert run(capsys, "store", "products.csv")[0] == 0
     store_id = stores()[0][0]

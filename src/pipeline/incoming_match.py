@@ -96,7 +96,9 @@ async def link_keys(model, table: dict, saved: dict, target: dict) -> dict:
     warehouse) against the store's keys (target["keys"]), by values first. One store key holding at
     least SHARE of its values and no rival: linked, no call. Several at SHARE, or the best only above FLOOR: the
     matching question for those candidates; its best pair kept when direct, a question when below SURE. Below FLOOR:
-    no link. Every other column is matched by a message, when it needs it (prompt/pipeline.py)."""
+    no link. One link per store table (sku, not also barcode and product_id, to variants): a second would be a second
+    join, and its columns would read as keys, never asked about. Every other column is matched by a message, when it
+    needs it (prompt/pipeline.py)."""
     definition = saved["schema"]["create_table"]["definition"]
     ids = [c["column_id"] for c in definition["columns"]]
     keys = [k | {"sql_type": k["sql_type"].upper()} for k in target.get("keys", [])]
@@ -145,4 +147,10 @@ async def link_keys(model, table: dict, saved: dict, target: dict) -> dict:
                                           "options": options(probabilities)}})
         elif best > 0.5 and max((r for r in CRITERIA if r != "none"), key=lambda r: probabilities.get(r, 0)) == "direct":
             linked[pos] = c["id"]
-    return {"keys": linked, "warnings": warnings}
+    best = {}                                                 # one join key per store table, as a database has: the
+    for pos, sid in linked.items():                           # one on a row each first, then the most values found
+        k = next(k for k in keys if k["id"] == sid)
+        rank = (saved["profile"]["columns"][pos]["max_repeat"] == 1, shares(profile.values(table, pos), k))
+        if k["table"] not in best or rank > best[k["table"]][0]:
+            best[k["table"]] = (rank, pos, sid)
+    return {"keys": {pos: sid for _, pos, sid in best.values()}, "warnings": warnings}
