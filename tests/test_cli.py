@@ -247,8 +247,15 @@ def test_incoming_classification_question_resumes_before_upload(env, capsys, mon
     assert run(capsys, "store", "customers.csv")[0] == 0
     store_id = stores()[0][0]
     monkeypatch.setattr(cli, "connect", UncertainIncomingModel)
+    real = cli.incoming_pipeline.classify
+
+    async def chatty(*args):
+        print("GLiNER2 config banner")                        # what loading the extractor prints
+        return await real(*args)
+
+    monkeypatch.setattr(cli.incoming_pipeline, "classify", chatty)
     code, output, error = run(capsys, "incoming", "supplier.csv")
-    assert code == 3 and not error
+    assert code == 3 and "GLiNER2 config banner" in error   # never on stdout: the questions JSON is all it carries
     payload = json.loads(output)
     assert payload["step"] == "roles" and payload["questions"][0]["type"] == "choice"
     with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:

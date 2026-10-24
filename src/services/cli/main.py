@@ -309,7 +309,8 @@ def classify_incoming(target: tuple[str, str | None], upload_id: str, progress: 
             return await incoming_pipeline.classify(model, path, progress["encoding"], progress["catalog"])
 
     try:
-        result = asyncio.run(classify())
+        with contextlib.redirect_stdout(sys.stderr):          # GLiNER2 prints its config on load: stdout stays JSON
+            result = asyncio.run(classify())
     except run.Paused as p:
         token = upload_id.removeprefix("up_")
         progress["open"] = [q | {"id": f"i_{token}_{q['id'].removeprefix('q_')}"} for q in p.questions]
