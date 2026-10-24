@@ -401,6 +401,18 @@ def test_an_update_from_an_upload_takes_its_values_through_the_key_converted(sup
         ("A1", 15.0), ("B2", 20.0), ("C3", 30.0)]                # C3 is not in the file: unchanged
 
 
+def test_a_repeating_reference_beside_a_unique_key_still_updates(supplied):
+    from orbitrows.pipeline.merge import convert
+    convert.save(supplied.db, 2, "EUR", "MAD", "x * 10")
+    supplied.db.executescript("""
+        ALTER TABLE in_supplier_1 ADD COLUMN alt TEXT;
+        UPDATE in_supplier_1 SET alt = 'A1';
+        INSERT INTO _incoming_columns (id, table_id, sql_name, sql_type, source_header, position, references_column_id)
+            VALUES (3, 1, 'alt', 'TEXT', 'Alt', 2, 1);""")         # also references a store key, repeating
+    reply = supplied.message("update the prices from supplier.csv")
+    assert reply["ran"][0]["changed"] == 2, reply                  # matched on ref, which is on a row each
+
+
 def test_a_missing_conversion_is_asked_then_applied(supplied):
     reply = supplied.message("update the prices from supplier.csv")
     [q] = reply["questions"]

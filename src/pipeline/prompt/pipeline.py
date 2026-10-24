@@ -148,9 +148,9 @@ def reader(db, store: list[dict], incoming: list[dict], asked: list, errors: lis
     def taken(rid, upload, i, s, name, typ):
         """Upload column i's value for store column s, converted; None when asked or refused."""
         plan = convert.plan(db, upload, (i, s))              # its pair's units, linked or not
-        if upload not in checked:
-            checked[upload] = next(filter(None, (repeated(db, names[upload], k) for k in dict.fromkeys(
-                k for k, *_ in keys[upload]))), None)
+        if upload not in checked:                             # one key on a row each is enough to match the rows
+            why = [repeated(db, names[upload], k) for k in dict.fromkeys(k for k, *_ in keys[upload])]
+            checked[upload] = None if not all(why) else why[0]  # a repeating reference (a product per variant) too
             if checked[upload]:
                 errors.append({"request": rid, "stage": "key", "error": checked[upload]})
         if checked[upload]:
