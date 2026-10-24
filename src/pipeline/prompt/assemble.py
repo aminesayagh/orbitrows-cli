@@ -81,10 +81,14 @@ def rewrite(node, mapping: dict):
 
 
 def tables_in(node) -> set:
-    out = set()
+    """The tables a node reads; a subquery's own alias is not one (step 6's comparison with a linked table's column,
+    correlated through the keys, stays a condition on its own table)."""
+    out, own = set(), set()
 
     def walk(n):
         if isinstance(n, dict):
+            if n.get("type") == "database_table" and "alias" in n:
+                own.add(n["alias"])
             if n.get("type") == "column":
                 out.add(n["source"])
             for v in n.values():
@@ -93,7 +97,7 @@ def tables_in(node) -> set:
             for v in n:
                 walk(v)
     walk(node)
-    return out
+    return out - own
 
 
 class Names:

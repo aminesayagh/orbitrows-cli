@@ -5,6 +5,8 @@ limit and group columns are the next stage.
     Jev   one call per prompt, per request that reads or changes rows (select, update, delete):
             does it act on every record (no condition)?
             per column of its tables (step 4: main table and reads): is it used to choose the records?
+            per table linked to its main table by a key: does it keep the records with, or without, a matching
+            record there ("supplier SKUs not in the store yet", "products without variants")?
             select only: are the records sorted? limited to a number? grouped (per …)?
     code  a lookup value of step 3 tied to a column chooses rows by definition: that column is kept even when Jev
           says no (SQLite found the value there); a column the request changes (step 5) is shown to Jev, since it can
@@ -16,19 +18,26 @@ Stage 2, per condition column:
           candidates, never guessed: the request's numbers (parameters algorithm, v2/units) whose unit fits the column's
           (the import's header unit: "1 kg" → 1000 for weight_g; a unit of another kind is never offered; a number
           step 5 writes as a new value is not a condition's), ISO dates, its table's other columns of the same type,
-          the request's texts (patterns: "starts with Mug")
+          and those of the tables a record of it has one record of (linked(): "below the supplier's recommended
+          price"), the request's texts (patterns: "starts with Mug")
     Jev   the operator (among those its type allows), the operand, the upper bound of a range, negated or not
     code  the AST node (comparison · membership · between · pattern with % and _ escaped · empty_check ·
           null_check), `not` around a negated one; negated on a column that can be NULL keeps the NULL rows
           ("except the Orbit ones" keeps the product without a brand: SQL's NOT (NULL = 'Orbit') would drop it);
+          a comparison with a linked table's column is correlated through the keys (through(): price >
+          recommended → sku IN (SELECT o.sku FROM offer o WHERE price > o.recommended)), so it stays a condition on
+          its own table; a matching record (stage 1) is key [NOT] IN (SELECT its key FROM the other table WHERE it
+          IS NOT NULL: a NULL key there never defeats NOT IN);
           then each condition runs on its table in a savepoint: an error is flagged, 0 rows is a warning
     ponytail: relative dates ("last month", "in October") are not read: flagged; add with a session date
 
 Section "conditions" of cases/<id>.json: {"requests": {"r1": {"all_rows": bool, "columns": ["t_x.c_y"], "sorted"?,
-"limited"?, "grouped"?, "predicates": [{"column", "operator", "negated", "condition": AST, "rows"}], "flagged"?}},
+"limited"?, "grouped"?, "linked"?: [{"table", "has", "of"}], "predicates": [{"column", "operator", "negated", "condition": AST,
+"rows", "linked"?}], "flagged"?}},
 "warnings", "jev": {"stage_1", "stage_2"}}.
 """
 import functools
+import json
 import re
 
 from orbitrows.sql.sql import program
@@ -100,6 +109,85 @@ NEGATE_RULES = [
 DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 
 
+def has_options(other: str) -> dict:
+    return {"has": f"Only those with a matching record in {other} ('already in {other}', 'that exist in {other}').",
+            "has_not": f"Only those with no matching record in {other} ('not in {other} yet', 'missing from "
+                       f"{other}', 'without any {other}').",
+            "neither": "Neither: it does not choose by that (a value of that table, 'the Kora ones', is a condition "
+                       "on its column)."}
+
+
+def keyed_to(schema, table) -> dict:
+    """{other table: (this table's column, its column)} for each table linked to `table` by a foreign key, either way
+    (the first key when there are several)."""
+    out = {}
+    for t, x in {d["definition"]["table_id"]: d["definition"] for d in schema}.items():
+        for fk in x.get("foreign_keys", []):
+            (c,), ref = fk["columns"], fk["references"]
+            if t == table and ref["table"] != table:
+                out.setdefault(ref["table"], (c, ref["columns"][0]))
+            elif ref["table"] == table and t != table:
+                out.setdefault(t, (ref["columns"][0], c))
+    return out
+
+
+def linked(schema, table) -> dict:
+    """{other table: chain of keys [(from table, column, to table, column)]} for each table a record of `table` has
+    one record of: many-to-one keys (a variant's product), and a key the other table holds as its own primary key
+    (one-to-one: an offer per variant SKU)."""
+    d = {x["definition"]["table_id"]: x["definition"] for x in schema}
+    steps = []
+    for t, x in d.items():
+        for fk in x.get("foreign_keys", []):
+            (c,), ref = fk["columns"], fk["references"]
+            steps.append((t, c, ref["table"], ref["columns"][0]))
+            if x.get("primary_key") == [c]:
+                steps.append((ref["table"], ref["columns"][0], t, c))
+    out, todo = {table: []}, [table]
+    while todo:
+        t = todo.pop(0)
+        for s in steps:
+            if s[0] == t and s[2] not in out:
+                out[s[2]] = out[t] + [s]
+                todo.append(s[2])
+    out.pop(table)
+    return out
+
+
+def _sub(table, alias, column, where) -> dict:
+    return {"id": alias, "type": "select", "from": {"type": "database_table", "reference": table, "alias": alias},
+            "columns": [{"expression": {"type": "column", "source": alias, "reference": column}, "alias": "k"}],
+            "scope": {"type": "filtered", "where": where}}
+
+
+def through(schema, cond, table) -> dict:
+    """A condition on `table` naming a linked table's column → on `table` alone, correlated through the keys: price >
+    recommended → sku IN (SELECT o.sku FROM offer o WHERE price > o.recommended); a parent's: product_id IN (SELECT
+    p.id FROM products p WHERE price < p.base_price). The subqueries' own aliases are not tables: assembly lifts the
+    condition as one on `table`."""
+    chains = linked(schema, table)
+    for other in sorted({s for s in re.findall(r'"source": "([^"]+)"', json.dumps(cond)) if s in chains}):
+        chain, n = chains[other], json.dumps(cond).count('"type": "select"')
+        aliases = [f"{s[2]}_l{n}{i}" for i, s in enumerate(chain)]
+        inner = json.loads(json.dumps(cond).replace(f'"source": "{other}"', f'"source": "{aliases[-1]}"'))
+        for i in range(len(chain) - 1, -1, -1):
+            t_from, c_from, t_to, c_to = chain[i]
+            inner = {"type": "membership", "operator": "in", "query": _sub(t_to, aliases[i], c_to, inner),
+                     "expression": {"type": "column", "source": aliases[i - 1] if i else table, "reference": c_from}}
+        cond = inner
+    return cond
+
+
+def existence(schema, table, other, has: bool) -> tuple[str, dict]:
+    """(the key column, its condition): key [NOT] IN (SELECT the other table's key WHERE it IS NOT NULL)."""
+    mine, theirs = keyed_to(schema, table)[other]
+    a = f"{other}_has"
+    known = {"type": "column", "source": a, "reference": theirs}
+    return f"{table}.{mine}", {"type": "membership", "operator": "in" if has else "not_in", "expression": _col(
+        f"{table}.{mine}"), "query": _sub(other, a, theirs, {"type": "null_check", "expression": known,
+                                                             "operator": "is_not_null"})}
+
+
 def rows_from(r: dict) -> str | None:
     """The request whose records this one starts from ("those": step 2's affected_rows or request_result)."""
     return r.get("waits_for") if r.get("input") in ("affected_rows", "request_result") else None
@@ -151,6 +239,10 @@ def questions(requests, schema, sources) -> dict:
         for key, text in candidates(schema, requests, sources, rid).items():
             q[f"{rid}_chooses_{key}"] = yes_no(CONTEXT, f"Does {said} keep or exclude records by what this column "
                                                         f"holds, or by its being empty: {text}", CHOOSE_RULES)
+        names = {t["definition"]["table_id"]: t["definition"]["sql_name"] for t in schema}
+        for other in keyed_to(schema, main_table(requests, sources, rid)):
+            q[f"{rid}_has_{other}"] = choice(CONTEXT, f"Does {said} keep its records by whether a record of "
+                                                      f"{names[other]} matches them?", has_options(names[other]))
         if r["statement"] == "select":
             for m, text in MODIFIERS.items():
                 q[f"{rid}_{m}"] = yes_no(CONTEXT, f"In {said}: {text}")
@@ -182,14 +274,24 @@ def build(requests, schema, sources, values, answers) -> dict:
                 cols.append(key)
             elif yes(rid, f"{rid}_chooses_{key}", f"chooses by {key}"):
                 cols.append(key)
+        has, main = [], main_table(requests, sources, rid)
+        for other in keyed_to(schema, main):                  # a matching record there, or none
+            c, probs = answers.get(f"{rid}_has_{other}", (None, {}))
+            if c in ("has", "has_not"):
+                has.append({"table": other, "has": c == "has", "of": main})
+            if c is not None and probs.get(c, 1) < SURE:
+                out[rid]["flagged"] = True
+                warnings.append({"request": rid, "problem": f"a matching record in {other} uncertain", "answer": c,
+                                 "probability": round(probs.get(c, 0), 2)} | question(answers, f"{rid}_has_{other}"))
         all_rows = yes(rid, f"{rid}_all", "all rows")
-        if all_rows and cols:
-            warnings.append({"request": rid, "problem": "every record, yet conditions found", "columns": cols})
+        if all_rows and (cols or has):
+            warnings.append({"request": rid, "problem": "every record, yet conditions found", "columns": cols,
+                             **({"linked": [h["table"] for h in has]} if has else {})})
             out[rid]["flagged"] = True
-        if not all_rows and not cols and not rows_from(r):   # "those": its records come from the other request
+        if not all_rows and not cols and not has and not rows_from(r):   # "those": its records come from the other request
             warnings.append({"request": rid, "problem": "some records, but no condition column found"})
             out[rid]["flagged"] = True
-        out[rid] |= {"all_rows": all_rows and not cols, "columns": cols,
+        out[rid] |= {"all_rows": all_rows and not cols and not has, "columns": cols, **({"linked": has} if has else {}),
                      **({"rows_from": rows_from(r)} if rows_from(r) else {})}
         if r["statement"] == "select":
             for m in MODIFIERS:
@@ -291,6 +393,10 @@ def operands(db, schema, r, key, values, params, parts_req) -> dict:
     for other in columns_of(schema, [table]):
         if other != key and column_info(schema, other)["sql_type"] == info["sql_type"]:
             out[f"c:{other}"] = (f"the {other.split('.')[1][2:]} column", _col(other))
+    names = {x["definition"]["table_id"]: x["definition"]["sql_name"] for x in schema}
+    for other in columns_of(schema, list(linked(schema, table))):   # a linked table's: "below the recommended price"
+        if (o := column_info(schema, other))["sql_type"] == info["sql_type"]:
+            out[f"c:{other}"] = (f"the {o['sql_name']} column of {names[other.split('.')[0]]}", _col(other))
     return out
 
 
@@ -410,6 +516,7 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                     drop(rid, key, "contradicts SQL: step 3 found the request's values elsewhere")
                     continue
             cond = predicate(op, _col(key), operand, upper, all_values, info["sql_type"] == "TEXT")
+            cond = cond and through(schema, cond, key.split(".")[0])   # a linked table's column: through the keys
             if cond is None and rows_from(r):                    # the other request's condition
                 drop(rid, key, f"the condition of request {rows_from(r)}, whose records this one starts from")
                 continue
@@ -437,6 +544,17 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                 warnings.append({"request": rid, "problem": f"no record matches the condition on {key}"})
             out[rid].setdefault("predicates", []).append({"column": key, "operator": op, "negated": negated,
                                                           "condition": cond, "rows": n})
+        for h in stage1.get(rid, {}).get("linked", []):        # a matching record in a linked table, or none
+            key, cond = existence(schema, h["of"], h["table"], h["has"])
+            n, err = count(db, schema, key.split(".")[0], cond)
+            if err:
+                out[rid]["flagged"] = True
+                warnings.append({"request": rid, "problem": f"matching record in {h['table']} refused", "error": err})
+            elif n == 0:
+                warnings.append({"request": rid, "problem": f"no record matches the condition on {h['table']}"})
+            out[rid].setdefault("predicates", []).append({"column": key, "operator": "in" if h["has"] else "not_in",
+                                                          "negated": False, "condition": cond, "rows": n,
+                                                          "linked": h["table"]})
         g = out.get(rid, {})
         if g and g.get("dropped") and not g["columns"] and not g.get("all_rows") and not rows_from(r):
             g["flagged"] = True                              # never widen to every record silently
