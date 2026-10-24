@@ -3,8 +3,9 @@ its order, each step fed the previous steps' outputs. Paid: the model; local: Co
 
     store   the store's tables read back from SQLite (ddl.schema_from_sqlite), without the CLI's own tables (`_…`);
             with the selected uploads' tables, keyed and linked in that view only (with_incoming): an update takes
-            a linked upload column's value through the key, converted by the user's formula (from_incoming); an
-            insert takes the upload's records whose key the store doesn't have (insert_from)
+            a linked upload column's value through the key, converted by the user's formula (from_incoming), or
+            the upload column a step names (its type the one its cells show: cell_type; read the same: from_uploads);
+            an insert takes the upload's records whose key the store doesn't have (insert_from)
     out     {prompt, requests, operation, values, sources, parts, conditions, grouping, formula, assembly}; assembly is
             {"program", "questions", "errors"}: step 7 runs the program in a savepoint, rolled back (nothing is changed)
 
@@ -54,12 +55,26 @@ def with_incoming(db, store: list[dict], incoming: list[dict]) -> tuple[list[dic
                            "nothing is guessed. Reading an upload without such a link is not implemented yet.")
         node = by_name[t["sql_name"]]
         node["definition"]["primary_key"] = [f"c_{links[0][0]}"]
+        for c in node["definition"]["columns"]:               # a key keeps its type: as compared with the store's
+            if c["sql_name"] not in {k for k, *_ in links}:
+                c["sql_type"] = cell_type(db, t["sql_name"], c["sql_name"])
         for key, table, column in links:
             tables[table]["foreign_keys"] = tables[table].get("foreign_keys", []) + [
                 {"columns": [f"c_{column}"], "references": {"table": node["definition"]["table_id"],
                                                             "columns": [f"c_{key}"]}}]
         out.append(node)
     return out, None
+
+
+def cell_type(db, table: str, column: str) -> str:
+    """An upload column's type as its cells show it (every cell is TEXT in the database: a raw snapshot): INTEGER
+    when each non-empty cell is a whole number, REAL when each is a plain number, else TEXT (an empty column too).
+    The view's only: a step may then name it for a number change; its value is cast when read (from_uploads)."""
+    cells = [str(v).strip() for (v,) in db.execute(f'SELECT DISTINCT "{column}" FROM "{table}" '
+                                                   f'WHERE TRIM(COALESCE("{column}", \'\')) <> \'\'')]
+    if not cells or not all(NUMBER.fullmatch(v) for v in cells):
+        return "TEXT"
+    return "INTEGER" if all(WHOLE.fullmatch(v) for v in cells) else "REAL"
 
 
 def keyed(db, upload: int, tables: dict) -> list[tuple]:
@@ -98,26 +113,19 @@ def _put(node, value):
     return node
 
 
-def from_incoming(db, store: list[dict], incoming: list[dict], reqs: list[dict], parts_: dict,
-                  sources_: dict) -> tuple[list, list]:
-    """An update's changed column directly matched to a (non-key) column of a selected upload takes that column's
-    value, which assembly reaches through the key: as is (an empty cell is NULL, never written over a value; cast to
-    REAL for a number column: incoming cells are TEXT), or converted by the user's formula (convert.py). → (questions:
-    a formula to give, errors: a unit varying row by row, a key repeated, a number cell that isn't a plain number);
-    each assignment so built is set (from: incoming), no longer pending. An insert takes the upload's new records
-    (insert_from)."""
-    asked, errors = [], []
-    plans = {t["id"]: convert.plan(db, t["id"]) for t in incoming}
+def reader(db, store: list[dict], incoming: list[dict], asked: list, errors: list):
+    """taken(rid, upload, i, s, name, typ): upload column i's value (its sql name `name`) for store column s (typ
+    its type), checked and converted; None when asked (a formula to give, into `asked`) or refused (into `errors`:
+    a unit varying row by row, a key repeated, a number cell that isn't a plain number). Every step's value read from
+    an upload goes through it, whichever step chose that column."""
     names = {t["id"]: t["sql_name"] for t in incoming}
-    types = {f"{n['definition']['table_id']}.{c['column_id']}": c["sql_type"] for n in store
-             for c in n["definition"]["columns"]}
     tables = {n["definition"]["sql_name"]: n["definition"] for n in store}
     keys = {t["id"]: keyed(db, t["id"], tables) for t in incoming}
     checked = {}                                              # upload → why its keys repeat, or None: checked once
 
     def taken(rid, upload, i, s, name, typ):
         """Upload column i's value for store column s, converted; None when asked or refused."""
-        plan = plans[upload]
+        plan = convert.plan(db, upload, (i, s))              # its pair's units, linked or not
         if upload not in checked:
             checked[upload] = next(filter(None, (repeated(db, names[upload], k) for k in dict.fromkeys(
                 k for k, *_ in keys[upload]))), None)
@@ -157,6 +165,25 @@ def from_incoming(db, store: list[dict], incoming: list[dict], reqs: list[dict],
                 value = {"type": "function", "name": "round", "arguments": [value]}
         return value
 
+    return taken
+
+
+def from_incoming(db, store: list[dict], incoming: list[dict], reqs: list[dict], parts_: dict,
+                  sources_: dict) -> tuple[list, list]:
+    """An update's changed column directly matched to a (non-key) column of a selected upload takes that column's
+    value, which assembly reaches through the key: as is (an empty cell is NULL, never written over a value; cast to
+    REAL for a number column: incoming cells are TEXT), or converted by the user's formula (convert.py). → (questions:
+    a formula to give, errors: a unit varying row by row, a key repeated, a number cell that isn't a plain number);
+    each assignment so built is set (from: incoming), no longer pending. An insert takes the upload's new records
+    (insert_from)."""
+    asked, errors = [], []
+    plans = {t["id"]: convert.plan(db, t["id"]) for t in incoming}
+    names = {t["id"]: t["sql_name"] for t in incoming}
+    taken = reader(db, store, incoming, asked, errors)
+    types = {f"{n['definition']['table_id']}.{c['column_id']}": c["sql_type"] for n in store
+             for c in n["definition"]["columns"]}
+    tables = {n["definition"]["sql_name"]: n["definition"] for n in store}
+    keys = {t["id"]: keyed(db, t["id"], tables) for t in incoming}
     for r in reqs:
         if r["statement"] == "insert":
             insert_from(db, r["id"], parts.main_table(reqs, sources_, r["id"]), plans, names, types, taken,
@@ -179,6 +206,56 @@ def from_incoming(db, store: list[dict], incoming: list[dict], reqs: list[dict],
                 continue
             a.update({"value": value, "from": "incoming"})
             a.pop("pending", None)
+    return asked, errors
+
+
+def reads(value, incoming: list[dict]) -> bool:
+    """Does the value read a column of a selected upload?"""
+    if isinstance(value, dict):
+        return value.get("type") == "column" and value.get("source") in {f"t_{t['sql_name']}" for t in incoming} \
+            or any(reads(v, incoming) for v in value.values())
+    return isinstance(value, list) and any(reads(v, incoming) for v in value)
+
+
+def from_uploads(db, store: list[dict], incoming: list[dict], reqs: list[dict], parts_: dict) -> tuple[list, list]:
+    """An update's value that reads an upload's column, whichever step chose it (step 5's parts, step 9's formula:
+    "set the price to the recommended price of supplier_offer.csv"), each cell read as a link's is (reader): trimmed,
+    an empty one NULL and no write (assembly, from: incoming), cast for a number column, converted by the units of
+    that (upload column, store column) pair. A value from a saved link (from_incoming) is not read twice.
+    → (questions, errors), as from_incoming's."""
+    asked, errors = [], []
+    taken = reader(db, store, incoming, asked, errors)
+    ids = {f"t_{t['sql_name']}": t["id"] for t in incoming}
+    types = {f"{n['definition']['table_id']}.{c['column_id']}": c["sql_type"] for n in store
+             for c in n["definition"]["columns"]}
+    for r in reqs:
+        for a in (parts_.get(r["id"]) or {}).get("assignments", []) if r["statement"] == "update" else []:
+            if a.get("from") == "incoming" or a.get("pending") or not reads(a["value"], incoming):
+                continue
+            table, column = (x.split("_", 1)[1] for x in a["column"].split("."))
+            s = db.execute("SELECT sc.id FROM _store_columns sc JOIN _store_tables st ON st.id = sc.table_id "
+                           "WHERE st.sql_name = ? AND sc.sql_name = ?", (table, column)).fetchone()
+            typ = types[a["column"]]
+            if a["value"].get("type") != "column" and typ == "INTEGER":   # within a formula, rounded by it: a
+                typ = "REAL"                                              # 12.5 cell is no longer refused
+            failed = []
+
+            def put(n):
+                if isinstance(n, list):
+                    return [put(v) for v in n]
+                if not isinstance(n, dict):
+                    return n
+                if n.get("type") == "column" and n.get("source") in ids:
+                    upload, name = ids[n["source"]], n["reference"].removeprefix("c_")
+                    (i,) = db.execute("SELECT id FROM _incoming_columns WHERE table_id = ? AND sql_name = ?",
+                                      (upload, name)).fetchone()
+                    if (v := taken(r["id"], upload, i, s and s[0], name, typ)) is None:
+                        failed.append(n)
+                    return v
+                return {k: put(v) for k, v in n.items()}
+            value = put(a["value"])
+            if not failed:
+                a.update({"value": value, "from": "incoming"})
     return asked, errors
 
 
@@ -299,16 +376,20 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
     step("step 5 · parts")
     s5 = await parts.run(model, db, prompt, reqs, store, s4["requests"], s3["values"], numeric_by_formula=True)
     pause("parts", parts=s5)
+    def converted(asked, errors, **sections):                # step 6b, and again after step 9: a stop or a question
+        if errors:
+            return {"prompt": prompt, "source_selection": selected, "requests": s1, "operation": s2, "parts": s5,
+                    **sections, "assembly": {"program": [], "questions": errors, "errors": errors}}
+        if asked:                                             # a formula to give: the message's question
+            raise Paused("conversion", asked, [{"step": k} | w for k, ws in warned.items() for w in ws
+                                               if "question" not in w])
+
     if incoming:
         asked, errors = from_incoming(db, store, incoming, reqs, s5["requests"], s4["requests"])
         s5["warnings"] = [w for w in s5["warnings"] if not ((s5["requests"].get(w.get("request")) or {}).get(
             "insert", {}).get("from") and w.get("problem", "").startswith("value of "))]   # the upload gives them
-        if errors:
-            return {"prompt": prompt, "source_selection": selected, "requests": s1, "operation": s2, "parts": s5,
-                    "assembly": {"program": [], "questions": errors, "errors": errors}}
-        if asked:                                             # a formula to give: the message's question
-            raise Paused("conversion", asked, [{"step": k} | w for k, ws in warned.items() for w in ws
-                                               if "question" not in w])
+        if stopped := converted(asked, errors):
+            return stopped
     step("step 6 · conditions")
     s6 = await conditions.run(model, prompt, reqs, store, s4["requests"], s3["values"], s5["requests"], db, spans)
     pause("conditions", conditions=s6)
@@ -316,10 +397,27 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
     g = await grouping.run(model, prompt, reqs, store, s4["requests"], s6, s6.get("parameters", {}))
     pause("grouping", grouping=g)
     step("step 5 · numeric changes")
-    own = {rid: {**p, "assignments": [x for x in p.get("assignments", []) if x.get("from") != "incoming"]}
-           for rid, p in s5["requests"].items()}            # a value from an upload is no formula step's
+    linked = []                                               # (request, a saved link's assignment, step 9's copy)
+
+    def mine(rid, x):                                         # step 9 sees a copy: the link's value stays unless the
+        if x.get("from") != "incoming":                       # message names an upload's column for it
+            return x
+        linked.append((rid, x, copy := {"column": x["column"], "value": x["value"]}))
+        return copy
+    own = {rid: {**p, "assignments": [mine(rid, x) for x in p.get("assignments", [])]}
+           for rid, p in s5["requests"].items()}
     f5 = await formula.run(model, prompt, reqs, store, s4["requests"], s3["values"], own, s6, g, db)
+    for rid, x, copy in linked:
+        if copy.get("from") == "formula" and reads(copy["value"], incoming):
+            x["value"] = copy["value"]                        # read again below, by its own pair's units
+            x.pop("from")
+        else:                                                 # the link's value: step 9's doubts about it don't apply
+            f5["warnings"] = [w for w in f5["warnings"] if not (w.get("request") == rid and w.get(
+                "problem", "").startswith(f"formula of {x['column']}"))]
     pause("formula", formula=f5)
+    if incoming and (stopped := converted(*from_uploads(db, store, incoming, reqs, s5["requests"]),
+                                          conditions=s6, grouping=g, formula=f5)):
+        return stopped
     step("step 7 · assembly")
     a = assemble.assemble(db, store, reqs, s2["requests"], s4["requests"], s5["requests"], s6["requests"],
                           g["requests"], [("requests", s1["warnings"]), ("operation", s2["warnings"]),

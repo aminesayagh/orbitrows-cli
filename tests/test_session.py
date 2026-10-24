@@ -509,3 +509,31 @@ def test_an_insert_from_an_upload_repeating_a_key_is_refused(adding):
     reply = s.message("add the new products from supplier.csv")
     assert not reply["ok"] and "ref of in_supplier_1 repeats 'C3'" in reply["error"], reply
     assert s.db.execute("SELECT sku FROM products ORDER BY sku").fetchall() == [("A1",), ("B2",)]
+
+
+def test_an_upload_column_the_formula_step_names_sets_the_value_without_a_link(supplied, monkeypatch):
+    """"set the price to the recommended price of supplier.csv": no link to products.price, but the upload's
+    recommended column (TEXT in the database, its cells numbers) is a number column of the pipeline's view, and the
+    formula step names it: read through the key, cast, an empty cell no write."""
+    from orbitrows.pipeline.prompt import formula
+    supplied.db.executescript("""
+        DELETE FROM _incoming_store_matches WHERE incoming_column_id = 2;
+        INSERT INTO _incoming_columns (id, table_id, sql_name, sql_type, source_header, position, unit_id, extra_json)
+            VALUES (3, 1, 'recommended', 'TEXT', 'Recommended (DH)', 2, 1, '{}');
+        ALTER TABLE in_supplier_1 ADD COLUMN recommended TEXT;
+        UPDATE in_supplier_1 SET recommended = CASE ref WHEN 'A1' THEN ' 12.5' WHEN 'B2' THEN '' ELSE '7' END;""")
+    seen = []
+
+    async def named(jev, prompt, requests, schema, sources, values, parts, *a, **k):
+        seen.append(formula.table_columns(schema, "t_products"))
+        [x] = parts["r1"]["assignments"]
+        x.pop("pending")
+        x.update({"value": {"type": "column", "source": "t_in_supplier_1", "reference": "c_recommended"},
+                  "from": "formula"})
+        return {"requests": {}, "warnings": []}
+    monkeypatch.setattr(formula, "run", named)
+    reply = supplied.message("set the price to the recommended price of supplier.csv")
+    assert "t_in_supplier_1.c_recommended" in seen[0], seen
+    assert reply["ran"][0]["changed"] == 1, reply
+    assert supplied.db.execute("SELECT sku, price FROM products ORDER BY sku").fetchall() == [
+        ("A1", 12.5), ("B2", 20.0), ("C3", 30.0)]                # B2's cell is empty; C3 is not in the file
