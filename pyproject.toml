@@ -36,6 +36,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.package-dir]
 orbitrows = "src"
 
+# The operations catalog ships with the code: its single source, opened read-only (pipeline/operations/catalog.py).
+[tool.setuptools.package-data]
+"orbitrows.pipeline.operations" = ["operations.db"]
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
