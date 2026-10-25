@@ -1,0 +1,7 @@
+"""Operations: the catalog of what a message can ask SQL to compute (functions, operators, window functions, and the
+compositions built on them), and the selection of one from a piece of a prompt. A module of its own, apart from the
+prompt steps: they ask it for an operation, it answers with one entry of the catalog, or that none is supported.
+Design: vault 02_projects/pilotstore/operation-selection-implementation.
+
+    inventory.py   phase 1: SQLGlot's expressions, each tried on SQLite (what the engine really runs)
+"""
