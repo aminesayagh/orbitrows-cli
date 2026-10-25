@@ -119,6 +119,12 @@ def divide(p, config):
     return arith("/", p["column"], given(p["divisor"]))
 
 
+def share_of_column(p, config):
+    """add 10% of the cost (config {"sign": 1}), take 10% of the cost off (-1): column ± other × percent / 100."""
+    share = arith("*", p["other"], lit(p["percent"] / 100))
+    return arith("+" if config["sign"] > 0 else "-", p["column"], share)
+
+
 def from_column(p, config):
     """set the price to the cost plus 20: other (+ amount, when one is given)."""
     return arith("+", p["other"], lit(p["amount"])) if p.get("amount") else p["other"]
@@ -208,5 +214,5 @@ def aggregate(p, config):
 
 BUILDERS = {f.__name__: f for f in (
     percent_of_column, multiple_of_column, relative_difference, difference, table_aggregate, count_linked, sum_linked,
-    within_days, percent_change, add_amount, multiply, divide, from_column, round_digits, round_to_step, clamp,
+    within_days, percent_change, add_amount, multiply, divide, share_of_column, from_column, round_digits, round_to_step, clamp,
     set_value, fill_empty, capitalize, affix, replace_text, text_function, shift_date, clear, aggregate)}

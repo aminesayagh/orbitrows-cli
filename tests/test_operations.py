@@ -98,6 +98,10 @@ CHECKS = {
     "DIVIDE_BY": ("variants", {"column": PRICE, "divisor": 4}, "SELECT variant_id, price_mad / 4.0 FROM variants"),
     "CAPITALIZE": ("products", {"column": col("products", "description")},
                    "SELECT product_id, UPPER(SUBSTR(description, 1, 1)) || SUBSTR(description, 2) FROM products"),
+    "ADD_PERCENT_OF_COLUMN": ("variants", {"column": PRICE, "percent": 10, "other": COST},
+                              "SELECT variant_id, price_mad + cost_mad * 0.1 FROM variants"),
+    "SUBTRACT_PERCENT_OF_COLUMN": ("variants", {"column": PRICE, "percent": 10, "other": COST},
+                                   "SELECT variant_id, price_mad - cost_mad * 0.1 FROM variants"),
     "FILL_EMPTY": ("variants", {"column": col("variants", "color"), "value": lit("none"), "column_type": "TEXT"},
                    "SELECT variant_id, COALESCE(NULLIF(TRIM(color), ''), 'none') FROM variants"),
 }

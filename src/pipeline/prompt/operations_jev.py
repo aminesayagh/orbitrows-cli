@@ -13,24 +13,43 @@ from .operations import Record, column_mentions, nlp, occurrences, segment_of, s
 MIN = 0.5
 CONTEXT = ("A merchant wrote one request that changes a number column of their shop database. Each number of the "
            "request is marked [n1: …]. The request may contain spelling mistakes: read it for its meaning.")
-KIND = {
-    "increase": "The value is raised by this amount or percentage ('raise by 15%', 'add 10', 'an extra 2').",
-    "decrease": "The value is lowered by this amount or percentage ('take 5 off', 'a 20% discount', 'cut by 3').",
-    "set": "The value becomes this number ('set the price to 50', 'make it 8').",
-    "multiply": "The value is multiplied by this factor ('twice', 'halve', 'triple', 'a third of it').",
-    "divide": "The value is divided by this number.",
-    "share_added": "This percentage or fraction OF a column is added to the value ('add 10% of the cost to the price', "
-                   "'raise the price by 15% of the cost').",
-    "share_removed": "This percentage or fraction OF a column is taken off the value ('lower the price by 10% of the "
-                     "cost').",
-    "round_decimals": "The value is rounded to this number of decimals.",
-    "round_multiple": "The value is rounded to the nearest multiple of this number ('to the nearest 5').",
-    "upper_limit": "The final value must never go above this number ('never above 300', 'capped at 12').",
-    "lower_limit": "The final value must never go below this number ('never below 20', 'at least 3').",
+KIND = {   # what a number does that is not one operation of the catalog: a part of a limit, or nothing
     "upper_limit_computed": "This number computes a maximum from a column ('twice' in 'never above twice the cost').",
     "lower_limit_computed": "This number computes a minimum from a column ('10%' in 'never below the cost plus 10%').",
     "none": "Not a change of the value: part of a condition, a count, a name, or a repeated step already counted.",
 }
+KIND_OF = {   # the operations catalog's entries a number can be (2026-10-25: one list of operations), and the kind this
+    "INCREASE_PERCENT": "increase", "ADD_AMOUNT": "increase",         # pass reads it as: several entries, one kind
+    "DECREASE_PERCENT": "decrease", "SUBTRACT_AMOUNT": "decrease", "SET_VALUE": "set", "MULTIPLY_BY": "multiply",
+    "DIVIDE_BY": "divide", "ADD_PERCENT_OF_COLUMN": "share_added", "SUBTRACT_PERCENT_OF_COLUMN": "share_removed",
+    "ROUND_DECIMALS": "round_decimals", "ROUND_TO_NEAREST": "round_multiple", "CLAMP_MAX": "upper_limit",
+    "CLAMP_MIN": "lower_limit",
+}
+_KINDS = {}
+
+
+def kinds() -> dict:
+    """The kind question's options: each catalog entry of KIND_OF (what it does, an example), then KIND."""
+    if not _KINDS:
+        from orbitrows.pipeline.operations.catalog import connect, get
+        db = connect()
+        for i in KIND_OF:
+            e = get(db, i)
+            _KINDS[i] = f"{e['name']}: {e['behavior']} (e.g. '{e['examples'][0]}')"
+        _KINDS.update(KIND)
+    return _KINDS
+
+
+def kind_of(answer) -> tuple:
+    """(kind, probabilities by kind): the entries of one kind add up ("raise by 15%" split between a percentage and
+    an amount is still an increase)."""
+    choice_, probs = answer if answer else (None, {})
+    by = {}
+    for k, pr in probs.items():
+        by[KIND_OF.get(k, k)] = by.get(KIND_OF.get(k, k), 0) + pr
+    return KIND_OF.get(choice_, choice_), by
+
+
 KIND_RULES = [
     "Judge the marked number by the words around it, not by its position in the sentence.",
     "'plus 10%' on a column ('the cost plus 10%') is an increase of that column by 10%, not a share.",
@@ -112,7 +131,8 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
     state = {"request": marked(text, occs), "columns named in the request": col_opts}
     q = {}
     for o in occs:
-        q[f"{o['occ']}_kind"] = choice(CONTEXT, f"What does the number {o['occ']} ('{o['text']}') do?", KIND, KIND_RULES)
+        q[f"{o['occ']}_kind"] = choice(CONTEXT, f"What does the number {o['occ']} ('{o['text']}') do?", kinds(),
+                                       KIND_RULES)
         clause = text[slice(*segment_of(segments(text), o["start"]))].strip()
         q[f"{o['occ']}_column"] = choice(CONTEXT, f"The step with {o['occ']} ('{o['text']}', in '{clause}'): do its own "
                                                   f"words name the column it changes or starts from? Which one?",
@@ -164,7 +184,7 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
         return tok.idx if tok is not None and seg[0] <= tok.idx < o["start"] else o["start"]
 
     for o in occs:
-        kind, kp = ans.get(f"{o['occ']}_kind", (None, {}))
+        kind, kp = kind_of(ans.get(f"{o['occ']}_kind"))
         col, cp = ans.get(f"{o['occ']}_column", ("none", {}))
         if kind is None or kp.get(kind, 0) < MIN:
             ambiguities.append({"problem": "what this number does: uncertain", "occurrence": o["occ"], "text": o["text"],

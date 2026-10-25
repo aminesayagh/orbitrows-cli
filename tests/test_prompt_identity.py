@@ -20,6 +20,19 @@ GONE = {"fastino/gliner2-multi-v1",                          # split.py's model 
         'SELECT DISTINCT "', '" FROM "', '" WHERE "', '" IS NOT NULL', '" IS NOT NULL LIMIT ',   # a read of the
         '" IS NOT NULL LIMIT 50', '" IS NOT NULL LIMIT 13', '" IS NOT NULL AND TRIM("',      # store's rows: the
         '") != \'\' LIMIT '}                                # pipeline reads the profile instead (2026-10-25)
+FORMULA_KINDS = [   # the formula's kinds of a number that are catalog entries since 2026-10-25
+    "The value is raised by this amount or percentage ('raise by 15%', 'add 10', 'an extra 2').",
+    "The value is lowered by this amount or percentage ('take 5 off', 'a 20% discount', 'cut by 3').",
+    "The value becomes this number ('set the price to 50', 'make it 8').",
+    "The value is multiplied by this factor ('twice', 'halve', 'triple', 'a third of it').",
+    "The value is divided by this number.",
+    "This percentage or fraction OF a column is added to the value ('add 10% of the cost to the price', 'raise the price by 15% of the cost').",
+    "This percentage or fraction OF a column is taken off the value ('lower the price by 10% of the cost').",
+    "The value is rounded to this number of decimals.",
+    "The value is rounded to the nearest multiple of this number ('to the nearest 5').",
+    "The final value must never go above this number ('never above 300', 'capped at 12').",
+    "The final value must never go below this number ('never below 20', 'at least 3').",
+]
 PARTS_TEMPLATES = [   # and its outputs' fixed list (the catalog's outputs since 2026-10-25)
     "value", "count", "count_distinct", "sum", "avg", "min", "max", "Its values, as they are.",
     "How many values (count).", "How many different values.", "Their total (sum).", "Their average.",
@@ -67,6 +80,7 @@ REPLACED = {"pipeline/prompt/grouping.py": {   # the one tree question over ever
     "pipeline/prompt/parts.py": {"SQLite, on all rows", *PARTS_TEMPLATES},
     "sql/sql.py": {"SAVEPOINT ast_check", "ROLLBACK TO ast_check", "RELEASE ast_check"},
     # 2026-10-25: each formula step's SQL is written by the operations catalog's builder (one SQL per operation)
+    "pipeline/prompt/operations_jev.py": set(FORMULA_KINDS),
     "pipeline/prompt/operations_map.py": {"type", "value", "operator", "left", "right", "arithmetic", "name",
                                           "arguments", "function", "concat", "round", "upper", "parts", "date",
                                           "least", "greatest", "coalesce", "substr"}}
