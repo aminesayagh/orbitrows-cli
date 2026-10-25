@@ -13,7 +13,8 @@
     Jev   call 2, per part found: for a changed column that is not a number, one of the catalog's changes
           (pipeline/operations: set, from another column, prefix, suffix, replace, capitals, lower case, trim, fill the
           empty values, empty it; changes(), 2026-10-25) or none, and its operands (one of the candidates, or none);
-          for an output, the aggregate; for a schema action, the column, the new name, the type
+          for an output, one of the catalog's outputs (its values, a count, a total, an average…); for a
+          schema action, the column, the new name, the type
     code  the value, from the entry's builder (operations/builders.py): the tree is built there, never written by
           Jev. A number column's change, none of the catalog's or one missing a part, is the formula's (formula.py).
           Every request is then compiled (sql.py) and prepared by SQLite (EXPLAIN: no row read): an SQLite error is a
@@ -75,12 +76,27 @@ def changes(typ: str) -> dict:
 
 
 def entry(entry_id):
-    return next((e for e in _CHANGES if e["id"] == entry_id), None)
+    return next((e for e in _CHANGES + _OUTPUTS if e["id"] == entry_id), None)
 
 
-AGGREGATE = {"value": "Its values, as they are.", "count": "How many values (count).",
-             "count_distinct": "How many different values.", "sum": "Their total (sum).", "avg": "Their average.",
-             "min": "The smallest (minimum).", "max": "The largest (maximum)."}
+_OUTPUTS = []
+
+
+def outputs(typ: str) -> dict:
+    """What a read can show of a column of type `typ`: the catalog's outputs (role output: its values, a count, a
+    total…), a number column's figures (total, average) only for a number. {entry id: what it shows}."""
+    if not _OUTPUTS:
+        from orbitrows.pipeline.operations.catalog import connect, entries
+        _OUTPUTS.extend(e for e in entries(connect()) if e["role"] == "output")
+    return {e["id"]: f"{e['name']}: {e['behavior']}" for e in _OUTPUTS
+            if typ in ("INTEGER", "REAL") or e["parameters"][0].get("constraints", {}).get("data_type") != "numeric"}
+
+
+def aggregate_of(e) -> str:
+    """The output's aggregate as the next steps name it: value, count, count_distinct, sum, avg, min, max."""
+    return e["config"]["function"] + ("_distinct" if e["config"].get("distinct") else "")
+
+
 ACTIONS = {"add_column": "Add a new column.", "rename_column": "Rename an existing column.",
            "drop_column": "Remove a column.", "rename_table": "Rename the table itself."}
 TYPES = {"TEXT": "Text.", "INTEGER": "Whole numbers (quantities, days, counts).",
@@ -280,7 +296,8 @@ def questions_2(db, requests, schema, sources, values, a1) -> dict:
             tables = read_tables(schema, sources, rid, main)
             for key in [k.split("_shows_")[1] for k, p in a1.items() if k.startswith(f"{rid}_shows_") and p >= 0.5]:
                 q[f"{rid}_{key}_aggregate"] = choice(CONTEXT, f"What does {said(r)} show of "
-                                                              f"{columns_of(schema, tables)[key]}", AGGREGATE)
+                                                              f"{columns_of(schema, tables)[key]}",
+                                                     outputs(coltype(schema, key)[0]))
         if st == "insert" and main:
             for key in [k.split("_gives_")[1] for k, p in a1.items() if k.startswith(f"{rid}_gives_") and p >= 0.5]:
                 typ, _ = coltype(schema, key)
@@ -383,14 +400,15 @@ def build(db, requests, schema, sources, values, a1, a2) -> dict:
                 # a column whose value chooses the rows ("the Volt variants": brand) is shown only when Jev is sure
                 if a1.get(f"{rid}_shows_{key}", 0.0) < (SURE if chooses else 0.5) or (whole and a1.get(f"{rid}_shows_{key}", 0) < SURE):
                     continue
-                if outs and key in own_id and a2.get(f"{rid}_{key}_aggregate", ("value",))[0] in ("count", "count_distinct"):
+                shown = entry(a2.get(f"{rid}_{key}_aggregate", ("SHOW_VALUES",))[0]) or entry("SHOW_VALUES")
+                if outs and key in own_id and aggregate_of(shown).startswith("count"):
                     continue                                  # counting its ids = counting the records: shown once
                 unsure_yes(rid, f"{rid}_shows_{key}", f"shows {key}", 0.5)
-                agg = pick(rid, f"{rid}_{key}_aggregate", f"aggregate of {key}", "value") or "value"
-                c = _col(*key.split("."))
-                e = c if agg == "value" else {"type": "aggregate", "function": agg.removesuffix("_distinct"),
-                                              "argument": c, "distinct": agg == "count_distinct"}
-                outs.append({"column": key, "aggregate": agg, "expression": e})
+                shown = entry(pick(rid, f"{rid}_{key}_aggregate", f"aggregate of {key}", "SHOW_VALUES",
+                                   labels={x["id"]: x["name"] for x in _OUTPUTS})) or entry("SHOW_VALUES")
+                e = BUILDERS[shown["builder_key"]]({"column": _col(*key.split("."))}, shown["config"])
+                outs.append({"column": key, "aggregate": aggregate_of(shown), "expression": e,
+                             "operation": shown["id"]})
             if not outs:
                 whole = unsure_yes(rid, f"{rid}_whole", "whole records", 0.5)
             out[rid]["outputs"] = "all" if whole and not any(o["aggregate"] != "value" for o in outs) else outs

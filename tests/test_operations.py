@@ -87,6 +87,14 @@ CHECKS = {
     "SHIFT_DATE": ("sales", {"column": col("sales", "sold_on"), "amount": -1, "unit": "months"},
                    "SELECT sale_id, DATE(sold_on, '-1 months') FROM sales"),
     "CLEAR_VALUE": ("variants", {"column": col("variants", "barcode")}, "SELECT variant_id, NULL FROM variants"),
+    "SHOW_VALUES": ("variants", {"column": PRICE}, "SELECT price_mad FROM variants"),
+    "COUNT_VALUES": ("variants", {"column": col("variants", "color")}, "SELECT COUNT(color) FROM variants"),
+    "COUNT_DISTINCT_VALUES": ("variants", {"column": col("variants", "color")},
+                              "SELECT COUNT(DISTINCT color) FROM variants"),
+    "SUM_VALUES": ("variants", {"column": PRICE}, "SELECT SUM(price_mad) FROM variants"),
+    "AVERAGE_VALUES": ("variants", {"column": PRICE}, "SELECT AVG(price_mad) FROM variants"),
+    "MINIMUM_VALUE": ("variants", {"column": PRICE}, "SELECT MIN(price_mad) FROM variants"),
+    "MAXIMUM_VALUE": ("variants", {"column": PRICE}, "SELECT MAX(price_mad) FROM variants"),
     "FILL_EMPTY": ("variants", {"column": col("variants", "color"), "value": lit("none"), "column_type": "TEXT"},
                    "SELECT variant_id, COALESCE(NULLIF(TRIM(color), ''), 'none') FROM variants"),
 }
@@ -114,8 +122,11 @@ def test_an_entry_builds_the_sql_it_describes(shipped, entry_id):
     node = BUILDERS[entry["builder_key"]](p, entry["config"])
     db = baseline()
     pk = {"variants": "variant_id", "products": "product_id", "sales": "sale_id"}[table]
-    columns = [{"expression": col(table, pk), "alias": "id"}]
-    if entry["role"] == "condition":
+    columns = [] if entry["role"] == "output" else [{"expression": col(table, pk), "alias": "id"}]
+    if entry["role"] == "output":                                    # what a read shows: the figure alone
+        columns.append({"expression": node, "alias": "v"})
+        scope = {"type": "all_rows"}
+    elif entry["role"] == "condition":
         scope = {"type": "filtered", "where": node}
     else:
         columns.append({"expression": node, "alias": "v"})

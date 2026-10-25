@@ -20,7 +20,10 @@ GONE = {"fastino/gliner2-multi-v1",                          # split.py's model 
         'SELECT DISTINCT "', '" FROM "', '" WHERE "', '" IS NOT NULL', '" IS NOT NULL LIMIT ',   # a read of the
         '" IS NOT NULL LIMIT 50', '" IS NOT NULL LIMIT 13', '" IS NOT NULL AND TRIM("',      # store's rows: the
         '") != \'\' LIMIT '}                                # pipeline reads the profile instead (2026-10-25)
-PARTS_TEMPLATES = [
+PARTS_TEMPLATES = [   # and its outputs' fixed list (the catalog's outputs since 2026-10-25)
+    "value", "count", "count_distinct", "sum", "avg", "min", "max", "Its values, as they are.",
+    "How many values (count).", "How many different values.", "Their total (sum).", "Their average.",
+    "The smallest (minimum).", "The largest (maximum).", "aggregate", "argument",
     "set_value", "add", "subtract", "add_percent", "subtract_percent", "double", "halve", "column", "column_percent",
     "round", "prefix", "suffix", "replace", "empty",
     "Set to a value written in the prompt ('set the price to 50', 'mark them as draft').",

@@ -4,7 +4,8 @@ transaction that raises the entry's version and the catalog's revision. Kept apa
 
     entry      one operation: what it does (behavior), what it is for (outcomes), how merchants ask for it
                (examples), its parameters, where it applies, how it differs from close ones (distinctions), its role
-               (it chooses rows: condition; it computes a value: value; SQLGlot's own expressions: technical), the
+               (it chooses rows: condition; it computes a new value: value; what a read shows of a column:
+               output; SQLGlot's own expressions: technical), the
                builder that makes our AST from its resolved parameters (builders.py), SQLGlot's class and names, and
                SQLite's support (the inventory's check, or why it is not built yet)
     enabled    only an entry whose builder is verified on the demo store (tests/test_operations.py: every enabled entry
@@ -19,7 +20,7 @@ import sqlite3
 from pathlib import Path
 
 PATH = Path(__file__).with_name("operations.db")
-ROLES = ("condition", "value", "technical")
+ROLES = ("condition", "value", "output", "technical")
 KINDS = ("composition", "function", "aggregate", "window", "operator", "predicate")
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS catalog_state (
@@ -31,7 +32,7 @@ CREATE TABLE IF NOT EXISTS operations (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     behavior TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('condition', 'value', 'technical')),
+    role TEXT NOT NULL CHECK (role IN ('condition', 'value', 'output', 'technical')),
     effect TEXT NOT NULL CHECK (effect IN ('read', 'update', 'insert', 'delete', 'schema_change')),
     kind TEXT NOT NULL CHECK (kind IN ('composition', 'function', 'aggregate', 'window', 'operator', 'predicate')),
     sqlglot_class TEXT,

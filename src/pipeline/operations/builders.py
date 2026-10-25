@@ -171,7 +171,19 @@ def clear(p, config):
     return lit(None)
 
 
+# ---- outputs: what a read shows of a column ---------------------------------------------------------------------
+
+def aggregate(p, config):
+    """the column's values as they are (config {"function": "value"}), or one figure over the records it reads:
+    COUNT, COUNT(DISTINCT), SUM, AVG, MIN, MAX (config {"function": "count", "distinct": true}…). Per group when the
+    read is grouped ("per brand")."""
+    if config["function"] == "value":
+        return p["column"]
+    return {"type": "aggregate", "function": config["function"], "argument": p["column"],
+            "distinct": bool(config.get("distinct"))}
+
+
 BUILDERS = {f.__name__: f for f in (
     percent_of_column, multiple_of_column, relative_difference, difference, table_aggregate, count_linked, sum_linked,
     within_days, percent_change, add_amount, multiply, from_column, round_digits, round_to_step, clamp, set_value,
-    fill_empty, affix, replace_text, text_function, shift_date, clear)}
+    fill_empty, affix, replace_text, text_function, shift_date, clear, aggregate)}
