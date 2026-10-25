@@ -36,6 +36,21 @@ REPLACED = {"pipeline/prompt/grouping.py": {   # the one tree question over ever
     "pipeline/prompt/conditions.py": {"rows", "no record matches the condition on "},
     "pipeline/prompt/parts.py": {"SQLite, on all rows"},
     "sql/sql.py": {"SAVEPOINT ast_check", "ROLLBACK TO ast_check", "RELEASE ast_check"}}
+TRIMMED = {"pipeline/prompt/operations.py"}   # the PoC's option A (word rules), never called, removed 2026-10-25: its
+# kept definitions (the formula's helpers) are compared, each as the PoC wrote it
+
+
+def kept(text: str, mine: str) -> str:
+    """The PoC module with only the top-level definitions the CLI's still has."""
+    names = {getattr(n, "name", None) or next((t.id for t in getattr(n, "targets", []) if isinstance(t, ast.Name)), None)
+             for n in ast.parse(mine).body}
+    tree = ast.parse(text)
+    tree.body = [n for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom)) or (
+        getattr(n, "name", None) or next((t.id for t in getattr(n, "targets", []) if isinstance(t, ast.Name)), None)
+    ) in names]
+    return ast.unparse(tree)
+
+
 ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 
 
@@ -67,6 +82,6 @@ def test_what_was_tuned_is_kept():
     for module, path in PORTED.items():
         theirs = subprocess.run(["git", "show", f"{COMMIT}:{path}"], cwd=poc, env=ENV, capture_output=True, text=True,
                                 check=True).stdout
-        if missing := [v for v in tuned(theirs) - tuned((SRC / module).read_text()) if v not in GONE | REPLACED.get(module, set())]:
+        if missing := [v for v in tuned(kept(theirs, (SRC / module).read_text()) if module in TRIMMED else theirs) - tuned((SRC / module).read_text()) if v not in GONE | REPLACED.get(module, set())]:
             lost[module] = missing
     assert not lost, lost
