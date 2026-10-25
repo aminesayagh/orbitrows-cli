@@ -1,10 +1,10 @@
-"""Step 6 of prompt → AST, stage 3: the conditions of stage 2 joined into one tree per request (all · any), and a
-read's sort, limit and group columns (plan S5, S7). Stages 1–2 are conditions.py.
+"""Step 6 of prompt → AST, stage 4: the conditions of stage 2 joined into one tree per request (all · any), and a
+read's sort, limit and group columns (plan S5, S7). Stages 1–2 are conditions.py, stage 3 formula.py.
 
     code  the conditions of a request, a duplicate merged (reserved > quantity is quantity < reserved); one condition
           is the tree; two or more: each shown as readable SQL
-    Jev   one call per prompt: for each pair of a request's conditions, AND or OR (where they meet in the tree); for a read
-          stage 1 found sorted / limited / grouped: the sort column and its direction, the limit (a number of the
+    Jev   one call per prompt: for each pair of a request's conditions, AND or OR (where they meet in the tree);
+          for a read stage 1 found sorted / limited / grouped: the sort column and its direction, the limit (a number of the
           request, read by the parameters algorithm, or one for a singular "the cheapest variant"), the group column
     code  the AST: the one tree the pairs' answers fit (tree_of), {"type": "all" | "any", "children"}, or the single
           condition; order_by [{expression, direction}];

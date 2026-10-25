@@ -262,7 +262,7 @@ async def from_incoming(model, prompt, db, store: list[dict], incoming: list[dic
     """An insert takes the upload's new records (insert_from), each value converted (taken). → (questions: a formula
     to give, errors: a unit varying row by row, a key repeated, a number cell that isn't a plain number, matching:
     an insert's uncertain source column). An update's changed column is resolved by the message: the upload's column
-    step 9 names, else after it (resolve); no pair is saved for the next one."""
+    the formula stage names, else after it (resolve); no pair is saved for the next one."""
     asked, errors, matching = [], [], []
     names = {t["id"]: t["sql_name"] for t in incoming}
     taken = reader(db, store, incoming, asked, errors)
@@ -278,7 +278,7 @@ async def from_incoming(model, prompt, db, store: list[dict], incoming: list[dic
 
 
 async def resolve(model, prompt, db, store: list[dict], incoming: list[dict], open_: list, warnings: list) -> list:
-    """An update's assignments (open_: [(request, assignment)]) still without a value after step 9 (no column named
+    """An update's assignments (open_: [(request, assignment)]) still without a value after the formula (no column named
     by the message): the upload's column that supplies it, by code (candidates: 0 a stop, 1 taken),
     else the model's choice among them (choose), uncertain a question. The assignment then reads the chosen column:
     from_uploads converts it; the next message resolves its own. → errors."""
@@ -327,7 +327,7 @@ def reads(value, incoming: list[dict]) -> bool:
 
 
 def from_uploads(db, store: list[dict], incoming: list[dict], reqs: list[dict], parts_: dict) -> tuple[list, list]:
-    """An update's value that reads an upload's column, whichever step chose it (step 5's parts, step 9's formula:
+    """An update's value that reads an upload's column, whichever step chose it (step 5's parts, the formula stage's:
     "set the price to the recommended price of supplier_offer.csv", resolve), each cell read as a link's is (reader):
     trimmed, an empty one NULL and no write (assembly, from: incoming), cast for a number column, converted by the
     units of that (upload column, store column) pair; a value already read (from: incoming) is not read twice.
@@ -493,7 +493,7 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
     step("step 5 · parts")
     s5 = await parts.run(model, db, prompt, reqs, store, s4["requests"], s3["values"], numeric_by_formula=True)
     pause("parts", parts=s5)
-    def converted(asked, errors, **sections):                # step 6b, and again after step 9: a stop or a question
+    def converted(asked, errors, **sections):                # step 6b, and after the formula: a stop or a question
         if errors:
             return {"prompt": prompt, "source_selection": selected, "requests": s1, "operation": s2, "parts": s5,
                     **sections, "assembly": {"program": [], "questions": errors, "errors": errors}}
@@ -509,14 +509,14 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
         pause("matching", matching={"warnings": matching})
         if stopped := converted(asked, errors):
             return stopped
-    step("step 6 · conditions")
+    step("step 6 · stages 1–2 · conditions")
     s6 = await conditions.run(model, prompt, reqs, store, s4["requests"], s3["values"], s5["requests"], db, spans)
     pause("conditions", conditions=s6)
-    step("step 5 · numeric changes")                         # before grouping (the PoC ran it after): its branches
+    step("step 6 · stage 3 · numeric changes")               # before grouping (the PoC ran it after): its branches
     unlinked = []                                             # (request, a pending assignment of an update from an
-    updates = {r["id"] for r in reqs if r["statement"] == "update"}   # upload, step 9's copy)
+    updates = {r["id"] for r in reqs if r["statement"] == "update"}   # upload, the formula's copy)
 
-    def mine(rid, x):                                         # step 9 sees a copy: a pending one is resolved after
+    def mine(rid, x):                                         # the formula sees a copy: a pending one is resolved after
         if incoming and x.get("pending") and rid in updates:  # it, unless the message's words give its value
             unlinked.append((rid, x, copy := dict(x)))
             return copy
@@ -530,11 +530,11 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
         if copy.get("from") == "formula":
             x.update({"value": copy["value"], "from": "formula"})
             x.pop("pending", None)
-        elif not any("question" in w for w in f5["warnings"] if about(w)):   # step 9 had nothing to ask: no words
+        elif not any("question" in w for w in f5["warnings"] if about(w)):   # the formula: nothing to ask, no words
             f5["warnings"] = [w for w in f5["warnings"] if not about(w)]
             open_.append((rid, x))
     pause("formula", formula=f5)
-    step("step 6 · grouping, sort, limit")                     # the WHERE's tree, without the CASE's branches: a
+    step("step 6 · stage 4 · grouping")      # the WHERE's tree, without the CASE's branches: a
     tree_of = json.loads(json.dumps(s6))                       # branch ("but for the black ones") chooses no rows
     for rid, done in f5.get("branches", {}).items():
         c = tree_of["requests"].get(rid) or {}

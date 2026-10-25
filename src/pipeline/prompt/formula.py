@@ -1,5 +1,6 @@
-"""Step 5 · numeric changes (2026-10-15): pass 1 (operations_jev.py) + pass 2 (operations_map.py) inside the pipeline,
-in place of step 5's templates for number columns (text and dates keep the templates).
+"""Step 6 of prompt → AST, stage 3 · numeric changes (2026-10-15; the PoC's step 9, run after grouping there): pass 1
+(operations_jev.py) + pass 2 (operations_map.py) inside the pipeline, in place of step 5's templates for number columns
+(text and dates keep the templates).
 
 For each update request and each number column step 5 changes: the request's words, step 3's column words (role
 not_value, their column asked in pass 1's call), step 6's conditions (with the words they came from) and step 6's
