@@ -14,6 +14,9 @@ COMMIT = "8c923a8"
 SRC = Path(__file__).resolve().parents[1] / "src"
 PORTED = {f"pipeline/prompt/{p.name}": f"v2/prompt_ast/{p.name}" for p in sorted((SRC / "pipeline" / "prompt").glob("*.py"))
           if p.name not in ("pipeline.py", "asking.py", "source_route.py")} | {  # source_route is new, not a PoC port
+    "pipeline/expressions/words.py": "v2/prompt_ast/operations.py",          # the formula's passes: their own module
+    "pipeline/expressions/steps.py": "v2/prompt_ast/operations_jev.py",      # since 2026-10-26
+    "pipeline/expressions/links.py": "v2/prompt_ast/operations_map.py",
     "sql/dml.py": "v2/ast/dml.py", "sql/sql.py": "v2/ast/sql.py", "units/parameters.py": "v2/units/parameters.py"}
 GONE = {"fastino/gliner2-multi-v1",                          # split.py's model name: the loader is services/extractor now
         "coref_work",                                        # coref.py's work folder: a private temporary one per process now
@@ -90,11 +93,13 @@ REPLACED = {"pipeline/prompt/grouping.py": {   # the one tree question over ever
     "pipeline/prompt/parts.py": {"SQLite, on all rows", *PARTS_TEMPLATES},
     "sql/sql.py": {"SAVEPOINT ast_check", "ROLLBACK TO ast_check", "RELEASE ast_check"},
     # 2026-10-25: each formula step's SQL is written by the operations catalog's builder (one SQL per operation)
-    "pipeline/prompt/operations_jev.py": set(FORMULA_KINDS),
-    "pipeline/prompt/operations_map.py": {"type", "value", "operator", "left", "right", "arithmetic", "name",
+    "pipeline/expressions/steps.py": set(FORMULA_KINDS),
+    "pipeline/expressions/links.py": {"type", "value", "operator", "left", "right", "arithmetic", "name",
                                           "arguments", "function", "concat", "round", "upper", "parts", "date",
                                           "least", "greatest", "coalesce", "substr"}}
-TRIMMED = {"pipeline/prompt/operations.py"}   # the PoC's option A (word rules), never called, removed 2026-10-25: its
+MOVED = {"pipeline/prompt/formula.py": ["pipeline/expressions/__init__.py"]}   # code moved as it was: its texts are
+# looked for there too (2026-10-26: compose(), the branch's positive condition and the A47 repair)
+TRIMMED = {"pipeline/expressions/words.py"}   # the PoC's option A (word rules), never called, removed 2026-10-25: its
 # kept definitions (the formula's helpers) are compared, each as the PoC wrote it
 
 
@@ -140,6 +145,8 @@ def test_what_was_tuned_is_kept():
     for module, path in PORTED.items():
         theirs = subprocess.run(["git", "show", f"{COMMIT}:{path}"], cwd=poc, env=ENV, capture_output=True, text=True,
                                 check=True).stdout
-        if missing := [v for v in tuned(kept(theirs, (SRC / module).read_text()) if module in TRIMMED else theirs) - tuned((SRC / module).read_text()) if v not in GONE | REPLACED.get(module, set())]:
+        mine = "\n".join((SRC / m).read_text() for m in [module, *MOVED.get(module, [])])
+        if missing := [v for v in tuned(kept(theirs, (SRC / module).read_text()) if module in TRIMMED else theirs)
+                       - tuned(mine) if v not in GONE | REPLACED.get(module, set())]:
             lost[module] = missing
     assert not lost, lost

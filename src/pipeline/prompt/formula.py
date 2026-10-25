@@ -1,6 +1,6 @@
-"""Step 6 of prompt → AST, stage 3 · numeric changes (2026-10-15; the PoC's step 9, run after grouping there): pass 1
-(operations_jev.py) + pass 2 (operations_map.py) inside the pipeline, in place of step 5's templates for number columns
-(text and dates keep the templates).
+"""Step 6 of prompt → AST, stage 3 · numeric changes (2026-10-15; the PoC's step 9, run after grouping there): the
+expressions module (pipeline/expressions: pass 1 and pass 2, 2026-10-26) inside the pipeline, for number columns and
+the text and date changes step 5's catalog changes leave to it.
 
 For each update request and each number column step 5 changes: the request's words, step 3's column words (role
 not_value, their column asked in pass 1's call), step 6's conditions (with the words they came from) and step 6's
@@ -13,8 +13,7 @@ from . import SURE
 from .asking import question
 from .conditions import column_info, fits
 from .grouping import readable
-from .operations_jev import extract
-from .operations_map import resolve
+from orbitrows.pipeline.expressions import compose
 from .parts import coltype, parents
 
 NUMERIC = ("INTEGER", "REAL")
@@ -70,20 +69,6 @@ def predicate_spans(cond6, values, params, rid, off, schema, main):
             item |= {"start": span[0] - off, "end": span[1] - off}
         out.append(item)
     return out
-
-
-def positive(cond):
-    """A branch condition names the records that get the special formula: positive by definition. Step 6, which knows
-    nothing of branches, may have negated it ("but only 10% for the Volt products" read as an exclusion): its
-    negation is removed (not X → X; X IS NULL OR NOT X → X)."""
-    if cond.get("type") == "not":
-        return cond["operand"]
-    if cond.get("type") == "any" and len(cond["children"]) == 2:
-        nul = [c for c in cond["children"] if c.get("type") == "null_check"]
-        neg = [c for c in cond["children"] if c.get("type") == "not"]
-        if nul and neg:
-            return neg[0]["operand"]
-    return cond
 
 
 def asked(doubt) -> bool:
@@ -143,28 +128,8 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
                   "stored_values": stored_values(schema, db, target) if kind == "text" else [],
                   "texts": [{"text": v["text"], "start": v["start"] - off} for v in values
                             if v["request"] == rid and v["role"] == "written" and v.get("start") is not None]}
-            p1 = await extract(jev, text, up)
-            branch_ids = {x["left"]["pred"] for x in p1["records"] if x["role"] == "branch_condition"}
-            pos = [p | {"sql": positive(p["node"])} if p["id"] in branch_ids else p for p in preds]
-            p2 = await resolve(jev, text, {"target": target, "predicates": pos}, p1["records"])
-            weak = [x for x in p1["records"] if (x["role"] == "where" and p1["answers"].get(
-                        f"{x['left']['pred']}_role", (None, {}))[1].get("where", 1) < SURE) or x["role"] == "unresolved_condition"]
-            two_values = sum(1 for x in p1["records"] if x["function"] == "set") >= 2 or any(
-                "several results are used by no other step" in q["problem"] for q in p2["questions"])
-            if p2["status"] == "ask" and len(weak) == 1 and two_values:   # two final values for one column
-                # A47: "active, but archived for the Orbit products": two final values need a branch; the condition
-                # read as a filter at 0.52 is the branch (reported as a repair)
-                w = weak[0]
-                recs = [x for x in p1["records"] if x is not w] + [
-                    w | {"role": "branch_condition", "rule_id": "repair.two_values_one_condition"},
-                    w | {"role": "branch", "function": "case", "rule_id": "repair.two_values_one_condition"}]
-                recs.sort(key=lambda x: x["start"])
-                pos = [p | {"sql": positive(p["node"])} if p["id"] == w["left"]["pred"] else p for p in pos]
-                again = await resolve(jev, text, {"target": target, "predicates": pos}, recs)
-                if again["status"] == "ok":
-                    p1 = {**p1, "records": recs}
-                    p2 = again | {"repaired": again.get("repaired", []) + [f"'{w['text']}' read as a branch: two final "
-                                                                         f"values and one weak filter"]}
+            done = await compose(jev, text, up)               # the expressions module (pipeline/expressions)
+            p1, p2 = done["pass_1"], done["pass_2"]
             key = f"{rid}.{target}"
             out[key] = {"records": p1["records"], "pass1_ambiguities": p1["ambiguities"], "map": p2.get("map"),
                         "status": p2["status"], "questions": p2.get("questions", []), "flagged": p2.get("flagged", [])}

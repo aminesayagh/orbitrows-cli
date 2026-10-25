@@ -12,8 +12,8 @@ SQLite text over `t_table.c_column` ids, for tests.
 """
 from orbitrows.services.model.client import ask, choice
 from orbitrows.pipeline.operations.builders import BUILDERS
-from . import SURE
-from .asking import question
+from orbitrows.pipeline.prompt import SURE
+from orbitrows.pipeline.prompt.asking import question
 
 MIN = 0.5
 VALUE = ("calculation", "rounding", "bound", "guard", "branch")
@@ -144,7 +144,7 @@ def reached(recs, links) -> set:
 def unused_numbers(text, upstream, recs, links) -> list[str]:
     """Each number of the request must belong to a step the formula uses, or to a condition: a number left out is a
     step lost on the way (pass 1 dropped it, or the map does not use it), so the merchant is asked."""
-    from .operations import occurrences
+    from .words import occurrences
     spans = [(text.find(p["text"]), text.find(p["text"]) + len(p["text"])) for p in upstream.get("predicates", [])]
     used = reached(recs, links)
     out = []

@@ -7,8 +7,8 @@ MIN is abstained (an ambiguity record), never guessed.
 import re
 
 from orbitrows.services.model.client import ask, choice
-from . import SURE
-from .operations import Record, column_mentions, nlp, occurrences, segment_of, segments
+from orbitrows.pipeline.prompt import SURE
+from .words import Record, column_mentions, nlp, occurrences, segment_of, segments
 
 MIN = 0.5
 CONTEXT = ("A merchant wrote one request that changes a number column of their shop database. Each number of the "

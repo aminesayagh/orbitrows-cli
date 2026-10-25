@@ -1,4 +1,4 @@
-"""The helpers of the formula's pass 1 (operations_jev.py): the request's words as spaCy reads them, its number
+"""The helpers of the formula's pass 1 (steps.py): the request's words as spaCy reads them, its number
 occurrences, its segments (one per step of a change) and the words naming columns; Record, one operation step.
 The PoC's option A (2026-10-14: a change read by word rules, no Jev) lived here too; option B (Jev) replaced it in
 the pipeline and its rules were never called: removed 2026-10-25.
