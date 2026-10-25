@@ -3,8 +3,9 @@ behavior, then each example and each outcome) and kept in the catalog (operation
 unit length, with the entry's whole searchable text's hash and its version); the CLI loads them into one matrix,
 compares a request's vector with it (dot product = cosine) and ranks each entry by its best vector. A stale entry
 (changed since) is left out and reported, never matched. Similarity ranks; it does not decide (selection, phase 4).
-Measured (evaluation.py, 64 held-out requests): one vector per entry R@10 0.92, one per example 0.98 with MiniLM, the
-whole request better than an extracted phrase; e5-base reaches 1.00 (a second, larger model: the upgrade if needed).
+Measured (evaluation.py, 64 held-out requests in English, half as an LLM agent writes them): one vector per example
+beats one per entry (MiniLM R@10 0.92 → 0.95), the whole request beats an extracted phrase, and replacing the store's
+column names with a neutral word does not help (0.92).
 
     embed(db, config)    the developer's: every enabled entry's vector for one model configuration
     Index(db, config)    the CLI's: the matrix, its ids, retrieve(text, k) → [(id, similarity)]
@@ -15,11 +16,11 @@ import json
 import numpy as np
 
 CONFIGS = {   # an immutable id per model and encoding: a changed one is a new id, never mixed with another
-    "minilm-2": {"model_name": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", "query": "",
-                 "document": ""},
-    "e5-base-2": {"model_name": "intfloat/multilingual-e5-base", "query": "query: ", "document": "passage: "},
+    "bge-small-en-1": {"model_name": "BAAI/bge-small-en-v1.5", "document": "",
+                       "query": "Represent this sentence for searching relevant passages: "},
 }
-DEFAULT = "minilm-2"                                          # the linker's model: already loaded
+DEFAULT = "bge-small-en-1"   # the client is an LLM writing English: 33M parameters, R@10 0.98 on agent-style requests
+                             # (MiniLM 0.95, e5-base and bge-base-en 0.98 at 3 to 8 times its size)
 TEMPLATE = 2                                                  # the texts' layout (texts())
 _MODELS = {}
 
