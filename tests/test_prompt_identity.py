@@ -17,6 +17,9 @@ PORTED = {f"pipeline/prompt/{p.name}": f"v2/prompt_ast/{p.name}" for p in sorted
     "sql/dml.py": "v2/ast/dml.py", "sql/sql.py": "v2/ast/sql.py", "units/parameters.py": "v2/units/parameters.py"}
 GONE = {"fastino/gliner2-multi-v1",                          # split.py's model name: the loader is services/extractor now
         "coref_work"}                                        # coref.py's work folder: a private temporary one per process now
+REPLACED = {"pipeline/prompt/grouping.py": {   # the one tree question over every candidate tree (mixed ones for three
+    "all", "any", "_all", "_any", "|tree", "How do the conditions of ", " combine?", "tree", "AND", "OR",  # conditions
+    "how the conditions combine: no answer, AND kept"}}  # only): one AND / OR question per pair now, any size
 ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 
 
@@ -48,6 +51,6 @@ def test_what_was_tuned_is_kept():
     for module, path in PORTED.items():
         theirs = subprocess.run(["git", "show", f"{COMMIT}:{path}"], cwd=poc, env=ENV, capture_output=True, text=True,
                                 check=True).stdout
-        if missing := [v for v in tuned(theirs) - tuned((SRC / module).read_text()) if v not in GONE]:
+        if missing := [v for v in tuned(theirs) - tuned((SRC / module).read_text()) if v not in GONE | REPLACED.get(module, set())]:
             lost[module] = missing
     assert not lost, lost

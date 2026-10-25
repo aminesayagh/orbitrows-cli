@@ -78,3 +78,12 @@ def test_a_required_key_to_its_parent_is_never_asked_as_a_matching_record():
     schema = [n.model_dump() for n in schema_from_sqlite(db)]
     assert "t_products" not in conditions.keyed_to(schema, "t_variants")
     assert "t_variants" in conditions.keyed_to(schema, "t_products")   # "products without variants" stays a choice
+
+
+def test_the_tree_follows_from_each_pair_s_and_or():
+    """(black or heavy) and (Orbit or archived): AND across the two groups, OR inside each → one tree; answers no tree
+    fits (only 0-1, 1-2, 2-3 joined by AND) → none, AND kept and flagged."""
+    ands = {(0, 2), (0, 3), (1, 2), (1, 3)}
+    assert grouping.tree_of([0, 1, 2, 3], lambda i, j: (min(i, j), max(i, j)) in ands) == \
+        ("all", [("any", [0, 1]), ("any", [2, 3])])
+    assert grouping.tree_of([0, 1, 2, 3], lambda i, j: (min(i, j), max(i, j)) in {(0, 1), (1, 2), (2, 3)}) is None

@@ -2,15 +2,15 @@
 read's sort, limit and group columns (plan S5, S7). Stages 1–2 are conditions.py.
 
     code  the conditions of a request, a duplicate merged (reserved > quantity is quantity < reserved); one condition
-          is the tree; two or more: every candidate tree (all of them, any of them, and for three the mixed ones),
-          each shown as readable SQL
-    Jev   one call per prompt: which tree the request means (only when there are two or more conditions); for a read
+          is the tree; two or more: each shown as readable SQL
+    Jev   one call per prompt: for each pair of a request's conditions, AND or OR (where they meet in the tree); for a read
           stage 1 found sorted / limited / grouped: the sort column and its direction, the limit (a number of the
           request, read by the parameters algorithm, or one for a singular "the cheapest variant"), the group column
-    code  the AST: {"type": "all" | "any", "children"} or the single condition; order_by [{expression, direction}];
+    code  the AST: the one tree the pairs' answers fit (tree_of), {"type": "all" | "any", "children"}, or the single
+          condition; order_by [{expression, direction}];
           limit; group_by [expression]; below 0.7 an answer is kept and flagged
-    ponytail: one sort column (a second one, "by brand then price", when a case needs it); trees of up to three
-    conditions (more is all / any only)
+    ponytail: one sort column (a second one, "by brand then price", when a case needs it); n·(n-1)/2 pair questions
+    (15 for six conditions, in the one call)
 
 Section "grouping" of cases/<id>.json: {"requests": {"r1": {"where": AST | None, "rows_from"?, "order_by"?,
 "limit"?, "group_by"?, "flagged"?}}, "warnings", "jev"}.
@@ -67,27 +67,38 @@ def merged(predicates: list[dict]) -> list[dict]:
     return out
 
 
-def trees(n: int) -> dict:
-    """Candidate trees over conditions 0…n-1: {"all": ("all", [0, 1]), …}; mixed ones for three conditions."""
-    idx = list(range(n))
-    out = {"all": ("all", idx), "any": ("any", idx)}
-    if n == 3:
-        for pair in combinations(idx, 2):
-            (rest,) = [i for i in idx if i not in pair]
-            out[f"any{pair}_all{rest}"] = ("all", [("any", list(pair)), rest])
-            out[f"all{pair}_any{rest}"] = ("any", [("all", list(pair)), rest])
+def pairs(n: int) -> list[tuple[int, int]]:
+    return list(combinations(range(n), 2))
+
+
+def components(idx, linked) -> list[list[int]]:
+    out, left = [], list(idx)
+    while left:
+        group, todo = [], [left.pop(0)]
+        while todo:
+            group.append(i := todo.pop())
+            todo += [j for j in left if linked(i, j)]
+            left = [j for j in left if j not in todo]
+        out.append(sorted(group))
     return out
+
+
+def tree_of(idx, both):
+    """The one tree whose every pair of conditions meets at an AND node exactly when both(i, j) (a cotree): split into
+    the groups no AND reaches across (OR of them), else the groups no OR reaches across (AND of them). None when the
+    answers fit no tree (a, b, c, d with only a-b, b-c, c-d AND)."""
+    if len(idx) == 1:
+        return idx[0]
+    for kind, linked in (("any", both), ("all", lambda i, j: not both(i, j))):
+        if len(groups := components(idx, linked)) > 1:
+            kids = [tree_of(g, both) for g in groups]
+            return None if None in kids else (kind, kids)
+    return None
 
 
 def build_tree(shape, conds):
     kind, children = shape
     return {"type": kind, "children": [build_tree(c, conds) if isinstance(c, tuple) else conds[c] for c in children]}
-
-
-def describe(shape, texts):
-    kind, children = shape
-    parts = [f"({describe(c, texts)})" if isinstance(c, tuple) else texts[c] for c in children]
-    return f" {'AND' if kind == 'all' else 'OR'} ".join(parts)
 
 
 def state(prompt, requests, schema, section) -> dict:
@@ -106,8 +117,13 @@ def questions(requests, schema, sources, section, params) -> dict:
         ps = merged(g.get("predicates", []))
         if len(ps) > 1:
             texts = [readable(schema, p["column"].split(".")[0], p["condition"]) for p in ps]
-            q[f"{rid}|tree"] = choice(CONTEXT, f"How do the conditions of {said} combine?",
-                                      {k: describe(shape, texts) for k, shape in trees(len(ps)).items()}, TREE_RULES)
+            for i, j in pairs(len(ps)):                       # one local question per pair: the tree follows
+                q[f"{rid}|{i}|{j}"] = choice(
+                    CONTEXT, f"In {said}, take two of its conditions: {texts[i]} · {texts[j]}. Does every record "
+                             "the request keeps meet both, or can a record be kept that meets only one of them?",
+                    {"and": "Every record kept meets both: wherever they sit in the request, they are joined by AND.",
+                     "or": "A record meeting only one of them can be kept: they are, or belong to, alternatives "
+                           "joined by OR."}, TREE_RULES)
         cols = columns_of(schema, tables_of(requests, sources, rid))
         if g.get("sorted"):
             q[f"{rid}|sort"] = choice(CONTEXT, f"By which column does {said} order its records?", cols)
@@ -146,11 +162,11 @@ def _col(key):
 def build(requests, section, params, answers) -> dict:
     out, warnings = {}, []
 
-    def pick(rid, name, labels=None):
+    def pick(rid, name, labels=None, what=None):
         c, probs = answers.get(f"{rid}|{name}", (None, {}))
         if c is not None and probs.get(c, 1) < SURE:
             out[rid]["flagged"] = True
-            warnings.append({"request": rid, "problem": f"{name} uncertain", "answer": c,
+            warnings.append({"request": rid, "problem": f"{what or name} uncertain", "answer": c,
                              "probability": round(probs.get(c, 0), 2)} | question(answers, f"{rid}|{name}", labels))
         return c
 
@@ -165,10 +181,14 @@ def build(requests, section, params, answers) -> dict:
         if len(conds) <= 1:
             out[rid]["where"] = conds[0] if conds else None
         else:
-            shape = trees(len(conds)).get(pick(rid, "tree"))
-            if shape is None:                                 # no answer: every condition, the narrowest reading
-                out[rid]["flagged"] = True
-                warnings.append({"request": rid, "problem": "how the conditions combine: no answer, AND kept"})
+            names = [p["column"].split(".c_")[-1] for p in ps]
+            said = {(i, j): pick(rid, f"{i}|{j}", what=f"how {names[i]} and {names[j]} combine")
+                    for i, j in pairs(len(conds))}
+            shape = None if None in said.values() else tree_of(list(range(len(conds))), lambda i, j: said[
+                min(i, j), max(i, j)] == "and")
+            if shape is None:                                 # no answer, or answers no tree fits: every condition,
+                out[rid]["flagged"] = True                    # the narrowest reading
+                warnings.append({"request": rid, "problem": "how the conditions combine: no tree fits, AND kept"})
                 shape = ("all", list(range(len(conds))))
             out[rid]["where"] = build_tree(shape, conds)
         if g.get("sorted"):
