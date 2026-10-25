@@ -146,3 +146,13 @@ def test_a_changed_entry_is_left_out_of_the_search_until_embedded_again(tmp_path
     catalog.save(db, {**entry, "examples": entry["examples"] + ["keep the scores at 100 at most"]})
     assert Index(db).stale == ["CLAMP_MAX"]                    # its old vectors are never matched
     db.close()
+
+
+def test_the_selector_resolves_only_a_sure_choice_and_says_unsupported_only_when_sure():
+    from orbitrows.pipeline.operations.selector import decided
+    cands = ["CLAMP_MAX", "SET_VALUE"]
+    assert decided(("CLAMP_MAX", {"CLAMP_MAX": 0.9}), cands)["status"] == "resolved"
+    assert decided(("CLAMP_MAX", {"CLAMP_MAX": 0.6}), cands)["status"] == "needs_clarification"   # the user is asked
+    assert decided(("none", {"none": 0.95}), cands)["status"] == "unsupported"                   # honest: no entry
+    assert decided(("none", {"none": 0.6}), cands)["status"] == "needs_clarification"
+    assert decided(None, cands)["status"] == "needs_clarification"                               # no answer (API)

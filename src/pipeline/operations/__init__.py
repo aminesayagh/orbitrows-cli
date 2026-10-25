@@ -7,5 +7,6 @@ Design: vault 02_projects/pilotstore/operation-selection-implementation.
     catalog.py     phase 2: operations.db, the catalog shipped with the CLI (its single source), read-only at run time
     builders.py    phase 2: the registered builders, an entry's resolved parameters → our AST
     index.py       phase 3: each entry's vectors (in the catalog), the matrix, retrieve(text, k)
-    evaluation.py  phase 3: held-out requests and Recall@K (the developer's: it loads the model)
+    evaluation.py  phases 3–4: held-out requests, Recall@K, the selector's choices (the developer's: models, paid)
+    selector.py    phase 4: Jev chooses among the search's top 10, or none (unsupported)
 """

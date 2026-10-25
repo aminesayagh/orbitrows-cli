@@ -3,6 +3,7 @@ request step would extract, and the entry it means (None: no entry supports it, 
 In English, as the CLI's client writes them (an LLM driving it), several kinds of tables, paraphrases and goals. Run by the developer (it loads the models):
 
     uv run python -m orbitrows.pipeline.operations.evaluation [config]   Recall@K per input (the default model)
+    uv run --env-file .env python -m orbitrows.pipeline.operations.evaluation select CALLS.json   phase 4 (paid)
 """
 CASES = [   # (whole request, extracted phrase, entry or None)
     ("Show the variants whose cost is below a third of the price", "cost below a third of the price",
@@ -119,6 +120,11 @@ CASES = [   # (whole request, extracted phrase, entry or None)
 ]
 
 
+def sys_argv_select() -> bool:
+    import sys
+    return sys.argv[1:2] == ["select"]
+
+
 def measure(index, field: int) -> dict:
     """Recall@1/3/5/10 on the supported cases, and the best similarity of each refused one next to the right
     entry's similarity on the supported ones (the gap a rejection threshold would need)."""
@@ -138,7 +144,49 @@ def measure(index, field: int) -> dict:
         "refused median": round(sorted(refused)[len(refused) // 2], 2)}
 
 
-if __name__ == "__main__":
+async def selected(calls_path: str, batch: int = 10) -> dict:
+    """Phase 4's measure (paid: one Jev call per `batch` cases, kept in calls_path for a free replay): the selector's
+    choice against retrieval alone (its top entry)."""
+    import json
+    from pathlib import Path
+    from orbitrows.services.model.client import Recorded, connect as model
+    from .catalog import connect, entries
+    from .index import Index
+    from .selector import select
+    db, path = connect(), Path(calls_path)
+    index, by_id = Index(db), {e["id"]: e for e in entries(db)}
+    calls = json.loads(path.read_text()) if path.exists() else {}
+    out = {}
+    async with Recorded(model(), calls) as jev:
+        for i in range(0, len(CASES), batch):
+            part = {str(j): CASES[j][0] for j in range(i, min(i + batch, len(CASES)))}
+            out |= await select(jev, index, by_id, part)
+            path.write_text(json.dumps(calls))
+    rows = []
+    for j, c in enumerate(CASES):
+        d = out[str(j)]
+        rows.append({"case": c[0], "want": c[2], "top": d["candidates"][0], **d})
+    sup, uns = [r for r in rows if r["want"]], [r for r in rows if not r["want"]]
+    right = [r for r in sup if r.get("operation") == r["want"]]
+    return {"retrieval top-1": round(sum(r["top"] == r["want"] for r in sup) / len(sup), 2),
+            "chosen right": round(len(right) / len(sup), 2),
+            "chosen right and sure": round(sum(r["status"] == "resolved" for r in right) / len(sup), 2),
+            "sure and wrong": sum(r["status"] == "resolved" and r.get("operation") != r["want"] for r in sup),
+            "supported refused": sum(r["status"] == "unsupported" for r in sup),
+            "unsupported refused (sure)": f"{sum(r['status'] == 'unsupported' for r in uns)}/{len(uns)}",
+            "unsupported matched (sure)": sum(r["status"] == "resolved" for r in uns),
+            "needs clarification": sum(r["status"] == "needs_clarification" for r in rows), "rows": rows}
+
+
+if __name__ == "__main__" and sys_argv_select():
+    import asyncio, json
+    found = asyncio.run(selected(__import__("sys").argv[2]))
+    print(json.dumps({k: v for k, v in found.items() if k != "rows"}, indent=1))
+    for r in found["rows"]:
+        if r.get("operation") != r["want"] or r["status"] != ("resolved" if r["want"] else "unsupported"):
+            print(f"{r['status']:20} {str(r.get('operation')):28} want {str(r['want']):28} p={r['probability']} "
+                  f"{r['case'][:70]}")
+elif __name__ == "__main__":
     import sys
     from .catalog import PATH, connect
     from .index import DEFAULT, Index, embed
