@@ -123,6 +123,16 @@ def around(r, key, values, params, m) -> str:
     return f"'…{t[max(0, a - 30):b].strip()}'"                # its words come before it ('over 100', 'heavier than 1 kg')
 
 
+COMPUTED = ("A value computed from the table, not written in the request: a share or a multiple of another column "
+            "('under 30% of the price', 'twice the cost'), a difference between columns, the column's average, lowest "
+            "or highest value, a number of days before today ('in the last 30 days').")
+COMPUTED_RULES = [
+    "The operation is the computation the condition compares with; which records, and showing, deleting or "
+    "updating them, are not part of it.",
+    "Choose none when no candidate computes what the request compares with (a median, a percentile, a rank).",
+]
+
+
 def mentions(cands: dict) -> list[str]:
     """The operands the request writes for a column: step 3's values found in it, its numbers, its dates. Two or
     more are as many conditions ("under 100 or over 300", "the black ones … or the white ones …"), each asked
@@ -469,7 +479,8 @@ def questions_2(db, requests, schema, stage1, values, params, parts) -> dict:
                                                         f"exception or a negation?", NEGATE_RULES)
                 continue
             q[f"{rid}|{key}|value"] = choice(CONTEXT, f"In {said}, which value is {name} compared with (the lower "
-                                                      f"bound for a range)?", opts | {"none": "None of these."})
+                                                      f"bound for a range)?", opts | {"computed": COMPUTED,
+                                                                                      "none": "None of these."})
             q[f"{rid}|{key}|upper"] = choice(CONTEXT, f"In {said}, if {name} is in a range, which value is its upper "
                                                       f"bound?", opts | {"none": "None of these, or not a range."})
             q[f"{rid}|{key}|not"] = yes_no(CONTEXT, f"In {said}, is the condition on {name} written as an exception "
@@ -604,6 +615,10 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                 upper = None
             else:
                 v = pick("value", needs_value)
+                if v == "computed":                           # stage 2b: an operation of the catalog
+                    p = answers.get(f"{rid}|{key}|not", 0.0)
+                    out[rid].setdefault("computed", []).append({"column": key, "operator": op, "negated": p >= 0.5})
+                    continue
                 u = pick("upper", op == "between")
                 operand = cands[v][1] if needs_value and v in cands else None
                 upper = cands[u][1] if op == "between" and u in cands else None
@@ -663,6 +678,94 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                              "dropped": [d["column"] for d in g["dropped"]]})
 
 
+def catalog_candidates(text: str) -> list[str]:
+    """The catalog's conditions closest to a request (operations/index.py: the top 10, conditions only)."""
+    from orbitrows.pipeline.operations.catalog import connect, entries
+    from orbitrows.pipeline.operations.index import Index
+    if "index" not in _CATALOG:
+        db = connect()
+        _CATALOG.update(index=Index(db), entries={e["id"]: e for e in entries(db)})
+    found = [i for i, _ in _CATALOG["index"].retrieve(text, len(_CATALOG["entries"]))]
+    return [i for i in found if _CATALOG["entries"][i]["role"] == "condition"][:10]
+
+
+_CATALOG = {}
+NUMBERS = ("percentage", "number", "duration_days")            # an entry's parameters a request's number fills
+
+
+def questions_2b(requests, schema, section, params) -> dict:
+    """Per computed condition (build_2: Jev's value "computed"): which catalog operation (or none), which other
+    column of its table it is computed from, which of the request's numbers it uses; one call."""
+    from orbitrows.pipeline.operations.selector import described
+    q = {}
+    for r in requests:
+        rid, said = r["id"], f"request {r['id']} ('{r['text']}')"
+        for c in section.get(rid, {}).get("computed", []):
+            key = c["column"]
+            info, ids = column_info(schema, key), catalog_candidates(r["text"])
+            name = f"the {info['sql_name']} column of {key.split('.')[0][2:]}"
+            q[f"{rid}|{key}|operation"] = choice(
+                CONTEXT, f"In {said}, which operation computes the value {name} is compared with?",
+                {i: described(_CATALOG["entries"][i]) for i in ids} | {"none": "None of these."}, COMPUTED_RULES)
+            others = {o: f"the {o.split('.')[1][2:]} column" for o in columns_of(schema, [key.split(".")[0]])
+                      if o != key and comparable(column_info(schema, o)["sql_type"], info["sql_type"])}
+            q[f"{rid}|{key}|other"] = choice(CONTEXT, f"In {said}, which other column is that value computed from?",
+                                             others | {"none": f"None: it is computed from {name} alone, or from "
+                                                               f"no column."})
+            nums = {f"n{i}": p["text"] for i, p in enumerate(params.get(rid, [])) if p["value"] is not None}
+            q[f"{rid}|{key}|number"] = choice(CONTEXT, f"In {said}, which number does that computation use (a "
+                                                       f"percentage, a factor, an amount, a number of days)?",
+                                              nums | {"none": "None."})
+    return q
+
+
+def build_2b(db, requests, schema, section, params, answers) -> None:
+    """Each computed condition built by its operation's builder, from the answers of questions_2b; below SURE a
+    question; none, or an operation whose parameters are not all known: the request is refused (assembly does
+    not build it: never run without one of its conditions)."""
+    from orbitrows.pipeline.operations.builders import BUILDERS
+    out, warnings = section["requests"], section["warnings"]
+    for r in requests:
+        rid = r["id"]
+        for c in out.get(rid, {}).pop("computed", []):
+            key, said = c["column"], f"the condition on {c['column']}"
+
+            def pick(name, labels=None):
+                v, probs = answers.get(f"{rid}|{key}|{name}", (None, {}))
+                if v is not None and probs.get(v, 1) < SURE:
+                    out[rid]["flagged"] = True
+                    warnings.append({"request": rid, "problem": f"{name} of {said} uncertain", "answer": v,
+                                     "probability": round(probs.get(v, 0), 2)}
+                                    | question(answers, f"{rid}|{key}|{name}", labels))
+                return v
+            op_id = pick("operation", {i: e["name"] for i, e in _CATALOG.get("entries", {}).items()})
+            entry = _CATALOG.get("entries", {}).get(op_id)
+            if entry is None:                                  # none, or no answer: honest, never guessed
+                out[rid]["refused"] = f"{said} compares with a computation no operation supports yet"
+                warnings.append({"request": rid, "problem": f"not supported: {out[rid]['refused']}"})
+                continue
+            other, n = pick("other"), pick("number")
+            p = {"column": _col(key), "operator": c["operator"], "column_type": column_info(schema, key)["sql_type"]}
+            if other not in (None, "none"):
+                p["other"] = _col(other)
+            if n not in (None, "none") and n[1:].isdigit() and int(n[1:]) < len(params.get(rid, [])):
+                p |= {x["name"]: params[rid][int(n[1:])]["value"] for x in entry["parameters"] if x["type"] in NUMBERS}
+            missing = [x["name"] for x in entry["parameters"] if x.get("required", True) and x["name"] not in p]
+            if missing:
+                out[rid]["refused"] = f"{said} ({entry['name']}) lacks its {', '.join(missing)}"
+                warnings.append({"request": rid, "problem": f"invalid parameters: {out[rid]['refused']}"})
+                continue
+            cond = through(schema, BUILDERS[entry["builder_key"]](p, entry["config"]), key.split(".")[0])
+            if c["negated"]:
+                cond = {"type": "not", "operand": cond}
+            if err := refused(db, schema, key.split(".")[0], cond):
+                out[rid]["flagged"] = True
+                warnings.append({"request": rid, "problem": f"condition on {key} refused", "error": err})
+            out[rid].setdefault("predicates", []).append({"column": key, "operator": c["operator"],
+                                                          "negated": c["negated"], "condition": cond,
+                                                          "operation": entry["id"]})
+
+
 async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], parts: dict, db=None, model=None) -> dict:
     """sources: step 4's section["requests"]; values: step 3's section["values"]; parts: step 5's
     section["requests"]."""
@@ -680,6 +783,15 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
         except Exception as e:
             a2 = {"error": repr(e)}
         build_2(db, requests, schema, section["requests"], values, params, parts, a2, section)
+        a2b = {}
+        if q := questions_2b(requests, schema, section["requests"], params):   # stage 2b: computed conditions
+            try:
+                a2b = await ask(jev, st, q)
+            except Exception as e:
+                a2b = {"error": repr(e)}
+        build_2b(db, requests, schema, section, params, a2b)
         section["parameters"] = params
+        section["jev"] = {"stage_1": answers, "stage_2": a2, "stage_2b": a2b}
+        return section
     section["jev"] = {"stage_1": answers, "stage_2": a2}
     return section

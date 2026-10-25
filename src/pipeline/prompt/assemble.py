@@ -508,6 +508,9 @@ def assemble(db, schema, requests, operation, sources, parts, conditions, groupi
             warnings.append({"request": rid, "problem": f"not built: statement {st}, table {main}"})
             continue
         g6, c6 = grouping.get(rid, {}), conditions.get(rid, {})
+        if c6.get("refused"):                                 # a condition it cannot build: never run without it
+            warnings.append({"request": rid, "problem": f"not built: {c6['refused']}"})
+            continue
         ast = statement(r, st, main, schema, sources.get(rid, {}), parts.get(rid, {}), c6, g6, items, warnings,
                         typed_columns)
         if ast is None:

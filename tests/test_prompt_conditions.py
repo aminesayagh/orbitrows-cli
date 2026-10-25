@@ -100,3 +100,46 @@ def test_two_numbers_on_one_column_are_two_conditions(store):
                   f"{key}|n1|op": (">", {">": 0.95}), f"{key}|n1|not": 0.02}, numbers=(15, 25),
                  tree={"r1|0|1": ("or", {"or": 0.95})})
     assert rows == [["A", 10.0], ["C", 30.0], [None, 5.0]], rows       # B (20) is between: kept out
+
+
+@pytest.fixture
+def catalogued(monkeypatch):
+    """The shipped catalog's entries, its search stubbed (no model): its candidates are given."""
+    from orbitrows.pipeline.operations import catalog
+    db = catalog.connect()
+    monkeypatch.setitem(conditions._CATALOG, "entries", {e["id"]: e for e in catalog.entries(db)})
+    monkeypatch.setattr(conditions, "catalog_candidates", lambda text: ["COMPARE_TABLE_AVERAGE", "CLAMP_MAX"])
+
+
+def computed(db, schema, text, operation):
+    """Stages 1, 2 and 2b for "price above a computed value", the operation chosen as given → assembly's output."""
+    requests = [{"id": "r1", "text": text, "statement": "select"}]
+    sources = {"r1": {"from": {"type": "database_table", "reference": "t_variants"}, "reads": []}}
+    key = "r1|t_variants.c_price"
+    section = conditions.build(requests, schema, sources, [], {"r1_all": 0.02, "r1_chooses_t_variants.c_price": 0.97})
+    conditions.build_2(db, requests, schema, section["requests"], [], {"r1": []}, {},
+                       {f"{key}|op": (">", {">": 0.95}), f"{key}|value": ("computed", {"computed": 0.9}),
+                        f"{key}|upper": ("none", {"none": 0.95}), f"{key}|not": 0.02}, section)
+    asked = conditions.questions_2b(requests, schema, section["requests"], {"r1": []})
+    assert set(asked) == {f"{key}|operation", f"{key}|other", f"{key}|number"}
+    conditions.build_2b(db, requests, schema, section, {"r1": []},
+                        {f"{key}|operation": (operation, {operation: 0.95}), f"{key}|other": ("none", {"none": 0.9}),
+                         f"{key}|number": ("none", {"none": 0.9})})
+    tree = grouping.build(requests, section, {}, {})["requests"]
+    return assemble.assemble(db, schema, requests, {"r1": {"statement": "select"}}, sources, {"r1": {"outputs": "all"}},
+                             section["requests"], tree)
+
+
+def test_a_value_computed_from_the_table_is_built_by_the_catalog_s_operation(store, catalogued):
+    db, schema = store
+    out = computed(db, schema, "variants priced above the average", "COMPARE_TABLE_AVERAGE")
+    assert not out["errors"], out
+    rows = sorted((list(r) for r in db.execute(out["program"][0]["sql"][0])), key=str)
+    assert rows == [["B", 20.0], ["C", 30.0]], rows               # the average of 10, 20, 30 and 5 is 16.25
+
+
+def test_a_computation_no_operation_supports_leaves_the_request_unbuilt(store, catalogued):
+    """"above the median": none of the catalog → not built (never run without its condition), said honestly."""
+    db, schema = store
+    out = computed(db, schema, "variants priced above the median", "none")
+    assert out["program"] == [] and any("no operation supports" in q["problem"] for q in out["questions"]), out
