@@ -16,7 +16,10 @@ PORTED = {f"pipeline/prompt/{p.name}": f"v2/prompt_ast/{p.name}" for p in sorted
           if p.name not in ("pipeline.py", "asking.py", "source_route.py")} | {  # source_route is new, not a PoC port
     "sql/dml.py": "v2/ast/dml.py", "sql/sql.py": "v2/ast/sql.py", "units/parameters.py": "v2/units/parameters.py"}
 GONE = {"fastino/gliner2-multi-v1",                          # split.py's model name: the loader is services/extractor now
-        "coref_work"}                                        # coref.py's work folder: a private temporary one per process now
+        "coref_work",                                        # coref.py's work folder: a private temporary one per process now
+        'SELECT DISTINCT "', '" FROM "', '" WHERE "', '" IS NOT NULL', '" IS NOT NULL LIMIT ',   # a read of the
+        '" IS NOT NULL LIMIT 50', '" IS NOT NULL LIMIT 13', '" IS NOT NULL AND TRIM("',      # store's rows: the
+        '") != \'\' LIMIT '}                                # pipeline reads the profile instead (2026-10-25)
 REPLACED = {"pipeline/prompt/grouping.py": {   # the one tree question over every candidate tree (mixed ones for three
     "all", "any", "_all", "_any", "|tree", "How do the conditions of ", " combine?", "tree", "AND", "OR",  # conditions
     "how the conditions combine: no answer, AND kept"},  # only): one AND / OR question per pair now, any size

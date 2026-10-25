@@ -31,6 +31,7 @@ import re
 
 from text_to_num import alpha2digit
 
+from orbitrows.pipeline.store.profile import listed
 from orbitrows.sql.sql import check, program
 from . import SURE
 from .asking import question
@@ -139,10 +140,9 @@ def texts(db, schema, r: dict, values: list[dict], column: tuple | None) -> list
     if column:
         d = _schema(schema)[column[0]]
         name = next(c["sql_name"] for c in d["columns"] if c["column_id"] == column[1])
-        stored = db.execute(f'SELECT DISTINCT "{name}" FROM "{d["sql_name"]}" WHERE "{name}" IS NOT NULL LIMIT 13'
-                            ).fetchall()
+        stored = listed(db, d["sql_name"], name)              # the profile's values, never the rows
         if len(stored) <= 12:
-            out += [s for (s,) in stored if isinstance(s, str)]
+            out += [s for s in stored if isinstance(s, str)]
     seen = list(quoted)
     for x in out:
         x = x.strip(" ,.;:")

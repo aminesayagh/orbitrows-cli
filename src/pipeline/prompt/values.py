@@ -30,6 +30,7 @@ from rapidfuzz import fuzz
 
 from . import SURE
 from .asking import question
+from orbitrows.pipeline.store.profile import listed
 from orbitrows.services.model.client import ask, choice, yes_no
 
 LABELS = {                                                    # one call each (split.py: long label sets return nothing)
@@ -47,7 +48,6 @@ TYPO = 85                                                     # rapidfuzz ratio 
 SEMANTIC_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"   # v1's row matching (poc.py)
 SEMANTIC_MIN = 0.3                                            # v1's SEMANTIC_MIN: below, no candidate at all
 SEMANTIC_TOP = 3                                              # the right value was always in the top 3 when tested
-VOCAB_MAX = 50                                                # a column with few distinct values: colors, statuses…
 SCOPE_MIN = 0.8                                               # limits SQLite's search to one table: kept at 0.8, the
                                                               # 0.7 measurement (prompt_ast/__init__.py) did not cover it
 
@@ -131,7 +131,7 @@ def search(db, schema: list[dict], text: str, table: str | None = None,
     want, found = text.casefold(), {"exact": [], "typo": [], "contains": []}
     for tid, tname, cid, cname in text_columns(schema, table):
         hits = {"exact": [], "typo": [], "contains": []}
-        for (v,) in db.execute(f'SELECT DISTINCT "{cname}" FROM "{tname}" WHERE "{cname}" IS NOT NULL'):
+        for v in listed(db, tname, cname):                   # the profile's values: the rows are never read
             have = str(v).casefold()
             if have == want:
                 hits["exact"].append(v)
@@ -145,7 +145,7 @@ def search(db, schema: list[dict], text: str, table: str | None = None,
     return next((found[k] for k in kinds if found[k]), [])
 
 
-_ENCODER, _POOL = None, {}
+_ENCODER, _VECTORS = None, {}
 
 
 def meaning(db, schema: list[dict], text: str, near: str | None = None) -> list[dict]:
@@ -155,21 +155,16 @@ def meaning(db, schema: list[dict], text: str, near: str | None = None) -> list[
     embeddings rank, they never decide ("brouillon" ranks draft third). near: where call 1 places the value (a
     column "t_x.c_y" or a table "t_x"), searched first; codes are never compared (a digit or under 3 letters: "L",
     "MUG-RED"): they have no meaning to translate and sit close to everything.
-    ponytail: every vocabulary value is embedded once per process; a vector index when stores grow."""
+    The values are the profile's (a column with few of them: colours, statuses); each is embedded once per process."""
     global _ENCODER
     if _ENCODER is None:
         from sentence_transformers import SentenceTransformer
         _ENCODER = SentenceTransformer(SEMANTIC_MODEL)
-    if not _POOL:
-        for tid, tname, cid, cname in text_columns(schema):
-            vals = [v for (v,) in db.execute(f'SELECT DISTINCT "{cname}" FROM "{tname}" WHERE "{cname}" IS NOT NULL '
-                                             f'AND TRIM("{cname}") != \'\' LIMIT {VOCAB_MAX + 1}')]
-            if len(vals) <= VOCAB_MAX:
-                _POOL.update({(f"{tid}.{cid}", str(v)): None for v in vals
-                              if not code(str(v))})
-        keys = list(_POOL)
-        for k, vec in zip(keys, _ENCODER.encode([v for _, v in keys], normalize_embeddings=True)):
-            _POOL[k] = vec
+    keys = [(f"{tid}.{cid}", str(v)) for tid, tname, cid, cname in text_columns(schema)
+            for v in listed(db, tname, cname) if not code(str(v))]
+    if new := sorted({v for _, v in keys} - set(_VECTORS)):
+        _VECTORS.update(zip(new, _ENCODER.encode(new, normalize_embeddings=True)))
+    _POOL = {k: _VECTORS[k[1]] for k in keys}
     queries = list(dict.fromkeys([text] + re.findall(r"[^\W\d_]{3,}", text)))
     qv = _ENCODER.encode(queries, normalize_embeddings=True)
     pool = {k: v for k, v in _POOL.items() if near and (k[0] == near or k[0].split(".")[0] == near)} or _POOL
@@ -202,7 +197,7 @@ def within(db, schema: list[dict], text: str) -> list[dict]:
     ponytail: one stored value per phrase; two ("the red Orbit tees") need a split, add when a case needs it."""
     hits = []
     for tid, tname, cid, cname in text_columns(schema):
-        for (v,) in db.execute(f'SELECT DISTINCT "{cname}" FROM "{tname}" WHERE "{cname}" IS NOT NULL'):
+        for v in listed(db, tname, cname):
             v = str(v)
             if len(re.sub(r"[\W\d_]", "", v)) >= 3 and re.search(rf"\b{re.escape(v.casefold())}\b", text.casefold()):
                 hits.append((len(v), f"{tid}.{cid}", v))

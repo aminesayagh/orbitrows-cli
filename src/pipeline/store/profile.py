@@ -14,6 +14,7 @@ counted over the whole file: numbers compared as numbers, text by its last run o
 the same (A-1001, A-1002…). Evidence of an identifier assigned in order; a quantity jumps around (35, 7, 140).
 Large tables are profiled on MAX_ROWS rows spread over the file ("profiled" says how many).
 """
+import json
 import re
 from collections import Counter
 
@@ -87,3 +88,73 @@ def named(column: dict, header: list) -> dict:
 def overlap(a: list, b: list) -> float:
     a, b = {x for x in a if x}, {x for x in b if x}
     return round(len(a & b) / len(a), 2) if a else 0.0
+
+
+# ---- the stored profile: what the prompt pipeline knows of a table's values --------------------------------------
+# After a message is sent, the prompt pipeline never reads a table's rows: the generated SQL is the only thing that
+# does. What it knows of the values (a status column's statuses, a date column, an upload's number cells) is this
+# profile, counted with SQL at import or upload and again after each change the session runs (refresh), kept in
+# _profile next to the tables (a savepoint's undo restores it with them).
+
+LISTED = 50                                                   # up to this many distinct values, they are kept
+SAMPLES = 5
+DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+NUMBER = re.compile(r"[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)")    # an upload's number cell: a . for decimals, no unit
+WHOLE = re.compile(r"[+-]?[0-9]+(\.0*)?")
+
+
+def refresh(db, tables=None) -> None:
+    """Count the profile of every column of `tables` (all the store's and uploads' tables when None) and keep it."""
+    db.execute("CREATE TABLE IF NOT EXISTS _profile (table_name TEXT NOT NULL, column_name TEXT NOT NULL, "
+               "profile_json TEXT NOT NULL, PRIMARY KEY (table_name, column_name)) STRICT")
+    uploads = {n for (n,) in db.execute("SELECT sql_name FROM _incoming_tables")} if db.execute(
+        "SELECT 1 FROM sqlite_schema WHERE name = '_incoming_tables'").fetchone() else set()
+    if tables is None:
+        tables = [n for (n,) in db.execute("SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE "
+                                           "'\\_%' ESCAPE '\\' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'")]
+    for t in tables:
+        db.execute("DELETE FROM _profile WHERE table_name = ?", (t,))
+        for _, c, typ, *_ in db.execute(f'PRAGMA table_info("{t}")').fetchall():
+            db.execute("INSERT INTO _profile VALUES (?, ?, ?)", (t, c, json.dumps(counted(db, t, c, t in uploads),
+                                                                                  ensure_ascii=False)))
+
+
+def counted(db, t: str, c: str, upload: bool) -> dict:
+    filled = f'TRIM(COALESCE("{c}", \'\')) <> \'\''
+    rows, distinct = db.execute(f'SELECT COUNT(*), COUNT(DISTINCT CASE WHEN {filled} THEN "{c}" END) FROM "{t}"').fetchone()
+    empty, = db.execute(f'SELECT COUNT(*) FROM "{t}" WHERE NOT {filled}').fetchone()
+    top = db.execute(f'SELECT "{c}", COUNT(*) AS n FROM "{t}" WHERE {filled} GROUP BY "{c}" ORDER BY n DESC LIMIT 3'
+                     ).fetchall()
+    out = {"rows": rows, "empty": empty, "distinct": distinct, "max_repeat": top[0][1] if top else 0}
+    if repeats := [v for v, n in top if n > 1]:
+        out["repeats"] = repeats
+    if 0 < distinct <= LISTED:
+        out["values"] = sorted((v for (v,) in db.execute(f'SELECT DISTINCT "{c}" FROM "{t}" WHERE {filled}')), key=str)
+        if all(isinstance(v, str) and DATE.fullmatch(v) for v in out["values"]):
+            out["dates"] = True
+    elif distinct and not db.execute(f'SELECT 1 FROM "{t}" WHERE {filled} AND NOT ("{c}" GLOB '
+                                     "'[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]') LIMIT 1").fetchone():
+        out["dates"] = True
+    if upload:                                                # every cell is TEXT: what its cells hold
+        cells = [str(v).strip() for (v,) in db.execute(f'SELECT DISTINCT TRIM("{c}") FROM "{t}" WHERE {filled}')]
+        out["cells"] = "TEXT" if not cells or not all(NUMBER.fullmatch(v) for v in cells) else \
+            "INTEGER" if all(WHOLE.fullmatch(v) for v in cells) else "REAL"
+        out["not_whole"] = [v for v in cells if not WHOLE.fullmatch(v)][:3]
+        out["not_number"] = [v for v in cells if not NUMBER.fullmatch(v)][:3]
+        out["samples"] = [v for (v,) in db.execute(f'SELECT "{c}" FROM "{t}" WHERE {filled} LIMIT {SAMPLES}')]
+    return out
+
+
+def facts(db, table: str, column: str) -> dict:
+    """A column's stored profile; {} when it has none (a store never profiled: nothing is known of its values)."""
+    if not db.execute("SELECT 1 FROM sqlite_schema WHERE name = '_profile'").fetchone():
+        return {}
+    row = db.execute("SELECT profile_json FROM _profile WHERE table_name = ? AND column_name = ?",
+                     (table, column)).fetchone()
+    return json.loads(row[0]) if row else {}
+
+
+def listed(db, table: str, column: str) -> list:
+    """The column's values when it has few (LISTED at most: statuses, colours, brands), else []: a long text or a
+    column of many values is never searched for a value."""
+    return facts(db, table, column).get("values", [])

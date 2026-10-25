@@ -17,6 +17,7 @@ from contextlib import closing, contextmanager
 from pathlib import Path
 
 from orbitrows.pipeline.store import roles
+from orbitrows.pipeline.store.profile import refresh
 from orbitrows.pipeline.store.schema import check, creates, load, nodes, q, table_at
 from orbitrows.services.storage import registry
 
@@ -177,6 +178,7 @@ def write(store_id: str, store: dict, rows: dict) -> list[dict]:
             for sql in SCHEMA.split(";")[:-1]:              # not executescript: it would COMMIT first
                 db.execute(sql)
             _classify(db, store)
+            refresh(db)                                       # what the prompt pipeline knows of the values
             diffs += check(db, store, rows)                   # the proof, on this file, before COMMIT
             if lost := [d for d in diffs if d["kind"] == "value"]:
                 db.execute("ROLLBACK")

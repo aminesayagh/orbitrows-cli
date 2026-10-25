@@ -9,6 +9,7 @@ import math
 import sqlite3
 from pathlib import Path
 
+from orbitrows.pipeline.store.profile import facts
 from orbitrows.services.storage import registry
 from orbitrows.sql.dml import Arithmetic, Column, Lit, Negate
 
@@ -121,8 +122,7 @@ def plan(db: sqlite3.Connection, upload_id: int, pair: tuple[int, int]) -> dict:
         elif formula := lookup(db, s, i_unit, s_unit):
             found["known"].append({"pair": pair, "formula": formula})
         else:
-            samples = [v for (v,) in db.execute(
-                f'SELECT "{name}" FROM "{table}" WHERE TRIM(COALESCE("{name}", \'\')) != \'\' LIMIT 5')]
+            samples = facts(db, table, name).get("samples", [])   # the upload's profile: its rows are never read
             found["needs"].append({"pair": pair, "from": i_unit, "to": s_unit, "kind": i_kind or s_kind,
                                    "samples": samples})
     return found

@@ -14,8 +14,8 @@ the prompt; Jev still decides each phrase's role and picks among candidates (val
              its values and column names), never a hand-made word list
     keep     non-overlapping spans: word-level matches first, the longest stored value (maximal match), the best
              tier, the shortest span; then meanings, the closest first
-    ponytail: distinct values are read per process from SQLite; a store with large columns needs an index (FTS5 /
-    BM25 as CodeS does) before this scan
+    values   the profile's (pipeline/store/profile.py: LISTED at most per column), never the table's rows: a column of
+             many values or of long texts is not searched
 """
 import re
 import unicodedata
@@ -23,6 +23,7 @@ import unicodedata
 import numpy as np
 from rapidfuzz import fuzz
 
+from orbitrows.pipeline.store.profile import listed
 from .values import SEMANTIC_MODEL, TYPO, code, text_columns
 
 MAX_WORDS = 3
@@ -39,25 +40,30 @@ def fold(t: str) -> str:
 
 
 def _store(db, schema):
-    """{column: [values]}, the short-value columns, and the embeddings (values, hubness), once per process."""
-    if "values" in _CACHE:
-        return _CACHE
+    """{column: [values]} (the profile's: a column of many values or long texts has none, never searched), the
+    short-value columns, and the embeddings (values, hubness); the encoder and each text's vector once per process."""
     cols = {}
     for tid, tname, cid, cname in text_columns(schema):
-        cols[f"{tid}.{cid}"] = [str(v) for (v,) in db.execute(
-            f'SELECT DISTINCT "{cname}" FROM "{tname}" WHERE "{cname}" IS NOT NULL AND TRIM("{cname}") != \'\'')]
+        if vals := [str(v) for v in listed(db, tname, cname)]:
+            cols[f"{tid}.{cid}"] = vals
     short = {k for k, vs in cols.items() if vs and all(len(v.split()) <= 4 and "@" not in v for v in vs)}
-    from sentence_transformers import SentenceTransformer
-    enc = SentenceTransformer(SEMANTIC_MODEL)
+    if "enc" not in _CACHE:
+        from sentence_transformers import SentenceTransformer
+        _CACHE.update(enc=SentenceTransformer(SEMANTIC_MODEL), vectors={})
     pool = [(k, v) for k in sorted(short) for v in cols[k] if not code(v)]
-    pv = enc.encode([v for _, v in pool], normalize_embeddings=True)
     vocab = sorted({w for vs in cols.values() for v in vs for w in WORD.findall(v) if len(w) >= 3} |
                    {c["sql_name"] for t in schema for c in t["definition"]["columns"]} |
                    {t["definition"]["sql_name"] for t in schema})
-    vv = enc.encode(vocab, normalize_embeddings=True)
-    hub = np.sort(vv @ pv.T, axis=0)[-CSLS_K:].mean(axis=0)  # each value's closeness to its nearest store words
-    _CACHE.update(values=cols, short=short, enc=enc, pool=pool, pv=pv, hub=hub)
-    return _CACHE
+    pv, vv = vectors([v for _, v in pool]), vectors(vocab)
+    hub = np.sort(vv @ pv.T, axis=0)[-CSLS_K:].mean(axis=0) if pool else np.zeros(0)   # closeness to store words
+    return {"values": cols, "short": short, "enc": _CACHE["enc"], "pool": pool, "pv": pv, "hub": hub}
+
+
+def vectors(texts: list[str]):
+    known = _CACHE["vectors"]
+    if new := sorted(set(texts) - set(known)):
+        known.update(zip(new, _CACHE["enc"].encode(new, normalize_embeddings=True)))
+    return np.array([known[t] for t in texts]).reshape(len(texts), -1)
 
 
 def spans(prompt: str, requests: list[dict]) -> list[tuple[int, int]]:

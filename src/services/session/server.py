@@ -31,6 +31,7 @@ import traceback
 from datetime import UTC, datetime
 from pathlib import Path
 
+from orbitrows.pipeline.store.profile import refresh
 from orbitrows.services import questions
 from orbitrows.services.storage import registry
 
@@ -44,6 +45,7 @@ QUESTION = ("id", "request", "step", "problem")              # a question's fiel
 # a statement that changes the tables' structure: its first keyword, after blanks and comments (one statement each:
 # sqlite3 runs no more); refused for now (user, 2026-10-21)
 STRUCTURE = re.compile(r"(?:\s|--[^\n]*|/\*.*?\*/)*(?:CREATE|ALTER|DROP)\b", re.IGNORECASE | re.DOTALL)
+WRITES = re.compile(r'\s*(?:UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+"([^"]+)"', re.IGNORECASE)   # the table it changes
 
 
 def folder(store_id: str):
@@ -159,14 +161,6 @@ class Session:
         self.db.execute(f"ROLLBACK TO c{n}")
         self.db.execute(f"RELEASE c{n}")
 
-    @staticmethod
-    def forget() -> None:
-        """The pipeline's caches of the store's values (searched by the next message) were built from the data as it
-        was: a change or an undo makes them stale, so the next message rebuilds them."""
-        from orbitrows.pipeline.prompt import linker, values  # here: heavy imports a stub handler doesn't need
-        linker._CACHE.clear()
-        values._POOL.clear()
-
     def cancel(self, n: int, error: str) -> dict:
         self.drop(n)
         return {"ok": False, "error": f"{error}. Nothing was changed."}
@@ -280,6 +274,7 @@ class Session:
         if not ddl and self.db.total_changes == before:
             self.drop(n)
             return reply
+        refresh(self.db, sorted({m[1] for s in statements if (m := WRITES.match(s))}))   # in c<n>: undone with it
         try:
             # once a request changes columns, their _store_columns.edited_by will be this row's id
             self.db.execute("INSERT INTO _history (created_at, name, prompt, json_ast, sql, classification_done) "
@@ -292,7 +287,6 @@ class Session:
             return self.cancel(n, f"The change couldn't be recorded: {e}")
         self.count = n
         self.changes.append((n, text))
-        self.forget()
         return reply | {"n": n}
 
     def incoming(self, folder: Path) -> dict:
@@ -303,6 +297,7 @@ class Session:
         self.db.execute(f"SAVEPOINT c{n}")
         try:
             written = incoming.upload(self.db, self.dir, folder)
+            refresh(self.db, [written["table"]])
             self.write({"n": n, "prompt": written["name"], "sql": written["sql"], "at": registry.now()})
         except (sqlite3.Error, OSError, ValueError, KeyError) as e:   # ValueError: a bad AST, bad JSON too
             return self.cancel(n, f"The upload couldn't be written: {type(e).__name__}: {e}")
@@ -332,8 +327,6 @@ class Session:
         self.changes.pop()
         if upload := self.uploads.pop(n, None):              # its CSV, never placed, goes with it
             shutil.rmtree(upload[0], ignore_errors=True)
-        else:
-            self.forget()
         return {"ok": True, "undone": n, "prompt": prompt}
 
     def end(self) -> str | None:

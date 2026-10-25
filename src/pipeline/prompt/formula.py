@@ -8,6 +8,7 @@ numbers with units → pass 1 records → pass 2 map → the formula replaces st
 branch leaves step 6's WHERE (it lives in the CASE); an unclear one, or a map pass 2 cannot close, is a question and
 step 5's template value stays.
 """
+from orbitrows.pipeline.store.profile import facts, listed
 from . import SURE
 from .asking import question
 from .conditions import column_info, fits
@@ -17,7 +18,6 @@ from .operations_map import resolve
 from .parts import coltype, parents
 
 NUMERIC = ("INTEGER", "REAL")
-_KINDS = {}
 
 
 def stored_values(schema, db, key, most=12) -> list[str]:
@@ -25,28 +25,21 @@ def stored_values(schema, db, key, most=12) -> list[str]:
     d = {t["definition"]["table_id"]: t["definition"] for t in schema}
     tid, cid = key.split(".")
     name = next(c["sql_name"] for c in d[tid]["columns"] if c["column_id"] == cid)
-    vals = [v for (v,) in db.execute(f'SELECT DISTINCT "{name}" FROM "{d[tid]["sql_name"]}" WHERE "{name}" IS NOT NULL '
-                                     f'LIMIT {most + 1}') if isinstance(v, str)]
-    return vals if len(vals) <= most else []
+    vals = listed(db, d[tid]["sql_name"], name)              # the profile's values, never the rows
+    return [v for v in vals if isinstance(v, str)] if len(vals) <= most else []
 
 
 def column_kind(schema, db, key) -> str:
-    """number · date · text. A TEXT column whose stored values are all dates (YYYY-MM-DD) is a date column; read once
-    per store and process (store-only work, not per prompt)."""
-    if key in _KINDS:
-        return _KINDS[key]
+    """number · date · text. A TEXT column whose stored values are all dates (YYYY-MM-DD, as its profile counted
+    them) is a date column."""
     typ, _ = coltype(schema, key)
     kind = "number" if typ in NUMERIC else "text"
     if typ == "TEXT":
         d = {t["definition"]["table_id"]: t["definition"] for t in schema}
         tid, cid = key.split(".")
         name = next(c["sql_name"] for c in d[tid]["columns"] if c["column_id"] == cid)
-        vals = [v for (v,) in db.execute(f'SELECT DISTINCT "{name}" FROM "{d[tid]["sql_name"]}" WHERE "{name}" IS NOT '
-                                         f'NULL LIMIT 50')]
-        if vals and all(isinstance(v, str) and len(v) == 10 and v[4] == "-" and v[7] == "-" and v[:4].isdigit()
-                        for v in vals):
+        if facts(db, d[tid]["sql_name"], name).get("dates"):   # the profile: every value YYYY-MM-DD
             kind = "date"
-    _KINDS[key] = kind
     return kind
 
 

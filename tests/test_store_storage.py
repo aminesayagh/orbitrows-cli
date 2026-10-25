@@ -12,7 +12,7 @@ from orbitrows.services.storage import store as storage
 
 CASES = Path(__file__).parent / "fixtures" / "cases"
 EXPECTED = json.loads((CASES / "store_schema_expected.json").read_text())
-OWN = {"_store_tables", "_column_context", "_store_columns", "_export", "_history"}
+OWN = {"_store_tables", "_column_context", "_store_columns", "_export", "_history", "_profile"}
 
 
 @pytest.fixture(autouse=True)

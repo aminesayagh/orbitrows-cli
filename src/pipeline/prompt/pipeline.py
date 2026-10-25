@@ -17,9 +17,9 @@ has one (Paused, as the store import); once answered (client.settle), it runs ag
 recorded answers (client.Recorded). Every other warning is a notice: shown, and the pipeline goes on.
 """
 import json
-import re
 
 from orbitrows.pipeline.merge import convert
+from orbitrows.pipeline.store.profile import facts
 from orbitrows.pipeline.store.run import Paused, _Ordered, first_questions
 from orbitrows.services.extractor import client as extractor
 from orbitrows.services.storage.store import KINDS, ROLES
@@ -27,8 +27,6 @@ from orbitrows.sql.ddl import schema_from_sqlite
 
 from . import assemble, conditions, coref, formula, grouping, operation, parts, request_graph, source_route, sources, values
 
-NUMBER = re.compile(r"[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)")    # an upload's number cell: a . for decimals, no unit
-WHOLE = re.compile(r"[+-]?[0-9]+(\.0*)?")                     # into an INTEGER column without a formula
 
 
 def store_of(db) -> list[dict]:
@@ -92,11 +90,7 @@ def cell_type(db, table: str, column: str) -> str:
                       "WHERE t.sql_name = ? AND ic.sql_name = ?", (table, column)).fetchone()
     if kind and kind[0] is not None and KINDS[kind[0]] in ("record_reference", "model_reference"):
         return "TEXT"
-    cells = [str(v).strip() for (v,) in db.execute(f'SELECT DISTINCT "{column}" FROM "{table}" '
-                                                   f'WHERE TRIM(COALESCE("{column}", \'\')) <> \'\'')]
-    if not cells or not all(NUMBER.fullmatch(v) for v in cells):
-        return "TEXT"
-    return "INTEGER" if all(WHOLE.fullmatch(v) for v in cells) else "REAL"
+    return facts(db, table, column).get("cells", "TEXT")      # counted at upload: the rows are never read
 
 
 def keyed(db, upload: int, tables: dict) -> list[tuple]:
@@ -112,19 +106,14 @@ def keyed(db, upload: int, tables: dict) -> list[tuple]:
 
 
 def unique(db, upload: int, table: str, key: str) -> bool:
-    """Is the upload's key on one row each (one-to-one)? As its profile counted it (max_repeat); an upload saved
-    without one: its rows."""
-    (extra,) = db.execute("SELECT extra_json FROM _incoming_columns WHERE table_id = ? AND sql_name = ?",
-                          (upload, key)).fetchone()
-    found = json.loads(extra or "{}").get("profile", {}).get("max_repeat")
-    return found == 1 if found is not None else not repeated(db, table, key)
+    """Is the upload's key on one row each (one-to-one)? As its profile counted it (max_repeat)."""
+    return not repeated(db, table, key)
 
 
 def repeated(db, table: str, key: str) -> str | None:
     """Why the upload can't be matched on `key`: a key value on several rows (the store's tables don't enforce
     their keys, so an insert would add the record twice and an update would take one row of them), or None."""
-    found = [v for (v,) in db.execute(f'SELECT "{key}" FROM "{table}" WHERE TRIM(COALESCE("{key}", \'\')) <> \'\' '
-                                      f'GROUP BY "{key}" HAVING COUNT(*) > 1 LIMIT 3')]
+    found = facts(db, table, key).get("repeats", [])          # the profile's: the rows are never read
     return found and (f"{key} of {table} repeats {', '.join(map(repr, found))}: each record's key must be on one row "
                       "only, so its rows can't be matched to the store's records; nothing is guessed. Remove the "
                       "repeated rows, then upload it again.") or None
@@ -177,9 +166,7 @@ def reader(db, store: list[dict], incoming: list[dict], asked: list, errors: lis
         formula = next((x["formula"] for x in plan["known"] if x["pair"] == (i, s)), None)
         if typ in ("INTEGER", "REAL"):                        # CAST('$5' AS REAL) is 0: checked here, never guessed
             whole = typ == "INTEGER" and not formula          # 12.5 into an INTEGER column: refused, not rounded
-            bad = [v for (v,) in db.execute(f'SELECT DISTINCT TRIM("{name}") FROM "{names[upload]}" '
-                                            f'WHERE TRIM(COALESCE("{name}", \'\')) <> \'\'')
-                   if not (WHOLE if whole else NUMBER).fullmatch(v)]
+            bad = facts(db, names[upload], name).get("not_whole" if whole else "not_number", [])   # its profile
             if bad:
                 errors.append({"request": rid, "stage": "conversion", "error": (
                     f"{name} of {names[upload]} has cells that aren't plain {'whole ' * whole}numbers "
@@ -238,10 +225,9 @@ async def choose(model, db, prompt: str, wanted: list[tuple], warnings: list) ->
         return {}
     (name,) = db.execute("SELECT sql_name FROM _incoming_tables WHERE id = ?", (upload,)).fetchone()
     columns = sorted({c for *_, found in wanted for c in found})
-    cells = ", ".join(f'"{c[1]}"' for c in columns)
-    rows = db.execute(f'SELECT {cells} FROM "{name}" LIMIT 5').fetchall()
-    state = {"incoming": {"table": name, "columns": [{"name": c[1], "header": c[2]} for c in columns],
-                          "rows": [list(r) for r in rows]}}
+    state = {"incoming": {"table": name, "columns": [{"name": c[1], "header": c[2],         # the profile's samples
+                                                      "samples": facts(db, name, c[1]).get("samples", [])}
+                                                     for c in columns]}}
     answers = await ask(model, state, questions)
     out = {}
     for key, s, upload, found in wanted:
