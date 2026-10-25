@@ -65,7 +65,11 @@ REPLACED = {"pipeline/prompt/grouping.py": {   # the one tree question over ever
     # 2026-10-25: step 5's templates and their limits are the operations catalog's changes now (a number's change
     # is the formula's)
     "pipeline/prompt/parts.py": {"SQLite, on all rows", *PARTS_TEMPLATES},
-    "sql/sql.py": {"SAVEPOINT ast_check", "ROLLBACK TO ast_check", "RELEASE ast_check"}}
+    "sql/sql.py": {"SAVEPOINT ast_check", "ROLLBACK TO ast_check", "RELEASE ast_check"},
+    # 2026-10-25: each formula step's SQL is written by the operations catalog's builder (one SQL per operation)
+    "pipeline/prompt/operations_map.py": {"type", "value", "operator", "left", "right", "arithmetic", "name",
+                                          "arguments", "function", "concat", "round", "upper", "parts", "date",
+                                          "least", "greatest", "coalesce", "substr"}}
 TRIMMED = {"pipeline/prompt/operations.py"}   # the PoC's option A (word rules), never called, removed 2026-10-25: its
 # kept definitions (the formula's helpers) are compared, each as the PoC wrote it
 

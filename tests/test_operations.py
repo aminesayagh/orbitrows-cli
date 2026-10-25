@@ -95,6 +95,9 @@ CHECKS = {
     "AVERAGE_VALUES": ("variants", {"column": PRICE}, "SELECT AVG(price_mad) FROM variants"),
     "MINIMUM_VALUE": ("variants", {"column": PRICE}, "SELECT MIN(price_mad) FROM variants"),
     "MAXIMUM_VALUE": ("variants", {"column": PRICE}, "SELECT MAX(price_mad) FROM variants"),
+    "DIVIDE_BY": ("variants", {"column": PRICE, "divisor": 4}, "SELECT variant_id, price_mad / 4.0 FROM variants"),
+    "CAPITALIZE": ("products", {"column": col("products", "description")},
+                   "SELECT product_id, UPPER(SUBSTR(description, 1, 1)) || SUBSTR(description, 2) FROM products"),
     "FILL_EMPTY": ("variants", {"column": col("variants", "color"), "value": lit("none"), "column_type": "TEXT"},
                    "SELECT variant_id, COALESCE(NULLIF(TRIM(color), ''), 'none') FROM variants"),
 }

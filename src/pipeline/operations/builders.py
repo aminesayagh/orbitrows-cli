@@ -12,6 +12,12 @@ def lit(v) -> dict:
     return {"type": "literal", "value": v}
 
 
+def given(x) -> dict:
+    """A parameter as a node: a number or a text given as is, or already a node (a column, another step's result:
+    the formula composes them)."""
+    return x if isinstance(x, dict) else lit(x)
+
+
 def arith(op, left, right) -> dict:
     return {"type": "arithmetic", "operator": op, "left": left, "right": right}
 
@@ -100,12 +106,17 @@ def percent_change(p, config):
 
 def add_amount(p, config):
     """add 5 (config {"sign": 1}), take 5 off (-1): column ± amount."""
-    return arith("+" if config["sign"] > 0 else "-", p["column"], lit(p["amount"]))
+    return arith("+" if config["sign"] > 0 else "-", p["column"], given(p["amount"]))
 
 
 def multiply(p, config):
     """double (factor 2), halve (0.5), triple: column × factor."""
-    return arith("*", p["column"], lit(p["factor"]))
+    return arith("*", p["column"], given(p["factor"]))
+
+
+def divide(p, config):
+    """divide by 4: column ÷ divisor."""
+    return arith("/", p["column"], given(p["divisor"]))
 
 
 def from_column(p, config):
@@ -115,18 +126,23 @@ def from_column(p, config):
 
 def round_digits(p, config):
     """round to 2 decimals: ROUND(column, digits); to whole numbers: ROUND(column)."""
-    return func("round", p["column"], lit(int(p["digits"]))) if p.get("digits") else func("round", p["column"])
+    return func("round", p["column"], lit(int(p.get("digits") or 0)))
 
 
 def round_to_step(p, config):
-    """round to the nearest 5: ROUND(column / step) × step."""
-    return arith("*", func("round", arith("/", p["column"], lit(p["step"]))), lit(p["step"]))
+    """round to the nearest 5: ROUND(column / step) × step; the step divides as a decimal (123 / 5 is 24.6, never
+    SQLite's whole 24)."""
+    return arith("*", func("round", arith("/", p["column"], lit(float(p["step"]))), lit(0)), lit(p["step"]))
 
 
 def clamp(p, config):
     """cap at 500 (config {"bound": "max"}): MIN(column, 500); at least 500 ("min"): MAX(column, 500). A NULL value
-    stays NULL (SQLite's MIN / MAX of a NULL is NULL)."""
-    return func("least" if config["bound"] == "max" else "greatest", p["column"], lit(p["limit"]))
+    stays NULL (SQLite's MIN / MAX of a NULL is NULL); a limit that can be empty (a column, another step's result:
+    "never above twice the cost") keeps the value then: MIN(column, COALESCE(limit, column))."""
+    limit = given(p["limit"])
+    if limit["type"] != "literal":
+        limit = func("coalesce", limit, p["column"])
+    return func("least" if config["bound"] == "max" else "greatest", p["column"], limit)
 
 
 def set_value(p, config):
@@ -141,6 +157,12 @@ def fill_empty(p, config):
     if p.get("column_type") == "TEXT":
         col = func("nullif", func("trim", col), lit(""))
     return func("coalesce", col, p["value"])
+
+
+def capitalize(p, config):
+    """the first letter in capital, the rest as it is: UPPER(SUBSTR(column, 1, 1)) || SUBSTR(column, 2)."""
+    return {"type": "concat", "parts": [func("upper", func("substr", p["column"], lit(1), lit(1))),
+                                        func("substr", p["column"], lit(2))]}
 
 
 def affix(p, config):
@@ -163,7 +185,8 @@ def text_function(p, config):
 def shift_date(p, config):
     """move 7 days later: DATE(column, '+7 days'); 1 month earlier: DATE(column, '-1 months'); unit days, months or
     years (SQLite's modifiers)."""
-    return func("date", p["column"], lit(f"{int(p['amount']):+d} {p['unit']}"))
+    n = p["amount"]
+    return func("date", p["column"], lit(f"{'+' if n >= 0 else '-'}{abs(n)} {p['unit']}"))
 
 
 def clear(p, config):
@@ -185,5 +208,5 @@ def aggregate(p, config):
 
 BUILDERS = {f.__name__: f for f in (
     percent_of_column, multiple_of_column, relative_difference, difference, table_aggregate, count_linked, sum_linked,
-    within_days, percent_change, add_amount, multiply, from_column, round_digits, round_to_step, clamp, set_value,
-    fill_empty, affix, replace_text, text_function, shift_date, clear, aggregate)}
+    within_days, percent_change, add_amount, multiply, divide, from_column, round_digits, round_to_step, clamp,
+    set_value, fill_empty, capitalize, affix, replace_text, text_function, shift_date, clear, aggregate)}

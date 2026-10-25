@@ -11,6 +11,7 @@ The formula tree uses the step-5 nodes (column / literal / arithmetic / function
 SQLite text over `t_table.c_column` ids, for tests.
 """
 from orbitrows.services.model.client import ask, choice
+from orbitrows.pipeline.operations.builders import BUILDERS
 from . import SURE
 from .asking import question
 
@@ -195,12 +196,19 @@ def lit(v):
     return {"type": "literal", "value": v}
 
 
-def ar(op, a, b):
-    return {"type": "arithmetic", "operator": op, "left": a, "right": b}
+ENTRY = {"+": "ADD_AMOUNT", "-": "SUBTRACT_AMOUNT", "*": "MULTIPLY_BY", "/": "DIVIDE_BY", "prefix": "ADD_PREFIX",
+         "suffix": "ADD_SUFFIX", "replace": "REPLACE_TEXT", "upper": "UPPER_CASE", "lower": "LOWER_CASE",
+         "capitalize": "CAPITALIZE", "date_add": "SHIFT_DATE", "round": "ROUND_DECIMALS",
+         "round_to": "ROUND_TO_NEAREST", "clamp_max": "CLAMP_MAX", "clamp_min": "CLAMP_MIN"}
+# a step's function → the operations catalog's entry whose builder writes it (2026-10-25: one SQL per operation)
+_ENTRIES = {}
 
 
-def fn(name, *args):
-    return {"type": "function", "name": name, "arguments": list(args)}
+def catalog_entry(entry_id: str) -> dict:
+    if not _ENTRIES:
+        from orbitrows.pipeline.operations.catalog import connect, entries
+        _ENTRIES.update({e["id"]: e for e in entries(connect())})
+    return _ENTRIES[entry_id]
 
 
 def build(recs, links, target, preds) -> dict:
@@ -227,33 +235,24 @@ def build(recs, links, target, preds) -> dict:
                     "else": operand(None, r, "else")}
         if f == "set":
             return operand(r["right"], r, "right")
-        left = operand(r["left"], r, "left")
-        right = r["right"] or {}
-        if f == "prefix":                                   # text and dates (2026-10-16)
-            return {"type": "concat", "parts": [lit(right["value"]), left]}
-        if f == "suffix":
-            return {"type": "concat", "parts": [left, lit(right["value"])]}
-        if f == "replace":
-            return fn("replace", left, lit(right["old"]), lit(right["value"]))
-        if f in ("upper", "lower"):
-            return fn(f, left)
-        if f == "capitalize":                               # first letter in capital, the rest as it is
-            return {"type": "concat", "parts": [fn("upper", fn("substr", left, lit(1), lit(1))), fn("substr", left, lit(2))]}
-        if f == "date_add":
-            n = right["value"]
-            return fn("date", left, lit(f"{'+' if n >= 0 else '-'}{abs(n)} {right['unit']}"))
-        if f in ("*", "+", "-", "/"):
-            return ar(f, left, operand(r["right"], r, "right"))
-        if f == "round":
-            return fn("round", left, lit((r["right"] or {}).get("value", 0) if r["right"] else 0))
-        if f == "round_to":
-            step = (r["right"] or {}).get("value")
-            return ar("*", fn("round", ar("/", left, lit(float(step))), lit(0)), lit(step))
-        if f in ("clamp_max", "clamp_min"):
-            limit = operand(r["right"], r, "right")
-            # an empty limit (no cost) keeps the value: coalesce(limit, value)
-            return fn("least" if f == "clamp_max" else "greatest", left, fn("coalesce", limit, left))
-        raise ValueError(f"unsupported function {f}")
+        if f not in ENTRY:
+            raise ValueError(f"unsupported function {f}")
+        e, left, right = catalog_entry(ENTRY[f]), operand(r["left"], r, "left"), r["right"] or {}
+        p = {"column": left}
+        if f in ("+", "-", "*", "/", "clamp_max", "clamp_min"):   # an amount, a factor, a limit: maybe a step's result
+            p[{"+": "amount", "-": "amount", "*": "factor", "/": "divisor"}.get(f, "limit")] = operand(r["right"], r,
+                                                                                                       "right")
+        elif f in ("prefix", "suffix"):                     # text and dates (2026-10-16)
+            p["text"] = lit(right["value"])
+        elif f == "replace":
+            p |= {"old": lit(right["old"]), "new": lit(right["value"])}
+        elif f == "date_add":
+            p |= {"amount": right["value"], "unit": right["unit"]}
+        elif f == "round":
+            p["digits"] = right.get("value", 0)
+        elif f == "round_to":
+            p["step"] = right.get("value")
+        return BUILDERS[e["builder_key"]](p, e["config"])
 
     last = final(recs, links)
     return node(ids[last]) if last else col(target)
