@@ -691,6 +691,9 @@ def catalog_candidates(text: str) -> list[str]:
 
 _CATALOG = {}
 NUMBERS = ("percentage", "number", "duration_days")            # an entry's parameters a request's number fills
+FACTORS = {"w2": (2, "2 (twice, double)"), "w3": (3, "3 (three times, triple)"), "w1.5": (1.5, "1.5 (one and a "
+           "half times)"), "w0.5": (0.5, "0.5 (half)"), "w0.33": (1 / 3, "a third"), "w0.25": (0.25, "a quarter")}
+# ponytail: the factors a request writes in words, offered next to its numbers (Jev chooses, code never reads them)
 
 
 def questions_2b(requests, schema, section, params) -> dict:
@@ -715,7 +718,14 @@ def questions_2b(requests, schema, section, params) -> dict:
             nums = {f"n{i}": p["text"] for i, p in enumerate(params.get(rid, [])) if p["value"] is not None}
             q[f"{rid}|{key}|number"] = choice(CONTEXT, f"In {said}, which number does that computation use (a "
                                                        f"percentage, a factor, an amount, a number of days)?",
-                                              nums | {"none": "None."})
+                                              nums | {k: d for k, (_, d) in FACTORS.items()} | {"none": "None."})
+        computed = [c["column"] for c in section.get(rid, {}).get("computed", [])]
+        for a, b in ((a, b) for i, a in enumerate(computed) for b in computed[i + 1:]):   # read from both sides
+            na, nb = (x.split(".")[1][2:] for x in (a, b))
+            q[f"{rid}|{a}~{b}|compared"] = choice(
+                CONTEXT, f"In {said}, which column is compared with a value computed from the other?",
+                {a: f"the {na} is compared with a value computed from the {nb}",
+                 b: f"the {nb} is compared with a value computed from the {na}"})
     return q
 
 
@@ -726,36 +736,74 @@ def build_2b(db, requests, schema, section, params, answers) -> None:
     from orbitrows.pipeline.operations.builders import BUILDERS
     out, warnings = section["requests"], section["warnings"]
     for r in requests:
-        rid = r["id"]
+        rid, made = r["id"], []
         for c in out.get(rid, {}).pop("computed", []):
             key, said = c["column"], f"the condition on {c['column']}"
+            heard = []                                        # its uncertain answers: questions if it is kept
 
             def pick(name, labels=None):
                 v, probs = answers.get(f"{rid}|{key}|{name}", (None, {}))
                 if v is not None and probs.get(v, 1) < SURE:
-                    out[rid]["flagged"] = True
-                    warnings.append({"request": rid, "problem": f"{name} of {said} uncertain", "answer": v,
-                                     "probability": round(probs.get(v, 0), 2)}
-                                    | question(answers, f"{rid}|{key}|{name}", labels))
-                return v
-            op_id = pick("operation", {i: e["name"] for i, e in _CATALOG.get("entries", {}).items()})
+                    heard.append({"request": rid, "problem": f"{name} of {said} uncertain", "answer": v,
+                                  "probability": round(probs.get(v, 0), 2)}
+                                 | question(answers, f"{rid}|{key}|{name}", labels))
+                return v, probs.get(v, 0)
+            (op_id, sure), (other, _), (n, _) = (pick("operation", {i: e["name"] for i, e in
+                                                                    _CATALOG.get("entries", {}).items()}),
+                                                 pick("other"), pick("number"))
             entry = _CATALOG.get("entries", {}).get(op_id)
-            if entry is None:                                  # none, or no answer: honest, never guessed
-                out[rid]["refused"] = f"{said} compares with a computation no operation supports yet"
-                warnings.append({"request": rid, "problem": f"not supported: {out[rid]['refused']}"})
-                continue
-            other, n = pick("other"), pick("number")
             p = {"column": _col(key), "operator": c["operator"], "column_type": column_info(schema, key)["sql_type"]}
             if other not in (None, "none"):
                 p["other"] = _col(other)
-            if n not in (None, "none") and n[1:].isdigit() and int(n[1:]) < len(params.get(rid, [])):
+            if entry and n in FACTORS:
+                f = FACTORS[n][0]
+                p |= {x["name"]: f * 100 if x["type"] == "percentage" else f for x in entry["parameters"]
+                      if x["type"] in ("percentage", "number")}
+            elif entry and n not in (None, "none") and n[1:].isdigit() and int(n[1:]) < len(params.get(rid, [])):
                 p |= {x["name"]: params[rid][int(n[1:])]["value"] for x in entry["parameters"] if x["type"] in NUMBERS}
-            missing = [x["name"] for x in entry["parameters"] if x.get("required", True) and x["name"] not in p]
-            if missing:
-                out[rid]["refused"] = f"{said} ({entry['name']}) lacks its {', '.join(missing)}"
+            missing = [x["name"] for x in entry["parameters"] if x.get("required", True) and x["name"] not in p] \
+                if entry else []
+            made.append({"c": c, "entry": entry, "p": p, "missing": missing, "sure": sure, "heard": heard,
+                         "other": other})
+        # two columns computed from each other are one condition ("priced more than twice their cost" is read from
+        # the price and from the cost): the one that builds, the surer, is kept
+        for i, m in enumerate(made):
+            for k, x in enumerate(made):
+                if k == i or not (x["c"]["column"] == m["other"] or x["other"] == m["c"]["column"]):
+                    continue
+                a, b = (m, x) if i < k else (x, m)
+                said_by = answers.get(f"{rid}|{a['c']['column']}~{b['c']['column']}|compared", (None, {}))[0]
+                built = lambda y: bool(y["entry"]) and not y["missing"]
+                if said_by in (a["c"]["column"], b["c"]["column"]) and built(a) == built(b):   # the subject, as
+                    m["dropped"] = said_by != m["c"]["column"]                                # Jev reads it
+                elif built(m) != built(x):                     # only one of the two readings can be built: that one
+                    m["dropped"] = not built(m)
+                else:                                          # no answer: the surer, the first
+                    m["dropped"] = m.get("dropped") or (x["sure"], -k) > (m["sure"], -i)
+        for m in made:
+            c, entry, key = m["c"], m["entry"], m["c"]["column"]
+            said = f"the condition on {key}"
+            if m.get("dropped"):
+                out[rid]["columns"] = [x for x in out[rid]["columns"] if x != key]
+                out[rid].setdefault("dropped", []).append({"column": key, "why": "computed from the other column, "
+                                                                                 "built from that one"})
+                continue
+            if m["heard"]:
+                out[rid]["flagged"] = True
+                warnings.extend(m["heard"])
+            if entry is None and "error" in answers:          # the model's call failed: said as such
+                out[rid]["refused"] = f"{said}: the operation could not be chosen (model error), nothing is guessed"
+                warnings.append({"request": rid, "problem": out[rid]["refused"], "error": answers["error"]})
+                continue
+            if entry is None:                                  # none: honest, never guessed
+                out[rid]["refused"] = f"{said} compares with a computation no operation supports yet"
+                warnings.append({"request": rid, "problem": f"not supported: {out[rid]['refused']}"})
+                continue
+            if m["missing"]:
+                out[rid]["refused"] = f"{said} ({entry['name']}) lacks its {', '.join(m['missing'])}"
                 warnings.append({"request": rid, "problem": f"invalid parameters: {out[rid]['refused']}"})
                 continue
-            cond = through(schema, BUILDERS[entry["builder_key"]](p, entry["config"]), key.split(".")[0])
+            cond = through(schema, BUILDERS[entry["builder_key"]](m["p"], entry["config"]), key.split(".")[0])
             if c["negated"]:
                 cond = {"type": "not", "operand": cond}
             if err := refused(db, schema, key.split(".")[0], cond):
