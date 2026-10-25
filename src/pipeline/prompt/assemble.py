@@ -438,7 +438,7 @@ def grouped(select: dict) -> bool:
     return bool(select.get("group_by") or select.get("having") or
                 any(c["expression"].get("type") == "aggregate" for c in select.get("columns", [])))
 
-ROWS = "__rows_of_{}__"                                       # replaced by the ids the session passes
+IDS = "__rows_of_{}__"                                       # replaced by the ids the session passes
 
 
 def with_condition(ast, cond):
@@ -459,7 +459,7 @@ def compiled(db, schema, items) -> list[dict]:
         if it.get("rows_from"):                             # affected rows: the ids the execution returns
             alias = it["ast"]["target" if "target" in it["ast"] else "from"]["alias"]
             with_condition(it["ast"], {"type": "membership", "operator": "in", "expression": col(alias, pk(schema, it["main"])),
-                                       "values": [{"type": "literal", "value": ROWS.format(it["rows_from"])}]})
+                                       "values": [{"type": "literal", "value": IDS.format(it["rows_from"])}]})
         try:
             before = len(program([x["ast"] for x in items[:i]], schema)) if i else 0
             it["sql"] = program([x["ast"] for x in items[:i + 1]], schema)[before:]
@@ -467,7 +467,7 @@ def compiled(db, schema, items) -> list[dict]:
             errors.append({"request": it["request"], "stage": "compile", "error": str(e)[:300]})
             break
         if it.get("rows_from"):
-            it["sql"] = [q.replace(f"'{ROWS.format(it['rows_from'])}'", f"SELECT value FROM json_each(:rows_{it['rows_from']})")
+            it["sql"] = [q.replace(f"'{IDS.format(it['rows_from'])}'", f"SELECT value FROM json_each(:rows_{it['rows_from']})")
                          for q in it["sql"]]
         if it.get("returning"):
             it["sql"] = [f'{q} RETURNING "{it["returning"]}"' for q in it["sql"]]

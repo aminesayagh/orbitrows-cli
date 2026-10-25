@@ -34,3 +34,25 @@ def test_assembly_replays(path):
     got = replay(saved)
     assert sql(got) == sql(saved["assembly"])
     assert json.loads(json.dumps(got, default=str)) == saved["assembly"]   # the ASTs, row counts, questions, errors too
+
+
+def test_a_read_of_the_rows_a_change_made_takes_the_ids_its_returning_gives():
+    """"Raise the black variants by 5%, then show those": r1 returns its ids, r2 reads them as the session runs it
+    (:rows_r1), so a variant still counts once its price no longer matches."""
+    db = baseline()
+    col = {"type": "column", "source": "t_variants", "reference": "c_price_mad"}
+    black = {"type": "comparison", "operator": "=", "left": {"type": "column", "source": "t_variants",
+                                                            "reference": "c_color"}, "right": {"type": "literal", "value": "black"}}
+    reqs = [{"id": "r1", "text": "raise", "statement": "update"}, {"id": "r2", "text": "show those", "statement": "select"}]
+    out = assemble.assemble(
+        db, store_of(db), reqs, {"r1": {"statement": "update"}, "r2": {"statement": "select"}},
+        {"r1": {"target": {"type": "database_table", "reference": "t_variants"}},
+         "r2": {"from": {"type": "database_table", "reference": "t_variants"}}},
+        {"r1": {"assignments": [{"column": "t_variants.c_price_mad", "value": {
+            "type": "arithmetic", "operator": "*", "left": col, "right": {"type": "literal", "value": 1.05}}}]},
+         "r2": {"outputs": [{"column": "t_variants.c_price_mad", "aggregate": "value", "expression": col}]}},
+        {"r1": {"predicates": [{"column": "t_variants.c_color", "condition": black}]}, "r2": {"rows_from": "r1"}},
+        {"r1": {"where": black}, "r2": {"rows_from": "r1", "where": None}}, [])
+    assert not out["errors"], out
+    first, second = (p["sql"][0] for p in out["program"])
+    assert first.endswith('RETURNING "variant_id"') and ":rows_r1" in second, (first, second)
