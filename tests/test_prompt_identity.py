@@ -19,7 +19,13 @@ GONE = {"fastino/gliner2-multi-v1",                          # split.py's model 
         "coref_work"}                                        # coref.py's work folder: a private temporary one per process now
 REPLACED = {"pipeline/prompt/grouping.py": {   # the one tree question over every candidate tree (mixed ones for three
     "all", "any", "_all", "_any", "|tree", "How do the conditions of ", " combine?", "tree", "AND", "OR",  # conditions
-    "how the conditions combine: no answer, AND kept"}}  # only): one AND / OR question per pair now, any size
+    "how the conditions combine: no answer, AND kept"},  # only): one AND / OR question per pair now, any size
+    "pipeline/prompt/operation.py": {   # "asks for information back?": never read; a change reports what SQLite's
+    "Answer yes when the merchant asks to see or get something back: a list, a count, a total, the new values, a file.",
+    "A request that only reads always gives information back: yes.",         # execution reports (2026-10-25)
+    "A condition or a computation the request needs to make its change is not information back: no.",
+    "_back", "') ask to get information back?", "reports_back", "reports back uncertain",
+    "Does request ", "id", "text", "request", "problem", "probability", 0.0, 0.5}}   # one use fewer of each
 ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 
 

@@ -1,15 +1,15 @@
 """Step 2 of prompt → AST: the statement each request needs (decided 2026-10-10: Jev is asked the AST statement type
 directly, replacing prompt_edit/family_requests.py's operation × element questions).
 
-    Jev   one call per prompt, two questions per request: the statement type (STATEMENTS) and whether the merchant
-          asks for information back ("…and tell me how many"); evidence: the prompt, the requests with step 1's links,
-          the store's tables and columns
+    Jev   one call per prompt, two questions per request: the statement type (STATEMENTS) and whether it holds two
+          actions (step 1 cuts it again); evidence: the prompt, the requests with step 1's links, the store's tables
+          and columns. What a change reports back is what SQLite's execution reports: not asked
     code  below 0.8: the likeliest statement is kept and flagged (the merchant is asked); other_object (an index, a
           view) is not supported yet: a warning, never a guessed AST
     code  step 1's "rows" input becomes request_result (the request it waits for is a select) or affected_rows (it
           inserts, updates or deletes: the executor keeps the ids SQLite returns)
 
-Section "operation" of cases/<id>.json: {"requests": {"r1": {"statement", "reports_back", "input"?, "flagged"?}},
+Section "operation" of cases/<id>.json: {"requests": {"r1": {"statement", "several_actions"?, "input"?, "flagged"?}},
 "warnings": [...], "jev": {...}}. The examples in the descriptions and rules must not be test prompts (cases/).
 """
 from . import SURE
@@ -51,11 +51,6 @@ RULES = [
     "safety copy with no destination ('take a backup first', 'save the store') is application.",
     "Answer for this request only.",
 ]
-BACK_RULES = [
-    "Answer yes when the merchant asks to see or get something back: a list, a count, a total, the new values, a file.",
-    "A request that only reads always gives information back: yes.",
-    "A condition or a computation the request needs to make its change is not information back: no.",
-]
 SEVERAL_RULES = [
     # 2026-10-15 (operations step): branches of one change are one action
     "A formula given to some records in place of the others' formula ('…; the Lego sets get 20% off instead', "
@@ -81,8 +76,6 @@ def questions(requests: list[dict]) -> dict:
     for r in requests:
         q[f"{r['id']}_statement"] = choice(CONTEXT, f"Which kind of statement does request {r['id']} ('{r['text']}') "
                                                     f"need?", STATEMENTS, RULES)
-        q[f"{r['id']}_back"] = yes_no(CONTEXT, f"Does request {r['id']} ('{r['text']}') ask to get information back?",
-                                      BACK_RULES)
         q[f"{r['id']}_several"] = yes_no(CONTEXT, f"Does request {r['id']} ('{r['text']}') ask for two or more separate "
                                                   f"actions?", SEVERAL_RULES)
     return q
@@ -94,15 +87,11 @@ def build(requests: list[dict], answers: dict) -> dict:
     for r in requests:
         rid = r["id"]
         st, probs = answers.get(f"{rid}_statement", (None, {}))
-        node = {"statement": st, "reports_back": answers.get(f"{rid}_back", 0.0) >= 0.5}
+        node = {"statement": st}
         if probs.get(st, 0) < SURE:
             node["flagged"] = True
             warnings.append({"request": rid, "problem": "statement uncertain", "answer": st,
                              "probability": round(probs.get(st, 0), 2)} | question(answers, f"{rid}_statement"))
-        if 1 - SURE < answers.get(f"{rid}_back", 0.0) < SURE:
-            warnings.append({"request": rid, "problem": "reports back uncertain",
-                             "probability": round(answers.get(f"{rid}_back", 0.0), 2)}
-                            | question(answers, f"{rid}_back"))
         several = answers.get(f"{rid}_several", 0.0)
         if several >= 0.5:                                    # step 1 cuts it again (request_graph.recut); if it
             node["several_actions"] = round(several, 2)       # can't, the merchant is asked: never one action dropped
