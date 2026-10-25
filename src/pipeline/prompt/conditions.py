@@ -473,15 +473,6 @@ def count(db, schema, table, cond) -> tuple[int | None, str | None]:
         return None, str(e)[:200]
 
 
-def every(db, schema, table, n) -> bool:
-    """Does a condition that selects n rows keep every record of its table? Then it chooses nothing ("has a product",
-    of variants that all have one): dropped, the request's result the same and its tree simpler."""
-    stmt = {"id": "q", "type": "select", "from": {"type": "database_table", "reference": table, "alias": table},
-            "columns": [{"expression": {"type": "aggregate", "function": "count"}, "alias": "n"}],
-            "scope": {"type": "all_rows"}}
-    return n is not None and n > 0 and db.execute(program([stmt], schema)[0]).fetchone()[0] == n
-
-
 def build_2(db, requests, schema, stage1, values, params, parts, answers, section) -> None:
     """Adds the predicates of stage 2 to stage 1's section. Two conditions are dropped, with their warnings (the
     request stays flagged only for what remains):
@@ -489,7 +480,6 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
         searched it and found nothing ("name = brand" when SQL found "Volt" in brand); a missing value stays flagged;
       - in a request that starts from another's records ("those"), a condition its own words give no value for:
         it is the other request's (r1's "heavier than 60 g" is not r2's).
-    A condition that keeps every record of its table chooses nothing: dropped (every()).
     Two condition columns compared with each other ("recommended below our price") are one comparison: kept once,
     from the column whose operator Jev was surer of (read from both, it may come out reversed, and the two together
     would match nothing)."""
@@ -569,9 +559,6 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                     cond = {"type": "any", "children": [
                         {"type": "null_check", "expression": _col(key), "operator": "is_null"}, cond]}
             n, err = count(db, schema, key.split(".")[0], cond)
-            if not err and every(db, schema, key.split(".")[0], n):
-                drop(rid, key, f"the condition on {key} keeps every record: it chooses nothing")
-                continue
             if err:
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": f"condition on {key} refused", "error": err})
@@ -588,8 +575,6 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
         for h in stage1.get(rid, {}).get("linked", []):        # a matching record in a linked table, or none
             key, cond = existence(schema, h["of"], h["table"], h["has"])
             n, err = count(db, schema, key.split(".")[0], cond)
-            if not err and every(db, schema, key.split(".")[0], n):   # every variant has its product: no condition
-                continue
             if err:
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": f"matching record in {h['table']} refused", "error": err})
