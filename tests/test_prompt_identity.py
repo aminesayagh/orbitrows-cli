@@ -20,7 +20,17 @@ GONE = {"fastino/gliner2-multi-v1",                          # split.py's model 
         'SELECT DISTINCT "', '" FROM "', '" WHERE "', '" IS NOT NULL', '" IS NOT NULL LIMIT ',   # a read of the
         '" IS NOT NULL LIMIT 50', '" IS NOT NULL LIMIT 13', '" IS NOT NULL AND TRIM("',      # store's rows: the
         '") != \'\' LIMIT '}                                # pipeline reads the profile instead (2026-10-25)
-FORMULA_KINDS = [   # the formula's kinds of a number that are catalog entries since 2026-10-25
+FORMULA_KINDS = [   # the formula's kinds of a number, a text, a date, a letter case: catalog entries since 2026-10-25
+    "The column becomes this text or this date ('set the status to draft', 'change the date to 2026-11-01').",
+    "This text is added at the start of the column's text ('put NEW in front of the names').",
+    "This text is added at the end of the column's text ('add (old) at the end of the names').",
+    "This text replaces another one inside the column's text ('replace cotton with organic cotton': organic cotton), also when the replaced text is said only once ('change Orbit to ORBIT in the names, but to Orbit™ for the active ones': ORBIT and Orbit™ both replace Orbit).",
+    "This text is removed from the column's text ('remove the word Kids').",
+    "The date is moved this many days, weeks, months or years LATER ('7 days later', 'push back a month').",
+    "The date is moved this many days, weeks, months or years EARLIER ('bring it forward 2 weeks').",
+    "All in capitals ('write the brands in capitals', 'uppercase the SKUs').",
+    "All in lower case ('put the colours in lower case').",
+    "Only the first letter of the text in capital ('capitalise the names').", "No change of letter case.",
     "The value is raised by this amount or percentage ('raise by 15%', 'add 10', 'an extra 2').",
     "The value is lowered by this amount or percentage ('take 5 off', 'a 20% discount', 'cut by 3').",
     "The value becomes this number ('set the price to 50', 'make it 8').",

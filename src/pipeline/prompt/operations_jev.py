@@ -40,16 +40,6 @@ def kinds() -> dict:
     return _KINDS
 
 
-def kind_of(answer) -> tuple:
-    """(kind, probabilities by kind): the entries of one kind add up ("raise by 15%" split between a percentage and
-    an amount is still an increase)."""
-    choice_, probs = answer if answer else (None, {})
-    by = {}
-    for k, pr in probs.items():
-        by[KIND_OF.get(k, k)] = by.get(KIND_OF.get(k, k), 0) + pr
-    return KIND_OF.get(choice_, choice_), by
-
-
 KIND_RULES = [
     "Judge the marked number by the words around it, not by its position in the sentence.",
     "'plus 10%' on a column ('the cost plus 10%') is an increase of that column by 10%, not a share.",
@@ -184,7 +174,7 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
         return tok.idx if tok is not None and seg[0] <= tok.idx < o["start"] else o["start"]
 
     for o in occs:
-        kind, kp = kind_of(ans.get(f"{o['occ']}_kind"))
+        kind, kp = read_as(ans.get(f"{o['occ']}_kind"), KIND_OF)
         col, cp = ans.get(f"{o['occ']}_column", ("none", {}))
         if kind is None or kp.get(kind, 0) < MIN:
             ambiguities.append({"problem": "what this number does: uncertain", "occurrence": o["occ"], "text": o["text"],
@@ -316,25 +306,47 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
 
 TEXT_CONTEXT = ("A merchant wrote one request that changes a text or date column of their shop database. The texts, "
                 "numbers and dates of the request that may be part of the change are marked [x1: …].")
-TEXT_KIND = {
-    "new_value": "The column becomes this text or this date ('set the status to draft', 'change the date to "
-                 "2026-11-01').",
-    "add_start": "This text is added at the start of the column's text ('put NEW in front of the names').",
-    "add_end": "This text is added at the end of the column's text ('add (old) at the end of the names').",
+TEXT_KIND = {   # what a text or a date does that is not one operation of the catalog
     "replaced": "This text, inside the column's text, is replaced by another one ('replace cotton with …': cotton).",
-    "replacement": "This text replaces another one inside the column's text ('replace cotton with organic cotton': "
-                   "organic cotton), also when the replaced text is said only once ('change Orbit to ORBIT in the names, "
-                   "but to Orbit™ for the active ones': ORBIT and Orbit™ both replace Orbit).",
-    "removed": "This text is removed from the column's text ('remove the word Kids').",
-    "later": "The date is moved this many days, weeks, months or years LATER ('7 days later', 'push back a month').",
-    "earlier": "The date is moved this many days, weeks, months or years EARLIER ('bring it forward 2 weeks').",
     "none": "Not a change of the column: part of a condition, a name used to choose the records, or a count.",
 }
-CASE = {"upper": "All in capitals ('write the brands in capitals', 'uppercase the SKUs').",
-        "lower": "All in lower case ('put the colours in lower case').",
-        "first_capital": "Only the first letter of the text in capital ('capitalise the names').",
-        "every_word": "The first letter of EACH word in capital ('Orbit Tee Kids').",
-        "none": "No change of letter case."}
+TEXT_KIND_OF = {"SET_VALUE": "new_value", "ADD_PREFIX": "add_start", "ADD_SUFFIX": "add_end",   # the catalog's
+                "REPLACE_TEXT": "replacement", "REMOVE_TEXT": "removed",                        # entries (2026-10-25)
+                "SHIFT_DATE": "later", "SHIFT_DATE_EARLIER": "earlier"}
+CASE = {"every_word": "The first letter of EACH word in capital ('Orbit Tee Kids').",
+        "none": "The letter case does not change."}
+CASE_OF = {"UPPER_CASE": "upper", "LOWER_CASE": "lower", "CAPITALIZE": "first_capital"}
+_TEXT = {}
+
+
+def described(ids, extra) -> dict:
+    """{entry id: what it does, an example} for `ids`, then `extra` (the options that are not operations)."""
+    from orbitrows.pipeline.operations.catalog import connect, get
+    db = connect()
+    return {i: f"{(e := get(db, i))['name']}: {e['behavior']} (e.g. '{e['examples'][0]}')" for i in ids} | extra
+
+
+def text_kinds() -> dict:
+    if "kinds" not in _TEXT:
+        _TEXT.update(kinds=described(TEXT_KIND_OF, TEXT_KIND), case=described(CASE_OF, CASE))
+    return _TEXT["kinds"]
+
+
+def case_kinds() -> dict:
+    text_kinds()
+    return _TEXT["case"]
+
+
+def read_as(answer, of: dict) -> tuple:
+    """(kind, probabilities by kind): the answer's entry read as this pass's kind (the others pass as they are);
+    the entries of one kind add up ("raise by 15%" split between a percentage and an amount is still an increase)."""
+    choice_, probs = answer if answer else (None, {})
+    by = {}
+    for k, pr in probs.items():
+        by[of.get(k, k)] = by.get(of.get(k, k), 0) + pr
+    return of.get(choice_, choice_), by
+
+
 UNIT = {"days": "days", "weeks": "weeks", "months": "months", "years": "years", "none": "Not a duration."}
 TEXT_USE = {"target": "It is the column the request changes.",
             "set_to": "The changed column becomes this column's value ('set the barcode to the SKU').",
@@ -408,7 +420,7 @@ async def extract_textdate(jev, text: str, upstream: dict, lang: str = "en") -> 
     q = {}
     stored = upstream.get("stored_values") or []           # a short list of existing values (a status): A02
     for c in cands:
-        q[f"{c['occ']}_kind"] = choice(TEXT_CONTEXT, f"What does {c['occ']} ('{c['text']}') do?", TEXT_KIND)
+        q[f"{c['occ']}_kind"] = choice(TEXT_CONTEXT, f"What does {c['occ']} ('{c['text']}') do?", text_kinds())
         exact = any(c["text"].casefold() == v.casefold() for v in stored)
         if stored and c["kind"] == "text" and not c.get("quoted") and not exact:   # "blue" IS a stored value: no question
             q[f"{c['occ']}_stored"] = choice(TEXT_CONTEXT, f"If {c['occ']} ('{c['text']}') gives the column's new value, "
@@ -439,7 +451,8 @@ async def extract_textdate(jev, text: str, upstream: dict, lang: str = "en") -> 
     q["empty"] = choice(TEXT_CONTEXT, "Does the request empty the column (clear it, remove its value, leave it blank)?",
                         {"yes": "Yes, the column is emptied (for all or some records).", "no": "No."})
     if not dated:                                           # letter case (2026-10-16, user: in the basic version)
-        q["case"] = choice(TEXT_CONTEXT, "Does the request change the letter case of the column's WHOLE text?", CASE,
+        q["case"] = choice(TEXT_CONTEXT, "Does the request change the letter case of the column's WHOLE text?",
+                           case_kinds(),
                            ["A text written or replaced that happens to be in capitals is not a case change: 'replace "
                             "Orbit with ORBIT', 'add ' NEW' at the end' change only those words: answer none.",
                             "A case change is asked for the column's whole text: 'write the brands in capitals', 'put "
@@ -483,7 +496,7 @@ async def extract_textdate(jev, text: str, upstream: dict, lang: str = "en") -> 
 
     replaced, replacement = [], []
     for c in cands:
-        kind, kp = ans.get(f"{c['occ']}_kind", (None, {}))
+        kind, kp = read_as(ans.get(f"{c['occ']}_kind"), TEXT_KIND_OF)
         if kind is None or kp.get(kind, 0) < MIN:
             ambiguities.append({"problem": "what this text does: uncertain", "occurrence": c["occ"], "text": c["text"],
                                 "start": c["start"], "end": c["end"], "answer": kind,
@@ -551,7 +564,7 @@ async def extract_textdate(jev, text: str, upstream: dict, lang: str = "en") -> 
         use, up = ans.get(f"{k}_use", ("other", {}))
         if use == "set_to" and up.get(use, 0) >= MIN and c["column"] != target:
             add("calculation", "set", None, {"column": c["column"]}, c["start"], c["end"], "jev.column_set_to")
-    cs, cp_ = ans.get("case", ("none", {}))
+    cs, cp_ = read_as(ans.get("case", ("none", {"none": 1.0})), CASE_OF)
     if cs not in ("none", None) and cp_.get(cs, 0) >= MIN:
         t = next((c for c in names.values() if c["column"] == target), None)
         a, b = (t["start"], t["end"]) if t else (0, len(text))

@@ -179,8 +179,9 @@ def affix(p, config):
 
 
 def replace_text(p, config):
-    """replace 'cotton' with 'organic cotton': REPLACE(column, old, new), every occurrence, case as written."""
-    return func("replace", p["column"], p["old"], p["new"])
+    """replace 'cotton' with 'organic cotton': REPLACE(column, old, new), every occurrence, case as written; remove
+    the word Kids (no new text): REPLACE(column, old, '')."""
+    return func("replace", p["column"], p["old"], p.get("new") or lit(""))
 
 
 def text_function(p, config):
@@ -191,7 +192,7 @@ def text_function(p, config):
 def shift_date(p, config):
     """move 7 days later: DATE(column, '+7 days'); 1 month earlier: DATE(column, '-1 months'); unit days, months or
     years (SQLite's modifiers)."""
-    n = p["amount"]
+    n = p["amount"] * config.get("sign", 1)                  # later (+), earlier (config {"sign": -1})
     return func("date", p["column"], lit(f"{'+' if n >= 0 else '-'}{abs(n)} {p['unit']}"))
 
 
