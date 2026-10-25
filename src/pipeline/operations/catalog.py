@@ -11,6 +11,7 @@ transaction that raises the entry's version and the catalog's revision. Kept apa
     enabled    only an entry whose builder is verified on the demo store (tests/test_operations.py: every enabled entry
                has its check); the inventory's entries stay disabled: no description, no builder yet
     embeddings phase 3 (the tables are here; the vectors are computed by the developer, never on the user's machine)
+    functions  sql_functions(): the functions our AST may call, from the inventory (sql/dml.py)
 
 Schema: vault 02_projects/pilotstore/operation-selection-implementation, section 15, plus role, kind, sqlglot_class
 and sql_names.
@@ -200,3 +201,33 @@ def inventoried(db) -> int:
                                          if r["sqlite"] else {})}]})
         n += 1
     return n
+
+
+SKIPPED = {"cast", "pi"}                                      # a type, not a value; no argument at all
+
+
+def sql_functions(path: Path = PATH) -> dict:
+    """The functions our AST may call (sql/dml.py FunctionCall), from the inventory: a SQLGlot function SQLite runs,
+    written NAME(…) under its own SQLGlot name (several classes print as CAST or DATE: only the one named so).
+    {name: {"class", "fields": AST fields in order (the required first), "required": how many, "variadic": bool}}."""
+    import re
+    db = connect(path)
+    out = {}
+    for cls, names, params, support in db.execute(
+            "SELECT o.sqlglot_class, o.sql_names_json, json_group_array(json_array(p.name, p.required)), "
+            "o.engine_support_json FROM operations o JOIN operation_parameters p ON p.operation_id = o.id "
+            "WHERE o.role = 'technical' AND o.kind = 'function' GROUP BY o.id ORDER BY o.id"):
+        e = json.loads(support)[0]
+        m = re.match(r"([A-Z_0-9]+)\(", e.get("sql", ""))
+        name = m and m.group(1).lower()
+        if not (e.get("runs") and not e.get("window") and name == json.loads(names)[0].lower()) or \
+                name in SKIPPED or name.startswith("json"):
+            continue
+        fields = [(f, r) for f, r in json.loads(params) if not f.startswith(("is_", "zero_")) and f != "safe"]
+        inner = e["sql"][e["sql"].index("(") + 1:e["sql"].rindex(")")].strip()
+        ran = inner.count(",") + 1 if inner else 0           # SQLGlot's required fields are not SQLite's signature:
+        out[name] = {"class": cls, "fields": [f for f, r in fields if r] + [f for f, r in fields if not r],   # the
+                     "required": max(sum(1 for _, r in fields if r), ran, 1),   # inventory's form SQLite accepted is
+                     "variadic": any(f == "expressions" for f, _ in fields)}   # the minimum (SUBSTRING needs a start)
+    db.close()
+    return out

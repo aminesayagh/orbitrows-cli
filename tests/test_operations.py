@@ -174,3 +174,19 @@ def test_the_selector_resolves_only_a_sure_choice_and_says_unsupported_only_when
     assert decided(("none", {"none": 0.95}), cands)["status"] == "unsupported"                   # honest: no entry
     assert decided(("none", {"none": 0.6}), cands)["status"] == "needs_clarification"
     assert decided(None, cands)["status"] == "needs_clarification"                               # no answer (API)
+
+
+def test_every_function_the_catalog_lets_the_ast_call_compiles_and_runs_on_sqlite():
+    """Beyond the hand-mapped ones (sql/dml.py MAPPED), the AST calls what the inventory found SQLite runs, each at
+    its minimum number of arguments (the form SQLite accepted, not SQLGlot's required fields)."""
+    from orbitrows.sql import dml
+    db = baseline()
+    price = col("variants", "price_mad")
+    assert {"ceil", "floor", "power", "sqrt"} <= set(dml.FUNCTIONS)
+    for name in dml.FUNCTIONS:
+        stmt = {"id": "q", "type": "select", "from": {"type": "database_table", "reference": "t_variants",
+                                                     "alias": "t_variants"},
+                "columns": [{"expression": {"type": "function", "name": name,
+                                            "arguments": [price] * dml.ARITY[name][0]}, "alias": "v"}],
+                "scope": {"type": "all_rows"}}
+        db.execute(program([stmt], store_of(db))[0]).fetchall()

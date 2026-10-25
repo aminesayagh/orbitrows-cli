@@ -7,7 +7,9 @@
                                  table or column, a syntax error…
     run(db, sql)                 runs them for real (a disposable copy of the store): the rows each select returns
 
-Our code only resolves ids and maps one node to one SQLGlot class. A select reading an earlier select (request_result)
+Our code only resolves ids and maps one node to one SQLGlot class: a function is either one of the hand-mapped ones
+(dml.MAPPED, SQLite's own forms) or one the operations catalog's inventory found SQLite runs (dml.FUNCTIONS: its
+SQLGlot class, its fields in order). A select reading an earlier select (request_result)
 becomes a CTE; a select inside a statement (a value, an IN list) becomes a subquery that may read the outer row. Not yet: a change reading an earlier request's rows (affected_rows: needs the executor).
 """
 import re
@@ -96,6 +98,11 @@ class Compiler:
                 return exp.Anonymous(this="substr", expressions=args)
             if n.name in ("greatest", "least"):
                 return (exp.Greatest if n.name == "greatest" else exp.Least)(this=args[0], expressions=args[1:])
+            if n.name in dml.FUNCTIONS:                     # the catalog's: its SQLGlot class, its fields in order
+                f = dml.FUNCTIONS[n.name]
+                fields = dict(zip([x for x in f["fields"] if x != "expressions"], args))
+                rest = args[len(fields):]
+                return getattr(exp, f["class"])(**fields, **({"expressions": rest} if rest else {}))
             return {"trim": exp.Trim, "length": exp.Length, "lower": exp.Lower, "upper": exp.Upper,
                     "abs": exp.Abs}[n.name](this=args[0])
         if isinstance(n, dml.Concat):

@@ -10,6 +10,8 @@ from typing import Annotated, Literal as L, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from orbitrows.pipeline.operations.catalog import sql_functions
+
 
 class Node(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -56,11 +58,15 @@ class DerivedReference(Node):
 
 # standard SQL scalar functions and their arity (min, max; None = any); greatest / least (SQLite MAX(a, b) / MIN(a, b))
 # write a guard: "lower by 10% but never below cost + 10" = greatest(price * 0.9, cost + 10)
-ARITY = {"trim": (1, 1), "length": (1, 1), "lower": (1, 1), "upper": (1, 1), "abs": (1, 1), "round": (1, 2),
-         "replace": (3, 3), "coalesce": (2, None), "greatest": (2, None), "least": (2, None),
-         "date": (2, 2), "substr": (2, 3),                                      # date(col, '+7 days'): a date moved (2026-10-16)
-         "real": (1, 1),                                                        # CAST(x AS REAL): an upload's TEXT cell
-         "nullif": (2, 2)}                                                      # NULLIF(TRIM(cell), ''): an empty cell
+MAPPED = {"trim": (1, 1), "length": (1, 1), "lower": (1, 1), "upper": (1, 1), "abs": (1, 1), "round": (1, 2),
+          "replace": (3, 3), "coalesce": (2, None), "greatest": (2, None), "least": (2, None),
+          "date": (2, 2), "substr": (2, 3),                                     # date(col, '+7 days'): a date moved (2026-10-16)
+          "real": (1, 1),                                                       # CAST(x AS REAL): an upload's TEXT cell
+          "nullif": (2, 2)}                                                     # NULLIF(TRIM(cell), ''): an empty cell
+# MAPPED: written by hand in sql.py (SQLite's own forms, each checked); every other function SQLite runs comes from
+# the operations catalog's inventory (2026-10-25: ceil, floor, power, sqrt, datetime…), compiled by its SQLGlot class
+FUNCTIONS = {n: f for n, f in sql_functions().items() if n not in MAPPED}
+ARITY = MAPPED | {n: (f["required"], None if f["variadic"] else len(f["fields"])) for n, f in FUNCTIONS.items()}
 
 
 class FunctionCall(Node):
