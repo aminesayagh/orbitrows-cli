@@ -28,7 +28,7 @@ Stage 2, per condition column:
           recommended → sku IN (SELECT o.sku FROM offer o WHERE price > o.recommended)), so it stays a condition on
           its own table; a matching record (stage 1) is key [NOT] IN (SELECT its key FROM the other table WHERE it
           IS NOT NULL: a NULL key there never defeats NOT IN);
-          then each condition runs on its table in a savepoint: an error is flagged, 0 rows is a warning
+          then each condition is prepared on its table (sql.check, no row read): an error is flagged
     ponytail: relative dates ("last month", "in October") are not read: flagged; add with a session date
 
 Section "conditions" of cases/<id>.json: {"requests": {"r1": {"all_rows": bool, "columns": ["t_x.c_y"], "sorted"?,
@@ -40,7 +40,7 @@ import functools
 import json
 import re
 
-from orbitrows.sql.sql import program
+from orbitrows.sql.sql import check, program
 from orbitrows.pipeline.store.context import declaration
 from orbitrows.units.header import _tables
 from orbitrows.units.parameters import parameters
@@ -462,15 +462,15 @@ def predicate(op, col, operand, upper, all_values, text_type):
     return None
 
 
-def count(db, schema, table, cond) -> tuple[int | None, str | None]:
-    """The rows a condition selects on its table, in a savepoint (nothing kept); or the error."""
+def refused(db, schema, table, cond) -> str | None:
+    """SQLite's error on a condition, prepared on its table (sql.check: no row read), or None."""
     stmt = {"id": "q", "type": "select", "from": {"type": "database_table", "reference": table, "alias": table},
             "columns": [{"expression": {"type": "aggregate", "function": "count"}, "alias": "n"}],
             "scope": {"type": "filtered", "where": cond}}
     try:
-        return db.execute(program([stmt], schema)[0]).fetchone()[0], None
+        return next((e["error"][:200] for e in check(db, program([stmt], schema))), None)
     except Exception as e:
-        return None, str(e)[:200]
+        return str(e)[:200]
 
 
 def build_2(db, requests, schema, stage1, values, params, parts, answers, section) -> None:
@@ -558,13 +558,10 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                 if info["nullable"] and op not in ("is_empty", "is_not_empty"):   # NOT (NULL = x) drops NULL rows
                     cond = {"type": "any", "children": [
                         {"type": "null_check", "expression": _col(key), "operator": "is_null"}, cond]}
-            n, err = count(db, schema, key.split(".")[0], cond)
-            if err:
+            if err := refused(db, schema, key.split(".")[0], cond):
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": f"condition on {key} refused", "error": err})
-            elif n == 0:
-                warnings.append({"request": rid, "problem": f"no record matches the condition on {key}"})
-            built = {"column": key, "operator": op, "negated": negated, "condition": cond, "rows": n}
+            built = {"column": key, "operator": op, "negated": negated, "condition": cond}
             if other and (seen := compared.get((rid, frozenset((key, other))))):   # the surer side replaces it
                 out[rid]["predicates"][out[rid]["predicates"].index(seen[0])] = built
                 out[rid]["columns"] = [c for c in out[rid]["columns"] if c != seen[0]["column"]]
@@ -574,15 +571,11 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                 compared[(rid, frozenset((key, other)))] = (built, sure_op)
         for h in stage1.get(rid, {}).get("linked", []):        # a matching record in a linked table, or none
             key, cond = existence(schema, h["of"], h["table"], h["has"])
-            n, err = count(db, schema, key.split(".")[0], cond)
-            if err:
+            if err := refused(db, schema, key.split(".")[0], cond):
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": f"matching record in {h['table']} refused", "error": err})
-            elif n == 0:
-                warnings.append({"request": rid, "problem": f"no record matches the condition on {h['table']}"})
             out[rid].setdefault("predicates", []).append({"column": key, "operator": "in" if h["has"] else "not_in",
-                                                          "negated": False, "condition": cond, "rows": n,
-                                                          "linked": h["table"]})
+                                                          "negated": False, "condition": cond, "linked": h["table"]})
         g = out.get(rid, {})
         if g and g.get("dropped") and not g["columns"] and not g.get("all_rows") and not rows_from(r):
             g["flagged"] = True                              # never widen to every record silently

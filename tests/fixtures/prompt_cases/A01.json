@@ -272,8 +272,7 @@
           "type": "literal",
           "value": "black"
          }
-        },
-        "rows": 5
+        }
        }
       ]
      }
@@ -451,8 +450,7 @@
       },
       "sql": [
        "UPDATE \"variants\" AS \"v\" SET \"price_mad\" = (\"v\".\"price_mad\" * 0.95) WHERE \"v\".\"color\" = 'black'"
-      ],
-      "rows": 5
+      ]
      }
     ],
     "questions": [],

@@ -3,13 +3,14 @@
     program(statements, schema)  the SQL of one prompt's statements, in order; the ids (t_variants, c_price_mad) are
                                  resolved against the store schema as earlier statements change it (a column added
                                  then filled, a table renamed then used)
-    check(db, sql)               runs them in order on the store inside a savepoint, then rolls back: SQLite reports
-                                 an unknown table or column, a NOT NULL column without default, a type error…
+    check(db, sql)               SQLite prepares each one (EXPLAIN: no row read, nothing run) and reports an unknown
+                                 table or column, a syntax error…
     run(db, sql)                 runs them for real (a disposable copy of the store): the rows each select returns
 
 Our code only resolves ids and maps one node to one SQLGlot class. A select reading an earlier select (request_result)
 becomes a CTE; a select inside a statement (a value, an IN list) becomes a subquery that may read the outer row. Not yet: a change reading an earlier request's rows (affected_rows: needs the executor).
 """
+import re
 import sqlite3
 
 from pydantic import TypeAdapter
@@ -276,22 +277,16 @@ def run(db: sqlite3.Connection, sql: list[str]) -> list:
 
 
 def check(db: sqlite3.Connection, sql: list[str]) -> list[dict]:
-    """SQLite's verdict, nothing kept: [] when every statement runs, else [{"statement", "sql", "error"}]."""
-    isolation = db.isolation_level
-    if isolation is not None:  # set only if needed: setting it COMMITs an open transaction (the session's)
-        db.isolation_level = None
-    db.execute("SAVEPOINT ast_check")
+    """SQLite's verdict on the statements as written (EXPLAIN prepares them: no row is read, nothing runs): [] when
+    each is valid, else [{"statement", "sql", "error"}]. After a CREATE, ALTER or DROP the next ones depend on it:
+    not checked. A value a column refuses (STRICT) is the execution's to report."""
     errors = []
-    try:
-        for i, q in enumerate(sql):
-            try:
-                db.execute(q)
-            except sqlite3.Error as e:
-                errors.append({"statement": i, "sql": q, "error": str(e)})
-                break                                         # later statements depend on this one
-    finally:
-        db.execute("ROLLBACK TO ast_check")
-        db.execute("RELEASE ast_check")
-        if isolation is not None:
-            db.isolation_level = isolation
+    for i, q in enumerate(sql):
+        try:
+            db.execute(f"EXPLAIN {q}", {k: "[]" for k in re.findall(r":(rows_\w+)", q)}).fetchall()   # ids: none yet
+        except sqlite3.Error as e:
+            errors.append({"statement": i, "sql": q, "error": str(e)})
+            break
+        if re.match(r"\s*(CREATE|ALTER|DROP)\b", q, re.IGNORECASE):
+            break
     return errors

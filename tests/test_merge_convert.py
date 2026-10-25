@@ -3,6 +3,7 @@ import sqlite3
 import pytest
 
 from orbitrows.pipeline.merge import convert
+from orbitrows.pipeline.store.profile import refresh
 from orbitrows.services import questions
 from orbitrows.services.storage import incoming, store
 from orbitrows.sql.dml import Arithmetic, Negate
@@ -42,6 +43,7 @@ def test_plan_asks_for_differing_units_and_refuses_row_varying_ones():
         CREATE TABLE in_supplier_1 (price TEXT, weight TEXT, currency TEXT, cost TEXT);
         INSERT INTO in_supplier_1 VALUES ('', '1', 'USD', '3'), ('12.5', '2', 'EUR', '4'), ('7', '3', 'USD', '5');
     """)
+    refresh(db)                                               # the profile the upload counts: its samples
     plans = [convert.plan(db, 1, pair) for pair in ((1, 1), (2, 2), (4, 3))]   # the pairs a message resolved
     found = {k: [x for p in plans for x in p[k]] for k in plans[0]}
     assert found["needs"] == [{"pair": (1, 1), "from": "EUR", "to": "MAD", "kind": "currency",

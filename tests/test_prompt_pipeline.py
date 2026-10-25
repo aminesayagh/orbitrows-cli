@@ -8,6 +8,7 @@ from fixtures.orbitrow.load import baseline
 from orbitrows.pipeline.prompt import (conditions, coref, formula, grouping, link, operation, parts, pipeline,
                                        request_graph, sources, values)
 from orbitrows.pipeline.prompt.asking import question
+from orbitrows.pipeline.store.profile import refresh
 from orbitrows.pipeline.store.run import Paused
 from orbitrows.services.model.client import Answers, Model, Recorded, ask, settle, yes_no
 
@@ -141,18 +142,21 @@ def test_step_1_carries_its_calls_to_the_questions_and_a_settled_answer_ends_the
 
 
 def test_the_dry_runs_keep_the_session_s_transaction_open():
-    """The session holds one open transaction (isolation_level None): the pipeline's dry runs must not commit it."""
+    """The session holds one open transaction (isolation_level None): SQLite's check must not commit it."""
     import sqlite3
-    from orbitrows.pipeline.prompt import assemble
     from orbitrows.sql import sql
     db = sqlite3.connect(":memory:", isolation_level=None)
     db.execute("CREATE TABLE t (x INTEGER)")
     db.execute("BEGIN")
     db.execute("INSERT INTO t VALUES (1)")
     assert sql.check(db, ["UPDATE t SET x = 2"]) == [] and db.in_transaction
-    assert assemble.execute(db, [], [], []) == [] and db.in_transaction
     db.execute("ROLLBACK")
     assert db.execute("SELECT COUNT(*) FROM t").fetchone() == (0,)   # the insert was never committed
+
+
+def ran_on(db, ran) -> list:
+    """The rows a read of the program returns, run as the session runs it."""
+    return db.execute(ran["sql"][0]).fetchall()
 
 
 def offered(monkeypatch, statement, parts_, grouping_=None):
@@ -195,6 +199,7 @@ def offered(monkeypatch, statement, parts_, grouping_=None):
     monkeypatch.setattr(source_route, "run", selected)
     monkeypatch.setattr(pipeline.extractor, "connect", lambda: "gliner2")
     monkeypatch.setattr(coref, "mentions", lambda prompts, name: [[]])
+    refresh(db)                                               # the profile the upload counts
     return db
 
 
@@ -209,7 +214,7 @@ async def test_a_read_of_an_upload_shows_the_store_s_values_and_sorts_its_number
     result = await pipeline.run("show the offer with our prices, by recommended price", Model(), db)
     assert result["assembly"]["errors"] == [], result["assembly"]
     [ran] = result["assembly"]["program"]
-    assert ran["returns"] == [["C3", 50.0, 55.0], ["A1", 100.0, 99.0], ["B2", 120.0, 129.0]], ran
+    assert ran_on(db, ran) == [("C3", 50.0, 55.0), ("A1", 100.0, 99.0), ("B2", 120.0, 129.0)], ran
 
 
 async def test_a_write_to_an_upload_is_refused_as_read_only(monkeypatch):
@@ -256,6 +261,7 @@ async def test_a_repeating_upload_key_is_linked_and_totalled_per_store_record(mo
     db.executemany("INSERT INTO in_warehouse_1 VALUES (?, ?, ?)", table["rows"])
     for pos, column in linked["keys"].items():                # as incoming.upload() writes it
         db.execute("UPDATE _incoming_columns SET references_column_id = ? WHERE position = ?", (column, pos))
+    refresh(db)
     total = {"type": "aggregate", "function": "sum"}
     sections = {request_graph: {"requests": [{"id": "r1", "text": "m", "start": 0, "end": 1}], "references": [],
                                 "warnings": []},
@@ -283,7 +289,7 @@ async def test_a_repeating_upload_key_is_linked_and_totalled_per_store_record(mo
     result = await pipeline.run("total warehouse quantity per variant", Model(), db)
     assert result["assembly"]["errors"] == [], result["assembly"]
     [ran] = result["assembly"]["program"]
-    assert sorted(ran["returns"]) == [["A1", 10.0], ["B2", 3.0]], ran
+    assert sorted(ran_on(db, ran)) == [("A1", 10.0), ("B2", 3.0)], ran
 
 
 def test_an_identifier_written_with_digits_stays_text_in_the_view():
@@ -298,6 +304,7 @@ def test_an_identifier_written_with_digits_stays_text_in_the_view():
             VALUES (1, 1, 'barcode', 'TEXT', 0, {KINDS.index("record_reference")}), (2, 1, 'qty', 'TEXT', 1, NULL);
         CREATE TABLE in_offer_1 (barcode TEXT, qty TEXT);
         INSERT INTO in_offer_1 VALUES ('6110000000052', '3'), ('0610000000999', '12');""")
+    refresh(db)
     assert pipeline.cell_type(db, "in_offer_1", "barcode") == "TEXT"
     assert pipeline.cell_type(db, "in_offer_1", "qty") == "INTEGER"
 

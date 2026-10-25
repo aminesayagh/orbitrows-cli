@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 from orbitrows.pipeline.prompt import coref, pipeline
+from orbitrows.pipeline.store.profile import refresh
 from orbitrows.pipeline.store.run import Paused
 from orbitrows.services.cli import main as cli
 from orbitrows.services.model import client as model
@@ -337,6 +338,17 @@ def test_a_select_sends_back_at_most_rows_rows(piped, monkeypatch):
     assert ran["rows"] == [(1,), (2,)] and ran["more"] is True
 
 
+
+
+def test_a_later_request_reads_the_ids_a_change_returned_as_the_program_runs(piped):
+    """"Raise the prices under 15, then show those": the update's RETURNING ids are passed to the read (assembly's
+    :rows_r1); the read finds the raised record although its price no longer matches the update's condition."""
+    reply = piped.session.apply("raise then show", [
+        {"request": "r1", "sql": ['UPDATE "products" SET price = price + 10 WHERE price < 15 RETURNING "id"']},
+        {"request": "r2", "sql": ['SELECT id, price FROM "products" WHERE id IN (SELECT value FROM json_each(:rows_r1))']}],
+        [])
+    assert [r.get("changed", r.get("rows")) for r in reply["ran"]] == [1, [(1, 20.0)]], reply
+
 async def _now(value):
     return value
 
@@ -366,6 +378,8 @@ def supplied(served, monkeypatch):
             CREATE TABLE in_supplier_1 (ref TEXT, prix TEXT);
             INSERT INTO in_supplier_1 VALUES ('A1', '1.5'), ('B2', '2'), ('Z9', '9');
             UPDATE _incoming_columns SET references_column_id = 1 WHERE id = 1;""")
+        refresh(db)                                           # the profile the import and the upload count
+        db.commit()
     prompt = "update the prices from supplier.csv"
     sections = {request_graph: {"requests": [{"id": "r1", "text": prompt, "start": 0, "end": len(prompt)}],
                                 "references": [], "warnings": []},
@@ -409,6 +423,7 @@ def test_a_repeating_reference_beside_a_unique_key_still_updates(supplied):
         UPDATE in_supplier_1 SET alt = 'A1';
         INSERT INTO _incoming_columns (id, table_id, sql_name, sql_type, source_header, position, references_column_id)
             VALUES (3, 1, 'alt', 'TEXT', 'Alt', 2, 1);""")         # also references a store key, repeating
+    refresh(supplied.db)
     reply = supplied.message("update the prices from supplier.csv")
     assert reply["ran"][0]["changed"] == 2, reply                  # matched on ref, which is on a row each
 
@@ -456,6 +471,7 @@ def adding(served, monkeypatch):
                                                  ('', 'Blank', '4');
                 UPDATE _incoming_columns SET references_column_id = 1 WHERE id = 1;""")
             convert.save(db, 3, "EUR", "MAD", "x * 10")
+            refresh(db)
             db.commit()
         prompt = "add the new products from supplier.csv"
         sections = {request_graph: {"requests": [{"id": "r1", "text": prompt, "start": 0, "end": len(prompt)}],
@@ -508,6 +524,7 @@ def test_an_empty_cell_of_an_upload_leaves_the_store_s_value(supplied):
     from orbitrows.pipeline.merge import convert
     convert.save(supplied.db, 2, "EUR", "MAD", "x * 10")
     supplied.db.execute("UPDATE in_supplier_1 SET prix = ' ' WHERE ref = 'B2'")   # CAST('' AS REAL) would be 0
+    refresh(supplied.db)
     reply = supplied.message("update the prices from supplier.csv")
     assert reply["ran"][0]["changed"] == 1, reply
     assert supplied.db.execute("SELECT sku, price FROM products ORDER BY sku").fetchall() == [
@@ -517,6 +534,7 @@ def test_an_empty_cell_of_an_upload_leaves_the_store_s_value(supplied):
 def test_an_insert_from_an_upload_repeating_a_key_is_refused(adding):
     s = adding()
     s.db.execute("INSERT INTO in_supplier_1 VALUES ('C3', 'Mug v2', '5')")
+    refresh(s.db)
     reply = s.message("add the new products from supplier.csv")
     assert not reply["ok"] and "ref of in_supplier_1 repeats 'C3'" in reply["error"], reply
     assert s.db.execute("SELECT sku FROM products ORDER BY sku").fetchall() == [("A1",), ("B2",)]
@@ -532,6 +550,7 @@ def test_an_upload_column_the_formula_step_names_sets_the_value_without_a_link(s
             VALUES (3, 1, 'recommended', 'TEXT', 'Recommended (DH)', 2, 1, '{}');
         ALTER TABLE in_supplier_1 ADD COLUMN recommended TEXT;
         UPDATE in_supplier_1 SET recommended = CASE ref WHEN 'A1' THEN ' 12.5' WHEN 'B2' THEN '' ELSE '7' END;""")
+    refresh(supplied.db)
     seen = []
 
     async def named(jev, prompt, requests, schema, sources, values, parts, *a, **k):
@@ -560,6 +579,7 @@ def test_an_update_without_a_named_source_asks_the_model_once_among_the_number_c
             VALUES (3, 1, 'recommended', 'TEXT', 'Recommended (DH)', 2, 1, '{}');
         ALTER TABLE in_supplier_1 ADD COLUMN recommended TEXT;
         UPDATE in_supplier_1 SET recommended = CASE ref WHEN 'A1' THEN '12.5' WHEN 'B2' THEN '25' ELSE '7' END;""")
+    refresh(supplied.db)
     asked = []
 
     class Choosing(client.Model):

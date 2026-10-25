@@ -1,6 +1,6 @@
 """Step 7 of prompt → AST: assembly and validation (plan S6, S8–S10, decided 2026-10-12). Code only, no Jev: every
-decision was made by steps 1–6; this step builds one complete AST statement per request, checks it, and runs the whole
-program on the store in a savepoint (rolled back) to show what it would do.
+decision was made by steps 1–6; this step builds one complete AST statement per request and checks it. It never runs
+it: the session's execution does, and reports what it did (rows changed, rows read).
 
     aliases      one per table of a statement; the steps' column nodes (source = table id) are rewritten to them
     other tables a condition on another table follows the foreign keys from the main table (variants → products →
@@ -8,21 +8,22 @@ program on the store in a savepoint (rolled back) to show what it would do.
                  along many-to-one keys (a product's name for a variant); one-to-many is warned, never guessed
     scope        the condition tree (step 6), all rows, or the rows of an earlier request ("those"):
                    after a select   id IN (SELECT id with that select's own conditions, order and limit)
-                   after an update or delete   the ids it changed: it runs with RETURNING, the ids are kept (notice
-                                    #11) and the later request reads id IN (…)
+                   after an insert, update or delete   the ids it changed: it runs with RETURNING and the later
+                                    request reads id IN (SELECT value FROM json_each(:rows_r1)), the ids the session
+                                    passes as it runs the program (notice #11)
     order        the requests' order (step 1's links); AND requests run as written
     validation   Pydantic (each statement's shape), the compiler against the schema as the statements change it (a
-                 column added by r1 exists for r2), SQLite in a savepoint: an error stops the run
-    questions    every warning of steps 1–7 in one list, with its step; this step adds: 0 rows changed (and when
-                 each condition alone matched rows), every row changed, a statement SQLite refused
+                 column added by r1 exists for r2), SQLite's prepare (EXPLAIN, no row read): an error stops the run
+    questions    every warning of steps 1–7 in one list, with its step; this step adds: every row changed (the
+                 statement has no condition), a statement SQLite refused
 
-Section "assembly": {"program": [{"request", "ast", "sql", "rows" | "returns", "rows_from"?}], "questions": [...],
+Section "assembly": {"program": [{"request", "ast", "sql", "rows_from"?, "returning"?}], "questions": [...],
 "errors": [...]}.
 """
 import json
 from collections import deque
 
-from orbitrows.sql.sql import program
+from orbitrows.sql.sql import check, program
 from .parts import main_table as parts_main_table
 
 ROWS = ("select", "update", "delete")
@@ -437,6 +438,8 @@ def grouped(select: dict) -> bool:
     return bool(select.get("group_by") or select.get("having") or
                 any(c["expression"].get("type") == "aggregate" for c in select.get("columns", [])))
 
+ROWS = "__rows_of_{}__"                                       # replaced by the ids the session passes
+
 
 def with_condition(ast, cond):
     key = "scope"
@@ -447,52 +450,31 @@ def with_condition(ast, cond):
 
 # ---- run ------------------------------------------------------------------------------------------------------
 
-def execute(db, schema, items, warnings) -> list[dict]:
-    """Every statement in order inside a savepoint, rolled back. A request reading the rows an update or delete
-    changed gets their ids from that statement's RETURNING."""
-    isolation = db.isolation_level
-    if isolation is not None:  # set only if needed: setting it COMMITs an open transaction (the session's)
-        db.isolation_level = None
-    db.execute("SAVEPOINT assemble")
-    errors, changed = [], {}
-    try:
-        for i, it in enumerate(items):
-            if it.get("rows_from") in changed:              # affected rows: the ids, now known
-                k = pk(schema, it["main"])
-                alias = it["ast"]["target" if "target" in it["ast"] else "from"]["alias"]
-                ids = changed[it["rows_from"]] or [None]
-                with_condition(it["ast"], {"type": "membership", "operator": "in", "expression": col(alias, k),
-                                           "values": [{"type": "literal", "value": x} for x in ids]})
-            asts = [x["ast"] for x in items[:i + 1]]
-            try:
-                before = len(program([x["ast"] for x in items[:i]], schema)) if i else 0
-                it["sql"] = program(asts, schema)[before:]
-            except Exception as e:                          # the AST is refused: nothing runs after it
-                errors.append({"request": it["request"], "stage": "compile", "error": str(e)[:300]})
-                break
-            try:
-                for q in it["sql"]:
-                    if it.get("returning"):
-                        q += f' RETURNING "{it["returning"]}"'
-                    cur = db.execute(q)
-                    if cur.description and it["ast"]["type"] == "select":
-                        rows = cur.fetchall()
-                        it["returns"] = [list(r) for r in rows[:20]]
-                        it["rows"] = len(rows)
-                    elif cur.description:                   # RETURNING
-                        ids = [r[0] for r in cur.fetchall()]
-                        changed[it["request"]] = ids
-                        it["rows"] = len(ids)
-                    else:
-                        it["rows"] = cur.rowcount
-            except Exception as e:
-                errors.append({"request": it["request"], "stage": "sqlite", "error": str(e)[:300]})
-                break
-    finally:
-        db.execute("ROLLBACK TO assemble")
-        db.execute("RELEASE assemble")
-        if isolation is not None:
-            db.isolation_level = isolation
+def compiled(db, schema, items) -> list[dict]:
+    """Every statement's SQL, in order, prepared by SQLite (sql.check: no row read, nothing run). A request reading
+    the rows an insert, update or delete changed reads their ids from that statement's RETURNING, which the session
+    passes when it runs the program (:rows_<request>, a JSON list): the ids come from the execution only."""
+    errors = []
+    for i, it in enumerate(items):
+        if it.get("rows_from"):                             # affected rows: the ids the execution returns
+            alias = it["ast"]["target" if "target" in it["ast"] else "from"]["alias"]
+            with_condition(it["ast"], {"type": "membership", "operator": "in", "expression": col(alias, pk(schema, it["main"])),
+                                       "values": [{"type": "literal", "value": ROWS.format(it["rows_from"])}]})
+        try:
+            before = len(program([x["ast"] for x in items[:i]], schema)) if i else 0
+            it["sql"] = program([x["ast"] for x in items[:i + 1]], schema)[before:]
+        except Exception as e:                              # the AST is refused: nothing runs after it
+            errors.append({"request": it["request"], "stage": "compile", "error": str(e)[:300]})
+            break
+        if it.get("rows_from"):
+            it["sql"] = [q.replace(f"'{ROWS.format(it['rows_from'])}'", f"SELECT value FROM json_each(:rows_{it['rows_from']})")
+                         for q in it["sql"]]
+        if it.get("returning"):
+            it["sql"] = [f'{q} RETURNING "{it["returning"]}"' for q in it["sql"]]
+    sql = [q for it in items if "sql" in it for q in it["sql"]]
+    if not errors and (bad := check(db, sql)):
+        errors.append({"request": next(it["request"] for it in items if bad[0]["sql"] in it.get("sql", [])),
+                       "stage": "sqlite", "error": bad[0]["error"][:300]})
     return errors
 
 
@@ -561,17 +543,12 @@ def assemble(db, schema, requests, operation, sources, parts, conditions, groupi
                 warnings.append({"request": rid, "problem": f"not built: {unlinked}"})
                 continue
         items.append(it)
-    errors = execute(db, schema, items, warnings)
+    errors = compiled(db, schema, items)
     for it in items:                                    # what the merchant should see before approving
         a = it["ast"]
-        if a["type"] in ("update", "delete") and it.get("rows") == 0:
-            pred = [p for p in conditions.get(it["request"], {}).get("predicates", [])]
-            alone = all((p.get("rows") or 0) > 0 for p in pred) and len(pred) > 1
-            warnings.append({"request": it["request"], "problem": "changes no record" +
-                             (": each condition matches records, but not together" if alone else "")})
         if a["type"] in ("update", "delete") and a["scope"]["type"] == "all_rows":
             warnings.append({"request": it["request"], "problem": f"changes every record of {store_name.get(it['main'])}",
-                             "rows": it.get("rows"), "scope": "all_rows"})   # read by the session: asked first
+                             "scope": "all_rows"})          # read by the session: asked first
     questions = [{"step": s, **w} for s, ws in steps_warnings for w in ws] + \
         [{"step": "assembly", **w} for w in warnings] + [{"step": "assembly", **e} for e in errors]
     return {"program": [{k: v for k, v in it.items() if k != "main"} for it in items],

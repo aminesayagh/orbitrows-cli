@@ -34,7 +34,7 @@ def built(db, schema, text, main, stage_1, stage_2) -> list:
     out = assemble.assemble(db, schema, requests, {"r1": {"statement": "select"}}, sources, {"r1": {"outputs": "all"}},
                             section["requests"], tree)
     assert not out["errors"], out
-    return sorted(out["program"][0]["returns"])
+    return sorted(list(r) for r in db.execute(out["program"][0]["sql"][0]))   # run as the session runs it
 
 
 def test_a_column_compared_with_a_linked_table_s(store):

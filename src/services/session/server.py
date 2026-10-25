@@ -45,6 +45,8 @@ QUESTION = ("id", "request", "step", "problem")              # a question's fiel
 # a statement that changes the tables' structure: its first keyword, after blanks and comments (one statement each:
 # sqlite3 runs no more); refused for now (user, 2026-10-21)
 STRUCTURE = re.compile(r"(?:\s|--[^\n]*|/\*.*?\*/)*(?:CREATE|ALTER|DROP)\b", re.IGNORECASE | re.DOTALL)
+PASSED = re.compile(r":(rows_\w+)")                         # a later request's ids, passed as it runs
+RETURNING = re.compile(r'RETURNING "[^"]+"$')
 WRITES = re.compile(r'\s*(?:UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+"([^"]+)"', re.IGNORECASE)   # the table it changes
 
 
@@ -258,14 +260,19 @@ class Session:
 
     def run(self, n: int, text: str, program: list, by: list, statements: list, before: int, ddl: bool,
             reply: dict) -> dict:
+        returned = {}                                         # request → the ids its RETURNING gave (assembly)
         for request, sql in by:
             try:
-                cursor = self.db.execute(sql)
-                rows = cursor.fetchmany(ROWS + 1)
+                cursor = self.db.execute(sql, {k: json.dumps(returned.get(k[5:], [])) for k in PASSED.findall(sql)})
+                rows = cursor.fetchall() if RETURNING.search(sql) else cursor.fetchmany(ROWS + 1)
             except sqlite3.Error as e:
                 return self.cancel(n, f"SQLite refused {sql}: {e}")
+            if RETURNING.search(sql):
+                returned.setdefault(request, []).extend(r[0] for r in rows)
             ran = {"request": request, "sql": sql}
-            if cursor.description:                            # a SELECT, or a change's RETURNING
+            if RETURNING.search(sql):                         # a change a later request reads: its count
+                reply["ran"].append(ran | {"changed": len(rows)})
+            elif cursor.description:                          # a SELECT
                 reply["ran"].append(ran | {"columns": [d[0] for d in cursor.description],
                                            "rows": rows[:ROWS]} | ({"more": True} if len(rows) > ROWS else {}))
             else:                                             # rowcount is -1 for DDL

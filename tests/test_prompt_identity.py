@@ -28,7 +28,14 @@ REPLACED = {"pipeline/prompt/grouping.py": {   # the one tree question over ever
     "A request that only reads always gives information back: yes.",         # execution reports (2026-10-25)
     "A condition or a computation the request needs to make its change is not information back: no.",
     "_back", "') ask to get information back?", "reports_back", "reports back uncertain",
-    "Does request ", "id", "text", "request", "problem", "probability", 0.0, 0.5}}   # one use fewer of each
+    "Does request ", "id", "text", "request", "problem", "probability", 0.0, 0.5},   # one use fewer of each
+    # 2026-10-25: no row is read before the session runs the program (the test runs and counts are gone)
+    "pipeline/prompt/assemble.py": {"select", "update", "delete", "SAVEPOINT assemble", "ROLLBACK TO assemble",
+                                    "RELEASE assemble", "request", "ast", "rows", "predicates", "changes no record",
+                                    "returns", ": each condition matches records, but not together"},
+    "pipeline/prompt/conditions.py": {"rows", "no record matches the condition on "},
+    "pipeline/prompt/parts.py": {"SQLite, on all rows"},
+    "sql/sql.py": {"SAVEPOINT ast_check", "ROLLBACK TO ast_check", "RELEASE ast_check"}}
 ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 
 

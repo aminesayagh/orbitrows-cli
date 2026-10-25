@@ -15,8 +15,7 @@
           below …': at least / at most a number, a column, or both added); for an output, the aggregate; for a
           schema action, the column, the new name, the type
     code  the expression, from the template: the tree is built here, never written by Jev. Every request is then
-          compiled (sql.py) and run on all rows in a savepoint, rolled back: an SQLite error is a warning (a
-          condition of the next step may exclude the rows it fails on)
+          compiled (sql.py) and prepared by SQLite (EXPLAIN: no row read): an SQLite error is a warning
 
 Guards: greatest / least with the bound, and coalesce(bound, value) when the bound can be NULL: a missing cost leaves
 the value as computed (MAX(x, NULL) would be NULL). An INTEGER column's computed value is rounded (STRICT tables
@@ -521,7 +520,7 @@ def build(db, requests, schema, sources, values, a1, a2, numeric_by_formula=Fals
                 sql = program([stmt], schema)
                 out[rid]["sql"] = sql
                 for e in check(db, sql):
-                    warnings.append({"request": rid, "problem": "SQLite, on all rows", "error": e["error"]})
+                    warnings.append({"request": rid, "problem": "SQLite refuses the statement", "error": e["error"]})
             except Exception as e:                            # a tree the AST refuses: never sent further
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": "AST refused", "error": str(e)[:300]})
