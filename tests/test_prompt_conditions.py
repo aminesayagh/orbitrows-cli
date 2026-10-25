@@ -23,18 +23,19 @@ def store(monkeypatch):
     return db, schema
 
 
-def built(db, schema, text, main, stage_1, stage_2) -> list:
+def built(db, schema, text, main, stage_1, stage_2, numbers=(), tree=None) -> list:
     """Steps 6 and 7 for one read of `main` (every column shown) → the rows it returns."""
     other = {"t_variants": "t_offer", "t_offer": "t_variants"}[main]
     requests = [{"id": "r1", "text": text, "statement": "select"}]
     sources = {"r1": {"from": {"type": "database_table", "reference": main}, "reads": [other]}}
+    params = [{"text": str(n), "value": n, "unit": None} for n in numbers]
     section = conditions.build(requests, schema, sources, [], stage_1)
-    conditions.build_2(db, requests, schema, section["requests"], [], {"r1": []}, {}, stage_2, section)
-    tree = grouping.build(requests, section, {}, {})["requests"]
+    conditions.build_2(db, requests, schema, section["requests"], [], {"r1": params}, {}, stage_2, section)
+    tree = grouping.build(requests, section, {}, tree or {})["requests"]
     out = assemble.assemble(db, schema, requests, {"r1": {"statement": "select"}}, sources, {"r1": {"outputs": "all"}},
                             section["requests"], tree)
     assert not out["errors"], out
-    return sorted(list(r) for r in db.execute(out["program"][0]["sql"][0]))   # run as the session runs it
+    return sorted((list(r) for r in db.execute(out["program"][0]["sql"][0])), key=str)   # as the session runs it
 
 
 def test_a_column_compared_with_a_linked_table_s(store):
@@ -87,3 +88,15 @@ def test_the_tree_follows_from_each_pair_s_and_or():
     assert grouping.tree_of([0, 1, 2, 3], lambda i, j: (min(i, j), max(i, j)) in ands) == \
         ("all", [("any", [0, 1]), ("any", [2, 3])])
     assert grouping.tree_of([0, 1, 2, 3], lambda i, j: (min(i, j), max(i, j)) in {(0, 1), (1, 2), (2, 3)}) is None
+
+
+def test_two_numbers_on_one_column_are_two_conditions(store):
+    """"under 15 or over 25": one condition per number written (not one for the column), joined by grouping."""
+    db, schema = store
+    key = "r1|t_variants.c_price"
+    rows = built(db, schema, "variants priced under 15 or over 25", "t_variants",
+                 {"r1_all": 0.02, "r1_chooses_t_variants.c_price": 0.97},
+                 {f"{key}|n0|op": ("<", {"<": 0.95}), f"{key}|n0|not": 0.02,
+                  f"{key}|n1|op": (">", {">": 0.95}), f"{key}|n1|not": 0.02}, numbers=(15, 25),
+                 tree={"r1|0|1": ("or", {"or": 0.95})})
+    assert rows == [["A", 10.0], ["C", 30.0], [None, 5.0]], rows       # B (20) is between: kept out

@@ -99,6 +99,35 @@ OPERATORS = {
     "is_not_empty": "Has a value ('with a barcode').",
 }
 TEXT_ONLY = {"contains", "starts_with", "ends_with"}
+ONE = ("between", "in", "is_empty", "is_not_empty")          # a mention is one value: never these
+MENTION_RULES = [
+    "Each value is its own condition; how the conditions combine (AND, OR) is asked later.",
+    "A bound of a range is its own condition: 'between 100 and 150' is at least 100 and at most 150.",
+    "Answer none when this value does not choose records by this column (it belongs to another column, or it "
+    "is a new value, a limit or a quantity, or the amount of a change: 'lower the price by 10%').",
+    "A negation belongs to the condition whose own words negate it ('but not 120' negates only 120; 'except the "
+    "Kora ones' negates only Kora), never to the other values of the column.",
+]
+
+
+def around(r, key, values, params, m) -> str:
+    """The request's words around mention m of `key` (operands()' numbering), for Jev: which words go with it."""
+    kind, i, t, at = m[0], int(m[1:]), r["text"], r.get("start", 0)
+    if kind == "s":
+        v = [v for v in values if v["request"] == r["id"] and v.get("column") == key][i]
+        a, b = v["start"] - at, v["end"] - at
+    elif kind == "n":
+        a, b = params[i]["start"], params[i]["end"]
+    else:
+        a, b = list(DATE.finditer(t))[i].span()
+    return f"'…{t[max(0, a - 30):b].strip()}'"                # its words come before it ('over 100', 'heavier than 1 kg')
+
+
+def mentions(cands: dict) -> list[str]:
+    """The operands the request writes for a column: step 3's values found in it, its numbers, its dates. Two or
+    more are as many conditions ("under 100 or over 300", "the black ones … or the white ones …"), each asked
+    apart; grouping joins them. One or none: the column's one condition, as before."""
+    return [k for k in cands if k[0] in "snd"]
 NEGATE_RULES = [
     "Answer yes only when words negate the condition: 'except the Kora ones', 'not black', 'other than', "
     "'excluding', 'all but'.",
@@ -423,6 +452,17 @@ def questions_2(db, requests, schema, stage1, values, params, parts) -> dict:
             ops = {k: v for k, v in OPERATORS.items() if info["sql_type"] == "TEXT" or k not in TEXT_ONLY}
             cands = operands(db, schema, r, key, values, params[rid], parts.get(rid, {}))
             opts = {k: c[0] for k, c in cands.items()}
+            if len(several := mentions(cands)) > 1:           # one condition per value written
+                for m in several:
+                    with_ = f"{cands[m][0]} (in {around(r, key, values, params[rid], m)})"
+                    q[f"{rid}|{key}|{m}|op"] = choice(
+                        CONTEXT, f"In {said}, how does the condition on {name} with {with_} choose records?",
+                        {k: v for k, v in ops.items() if k not in ONE} | {"none": "Not a condition on this column."},
+                        MENTION_RULES)
+                    q[f"{rid}|{key}|{m}|not"] = yes_no(CONTEXT, f"In {said}, is the condition on {name} with "
+                                                                f"{with_} written as an exception or a negation?",
+                                                       NEGATE_RULES + MENTION_RULES[-1:])
+                continue
             q[f"{rid}|{key}|op"] = choice(CONTEXT, f"How does {said} choose its records by {name}?", ops)
             if any(k.startswith("s") for k in cands):         # step 3 proved the value with SQL: nothing to ask
                 q[f"{rid}|{key}|not"] = yes_no(CONTEXT, f"In {said}, is the condition on {name} written as an "
@@ -473,6 +513,40 @@ def refused(db, schema, table, cond) -> str | None:
         return str(e)[:200]
 
 
+def mentioned(rid, key, m, cand, info, answers, out, warnings, db, schema, cands) -> dict | None:
+    """One value's condition on a column (mentions()): its operator, its negation; None when it is not one."""
+    def flag(problem, k=None, labels=None, p=None):         # k: the answer the user is asked again, if any
+        out[rid]["flagged"] = True
+        warnings.append({"request": rid, "problem": problem} | ({"probability": round(p, 2)} if p is not None else {})
+                        | (question(answers, f"{rid}|{key}|{m}|{k}", labels) if k else {}))
+    op, probs = answers.get(f"{rid}|{key}|{m}|op", (None, {}))
+    if op not in (None, "none") and probs.get(op, 1) < SURE:
+        flag(f"op of {key} with {cand[0]} uncertain", "op", {k: x[0] for k, x in cands.items()}, probs.get(op, 0))
+    if op in (None, "none"):
+        return None
+    operand = cand[2] if op in TEXT_ONLY and len(cand) > 2 else cand[1]   # a pattern: the text as written
+    if len(cand) > 3:                                         # a value read by its meaning: the merchant confirms
+        flag(f"value read by its meaning: {cand[0]}, to confirm")
+    cond = predicate(op, _col(key), operand, None, cand[1] if isinstance(cand[1], list) else [cand[1]],
+                     info["sql_type"] == "TEXT")
+    cond = cond and through(schema, cond, key.split(".")[0])
+    if cond is None:
+        flag(f"condition on {key} with {cand[0]}: a part is missing")
+        return None
+    p = answers.get(f"{rid}|{key}|{m}|not", 0.0)
+    if 1 - SURE < p < SURE:
+        flag(f"negation of {key} with {cand[0]} uncertain", "not", p=p)
+    if p >= 0.5:
+        cond = {"type": "not", "operand": cond}
+        if info["nullable"]:                                  # NOT (NULL = x) drops NULL rows
+            cond = {"type": "any", "children": [
+                {"type": "null_check", "expression": _col(key), "operator": "is_null"}, cond]}
+    if err := refused(db, schema, key.split(".")[0], cond):
+        flag(f"condition on {key} refused")
+        warnings[-1]["error"] = err
+    return {"column": key, "mention": m, "operator": op, "negated": p >= 0.5, "condition": cond}
+
+
 def build_2(db, requests, schema, stage1, values, params, parts, answers, section) -> None:
     """Adds the predicates of stage 2 to stage 1's section. Two conditions are dropped, with their warnings (the
     request stays flagged only for what remains):
@@ -499,6 +573,12 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
             info = column_info(schema, key)
             cands = operands(db, schema, r, key, values, params[rid], parts.get(rid, {}))
 
+            if len(several := mentions(cands)) > 1:           # one condition per value written
+                for m in several:
+                    built = mentioned(rid, key, m, cands[m], info, answers, out, warnings, db, schema, cands)
+                    if built:
+                        out[rid].setdefault("predicates", []).append(built)
+                continue
             proved = [c for k, c in cands.items() if k.startswith("s")]   # step 3's values in this column (SQL)
 
             def pick(name, needed=True):
