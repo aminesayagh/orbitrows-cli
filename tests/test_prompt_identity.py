@@ -20,6 +20,31 @@ GONE = {"fastino/gliner2-multi-v1",                          # split.py's model 
         'SELECT DISTINCT "', '" FROM "', '" WHERE "', '" IS NOT NULL', '" IS NOT NULL LIMIT ',   # a read of the
         '" IS NOT NULL LIMIT 50', '" IS NOT NULL LIMIT 13', '" IS NOT NULL AND TRIM("',      # store's rows: the
         '") != \'\' LIMIT '}                                # pipeline reads the profile instead (2026-10-25)
+PARTS_TEMPLATES = [
+    "set_value", "add", "subtract", "add_percent", "subtract_percent", "double", "halve", "column", "column_percent",
+    "round", "prefix", "suffix", "replace", "empty",
+    "Set to a value written in the prompt ('set the price to 50', 'mark them as draft').",
+    "Increase by an amount ('raise by 10', 'add 3').", "Decrease by an amount ('lower by 10').",
+    "Increase by a percentage ('raise by 5%').",
+    "Decrease by a percentage ('lower by 5%', '20% off', 'cut by a third' is not this).",
+    "Double it (multiply by 2).", "Halve it (divide by 2).",
+    "Set to another column's value, possibly plus or minus an amount ('to the cost plus 10').",
+    "Set to another column's value plus a percentage ('to the cost plus 30%').",
+    "Round it (to a number of decimals if one is written).", "Add a text at the start.", "Add a text at the end.",
+    "Replace a text inside it by another text.", "Empty it: no value (clear, remove the value).", "none",
+    "at_least_number", "at_least_column", "at_most_number", "at_most_column", "No limit on the new value.",
+    "The new value must stay at or above a number ('never below 20', 'at least 5').",
+    "The new value must stay at or above another column, possibly plus an amount ('never below the cost', 'at least the cost plus 10').",
+    "The new value must stay at or below a number ('never above 500', 'no more than 9').",
+    "The new value must stay at or below another column, possibly plus an amount ('never above the old price').",
+    "TEXT", "INTEGER", "type", "operator", "left", "right", "arithmetic", "arguments", "function", "coalesce",
+    "greatest", "least", 0.5, "at_least", "at_most", "flagged", "Does ", "request", "problem", "_column", "parts",
+    "concat", "_guard", " set a limit on the new value of ", "_bound_number", "In ",
+    ", which number is the limit on the new value of ",
+    ", or is added to the limit's column ('never below the cost plus 10': 10)?", "_bound_column",
+    ", which column is the limit on the new value of ", " based on ('never below the cost': cost)?", "limit of ",
+    "how", ": a part is missing", "limit column of ", "change of ", "limit number of ",
+]
 REPLACED = {"pipeline/prompt/grouping.py": {   # the one tree question over every candidate tree (mixed ones for three
     "all", "any", "_all", "_any", "|tree", "How do the conditions of ", " combine?", "tree", "AND", "OR",  # conditions
     "how the conditions combine: no answer, AND kept"},  # only): one AND / OR question per pair now, any size
@@ -34,7 +59,9 @@ REPLACED = {"pipeline/prompt/grouping.py": {   # the one tree question over ever
                                     "RELEASE assemble", "request", "ast", "rows", "predicates", "changes no record",
                                     "returns", ": each condition matches records, but not together"},
     "pipeline/prompt/conditions.py": {"rows", "no record matches the condition on "},
-    "pipeline/prompt/parts.py": {"SQLite, on all rows"},
+    # 2026-10-25: step 5's templates and their limits are the operations catalog's changes now (a number's change
+    # is the formula's)
+    "pipeline/prompt/parts.py": {"SQLite, on all rows", *PARTS_TEMPLATES},
     "sql/sql.py": {"SAVEPOINT ast_check", "ROLLBACK TO ast_check", "RELEASE ast_check"}}
 TRIMMED = {"pipeline/prompt/operations.py"}   # the PoC's option A (word rules), never called, removed 2026-10-25: its
 # kept definitions (the formula's helpers) are compared, each as the PoC wrote it

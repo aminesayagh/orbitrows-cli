@@ -10,16 +10,14 @@
             create_table  the table's name; per word of the request: is it one of the new table's columns?
     code  the operands: the numbers of the request (5%, 199), its text values (step 3's values, quoted text, proper
           names, the word after 'to' / 'as' / 'called', the stored values of a column with few of them), the columns
-    Jev   call 2, per part found: a template (set to · + · − · + % · − % · double · halve · another column ± ·
-          round · prefix · suffix · replace · empty), its operands (one of the candidates, or none), a guard ('never
-          below …': at least / at most a number, a column, or both added); for an output, the aggregate; for a
-          schema action, the column, the new name, the type
-    code  the expression, from the template: the tree is built here, never written by Jev. Every request is then
-          compiled (sql.py) and prepared by SQLite (EXPLAIN: no row read): an SQLite error is a warning
-
-Guards: greatest / least with the bound, and coalesce(bound, value) when the bound can be NULL: a missing cost leaves
-the value as computed (MAX(x, NULL) would be NULL). An INTEGER column's computed value is rounded (STRICT tables
-refuse 5.5 in an INTEGER column).
+    Jev   call 2, per part found: for a changed column that is not a number, one of the catalog's changes
+          (pipeline/operations: set, from another column, prefix, suffix, replace, capitals, lower case, trim, fill the
+          empty values, empty it; changes(), 2026-10-25) or none, and its operands (one of the candidates, or none);
+          for an output, the aggregate; for a schema action, the column, the new name, the type
+    code  the value, from the entry's builder (operations/builders.py): the tree is built there, never written by
+          Jev. A number column's change, none of the catalog's or one missing a part, is the formula's (formula.py).
+          Every request is then compiled (sql.py) and prepared by SQLite (EXPLAIN: no row read): an SQLite error is a
+          warning
 
 Section "parts" of cases/<id>.json: {"requests": {"r1": {"assignments": [{"column": "t_x.c_y", "value": expr}],
 "outputs": "all" | [{"column": "t_x.c_y" | None, "aggregate": "value" | count …, "expression": expr}],
@@ -31,6 +29,7 @@ import re
 from text_to_num import alpha2digit
 
 from orbitrows.pipeline.store.profile import listed
+from orbitrows.pipeline.operations.builders import BUILDERS
 from orbitrows.sql.sql import check, program
 from . import SURE
 from .asking import question
@@ -55,32 +54,30 @@ SHOW_RULES = [
 ]
 GIVE_RULES = ["Answer yes when the prompt gives the value of this column for the new record ('a supplier called "
               "Kora from Peru': the name and the country)."]
-HOW = {
-    "set_value": "Set to a value written in the prompt ('set the price to 50', 'mark them as draft').",
-    "add": "Increase by an amount ('raise by 10', 'add 3').",
-    "subtract": "Decrease by an amount ('lower by 10').",
-    "add_percent": "Increase by a percentage ('raise by 5%').",
-    "subtract_percent": "Decrease by a percentage ('lower by 5%', '20% off', 'cut by a third' is not this).",
-    "double": "Double it (multiply by 2).",
-    "halve": "Halve it (divide by 2).",
-    "column": "Set to another column's value, possibly plus or minus an amount ('to the cost plus 10').",
-    "column_percent": "Set to another column's value plus a percentage ('to the cost plus 30%').",
-    "round": "Round it (to a number of decimals if one is written).",
-    "prefix": "Add a text at the start.",
-    "suffix": "Add a text at the end.",
-    "replace": "Replace a text inside it by another text.",
-    "empty": "Empty it: no value (clear, remove the value).",
-}
-NUMBER_HOWS = {"add", "subtract", "add_percent", "subtract_percent", "column", "column_percent", "round"}
-NUMERIC = {"add", "subtract", "add_percent", "subtract_percent", "double", "halve", "column_percent", "round"}
-TEXTUAL = {"prefix", "suffix", "replace"}
-GUARD = {"none": "No limit on the new value.",
-         "at_least_number": "The new value must stay at or above a number ('never below 20', 'at least 5').",
-         "at_least_column": "The new value must stay at or above another column, possibly plus an amount ('never "
-                            "below the cost', 'at least the cost plus 10').",
-         "at_most_number": "The new value must stay at or below a number ('never above 500', 'no more than 9').",
-         "at_most_column": "The new value must stay at or below another column, possibly plus an amount ('never "
-                           "above the old price')."}
+FILLED = {"column", "value", "text", "old", "new", "other", "amount"}   # what this step's questions give an entry
+_CHANGES = []
+
+
+def changes(typ: str) -> dict:
+    """The catalog's changes (role value, pipeline/operations) this step can build for a column of type `typ`: not a
+    number change (the formula's), every required parameter one of FILLED. {entry id: what it does, an example}."""
+    if not _CHANGES:
+        from orbitrows.pipeline.operations.catalog import connect, entries
+        _CHANGES.extend(e for e in entries(connect()) if e["role"] == "value")
+    out = {}
+    for e in _CHANGES:
+        kind = next((p["constraints"].get("data_type") for p in e["parameters"] if p["name"] == "column"), None)
+        needs = {p["name"] for p in e["parameters"] if p["required"]}
+        if kind in ("numeric", "date") or not needs <= FILLED or (kind == "text" and typ != "TEXT"):
+            continue
+        out[e["id"]] = f"{e['name']}: {e['behavior']} (e.g. '{e['examples'][0]}')"
+    return out
+
+
+def entry(entry_id):
+    return next((e for e in _CHANGES if e["id"] == entry_id), None)
+
+
 AGGREGATE = {"value": "Its values, as they are.", "count": "How many values (count).",
              "count_distinct": "How many different values.", "sum": "Their total (sum).", "avg": "Their average.",
              "min": "The smallest (minimum).", "max": "The largest (maximum)."}
@@ -104,14 +101,6 @@ def _col(tid, cid):
 
 def _lit(v):
     return {"type": "literal", "value": v}
-
-
-def _ar(op, a, b):
-    return {"type": "arithmetic", "operator": op, "left": a, "right": b}
-
-
-def _fn(name, *args):
-    return {"type": "function", "name": name, "arguments": list(args)}
 
 
 def numbers(text: str) -> list[dict]:
@@ -261,7 +250,7 @@ def questions_1(requests, schema, sources) -> dict:
     return q
 
 
-def questions_2(db, requests, schema, sources, values, a1, numeric_by_formula=False) -> dict:
+def questions_2(db, requests, schema, sources, values, a1) -> dict:
     q = {}
     for r in requests:
         rid, st, main = r["id"], r["statement"], main_table(requests, sources, r["id"])
@@ -269,36 +258,24 @@ def questions_2(db, requests, schema, sources, values, a1, numeric_by_formula=Fa
         if st == "update" and main:
             for key in [k.split("_changes_")[1] for k, p in a1.items() if k.startswith(f"{rid}_changes_") and p >= 0.5]:
                 typ, _ = coltype(schema, key)
-                if numeric_by_formula and typ in ("INTEGER", "REAL"):
+                if typ in ("INTEGER", "REAL"):
                     continue                                    # the formula steps build it (formula.py)
                 name = columns_of(schema, [main])[key]
-                hows = {k: v for k, v in HOW.items() if (typ != "TEXT" or k not in NUMERIC)
-                        and (typ == "TEXT" or k not in TEXTUAL)}
                 others = {k: v for k, v in columns_of(schema, [main]).items() if k != key}
-                q[f"{rid}_{key}_how"] = choice(CONTEXT, f"How does {said(r)} change {name}", hows)
+                q[f"{rid}_{key}_how"] = choice(CONTEXT, f"How does {said(r)} change {name}",
+                                               changes(typ) | {"none": "None of these changes."})
                 q[f"{rid}_{key}_number"] = choice(CONTEXT, f"Which number of {said(r)} is the amount, the percentage, "
                                                            f"the new value or the decimals of the change of {name} "
                                                            f"(not a number choosing the records, not a limit)?",
                                                   nums | NONE)
                 q[f"{rid}_{key}_column"] = choice(CONTEXT, f"Which other column does the new value of {name} come "
                                                            f"from, in {said(r)}?", others | NONE)
-                if typ == "TEXT":
-                    tx = texts(db, schema, r, values, tuple(key.split(".")))
-                    q[f"{rid}_{key}_text"] = choice(CONTEXT, f"Which text does {said(r)} write into {name} (the new "
-                                                             f"value, the text added, or the replacing text)?",
-                                                    {f"x{i}": f"'{t}'" for i, t in enumerate(tx)} | NONE)
-                    q[f"{rid}_{key}_old"] = choice(CONTEXT, f"Which text of {name} does {said(r)} replace, if it "
-                                                            f"replaces one?", {f"x{i}": f"'{t}'" for i, t in enumerate(tx)} | NONE)
-                else:
-                    q[f"{rid}_{key}_guard"] = choice(CONTEXT, f"Does {said(r)} set a limit on the new value of {name}?",
-                                                     GUARD)
-                    q[f"{rid}_{key}_bound_number"] = choice(CONTEXT, f"In {said(r)}, which number is the limit on the "
-                                                                     f"new value of {name}, or is added to the limit's "
-                                                                     f"column ('never below the cost plus 10': 10)?",
-                                                            nums | NONE)
-                    q[f"{rid}_{key}_bound_column"] = choice(CONTEXT, f"In {said(r)}, which column is the limit on the "
-                                                                     f"new value of {name} based on ('never below the "
-                                                                     f"cost': cost)?", others | NONE)
+                tx = texts(db, schema, r, values, tuple(key.split(".")))
+                q[f"{rid}_{key}_text"] = choice(CONTEXT, f"Which text does {said(r)} write into {name} (the new "
+                                                         f"value, the text added, or the replacing text)?",
+                                                {f"x{i}": f"'{t}'" for i, t in enumerate(tx)} | NONE)
+                q[f"{rid}_{key}_old"] = choice(CONTEXT, f"Which text of {name} does {said(r)} replace, if it "
+                                                        f"replaces one?", {f"x{i}": f"'{t}'" for i, t in enumerate(tx)} | NONE)
         if st == "select" and main:
             tables = read_tables(schema, sources, rid, main)
             for key in [k.split("_shows_")[1] for k, p in a1.items() if k.startswith(f"{rid}_shows_") and p >= 0.5]:
@@ -329,39 +306,7 @@ def questions_2(db, requests, schema, sources, values, a1, numeric_by_formula=Fa
     return q
 
 
-def expression(how, target, operand, column, number, typ):
-    """The value a template builds. target: the changed column node; operand: a literal; column: another column."""
-    n = number["value"] if number else None
-    v = {"set_value": operand,
-         "add": n is not None and _ar("+", target, _lit(n)),
-         "subtract": n is not None and _ar("-", target, _lit(n)),
-         "add_percent": n is not None and _ar("*", target, _lit(round(1 + n / 100, 6))),
-         "subtract_percent": n is not None and _ar("*", target, _lit(round(1 - n / 100, 6))),
-         "double": _ar("*", target, _lit(2)),
-         "halve": _ar("*", target, _lit(0.5)),
-         "column": column and (column if n is None else _ar("+", column, _lit(n))),
-         "column_percent": column and n is not None and _ar("*", column, _lit(round(1 + n / 100, 6))),
-         "round": _fn("round", target, _lit(int(n))) if n is not None else _fn("round", target),
-         "prefix": operand and {"type": "concat", "parts": [operand, target]},
-         "suffix": operand and {"type": "concat", "parts": [target, operand]},
-         "empty": _lit(None)}.get(how)
-    if v and typ == "INTEGER" and how in ("add_percent", "subtract_percent", "halve", "column_percent"):
-        v = _fn("round", v)                                       # STRICT: an INTEGER column takes whole values
-    return v or None
-
-
-def guard(value, kind, bound_col, bound_num, nullable):
-    """greatest / least with the bound; coalesce(bound, value) when the bound's column can be NULL."""
-    if kind not in ("at_least", "at_most") or (bound_col is None and bound_num is None):
-        return value
-    bound = bound_col if bound_num is None else _lit(bound_num) if bound_col is None else \
-        _ar("+", bound_col, _lit(bound_num))
-    if bound_col is not None and nullable:
-        bound = _fn("coalesce", bound, value)
-    return _fn("greatest" if kind == "at_least" else "least", value, bound)
-
-
-def build(db, requests, schema, sources, values, a1, a2, numeric_by_formula=False) -> dict:
+def build(db, requests, schema, sources, values, a1, a2) -> dict:
     out, warnings = {}, []
 
     def pick(rid, key, problem, default=None, labels=None):
@@ -396,50 +341,33 @@ def build(db, requests, schema, sources, values, a1, a2, numeric_by_formula=Fals
                 if not unsure_yes(rid, f"{rid}_changes_{key}", f"changes {key}"):
                     continue
                 typ, _ = coltype(schema, key)
-                if numeric_by_formula and typ in ("INTEGER", "REAL"):
+                if typ in ("INTEGER", "REAL"):
                     out[rid]["assignments"].append({"column": key, "value": None, "pending": "formula"})
                     continue                                    # its value comes from formula.py
-                how = pick(rid, f"{rid}_{key}_how", f"how {key}")
-                uses_number = how in NUMBER_HOWS or (how == "set_value" and typ != "TEXT")
-                uses_text = typ == "TEXT" and how in ("set_value", "prefix", "suffix", "replace")
-                num = nums.get(pick(rid, f"{rid}_{key}_number", f"number of {key}", labels=said_nums) or "") if uses_number else None
-                oc = pick(rid, f"{rid}_{key}_column", f"column of {key}") if how in ("column", "column_percent") else None
-                tx = texts(db, schema, r, values, tuple(key.split("."))) if uses_text else []
-                said_tx = {f"x{i}": t for i, t in enumerate(tx)}
-                xi = pick(rid, f"{rid}_{key}_text", f"text of {key}", labels=said_tx) if uses_text else None
-                text = tx[int(xi[1:])] if xi else None
-                if how == "set_value":
-                    operand = _lit(text) if typ == "TEXT" else _lit(num["value"]) if num else None
-                    if typ == "INTEGER" and operand and float(operand["value"]).is_integer():
-                        operand = _lit(int(operand["value"]))
-                else:
-                    operand = _lit(text) if text else None
+                e = entry(pick(rid, f"{rid}_{key}_how", f"how {key}", labels={i: x["name"] for i, x in
+                                                                           ((x["id"], x) for x in _CHANGES)}))
+                params = {x["name"] for x in e["parameters"]} if e else set()
                 target = _col(*key.split("."))
-                if how == "replace":
-                    old = pick(rid, f"{rid}_{key}_old", f"replaced text of {key}", labels=said_tx)
-                    value = old and text and _fn("replace", target, _lit(tx[int(old[1:])]), _lit(text))
-                else:
-                    value = expression(how, target, operand, oc and _col(*oc.split(".")), num, typ)
-                if value and typ != "TEXT":
-                    kind = pick(rid, f"{rid}_{key}_guard", f"limit of {key}", "none")
-                    limited = kind not in (None, "none")
-                    bc = pick(rid, f"{rid}_{key}_bound_column", f"limit column of {key}") \
-                        if limited and kind.endswith("_column") else None
-                    # a number written once plays one part: the change's number is never also the limit's
-                    raw = a2.get(f"{rid}_{key}_bound_number", (None,))[0]
-                    reused = num is not None and raw == num["id"]
-                    bn = nums.get(pick(rid, f"{rid}_{key}_bound_number", f"limit number of {key}", labels=said_nums) or "") \
-                        if limited and not reused else None
-                    value = guard(value, kind and kind.rsplit("_", 1)[0], bc and _col(*bc.split(".")), bn and bn["value"],
-                                  bc is not None and coltype(schema, bc)[1])
-                if value is None and numeric_by_formula:   # no template for it ("move the date 7 days later"):
+                p = {"column": target, "column_type": typ}
+                if "amount" in params and (num := nums.get(pick(rid, f"{rid}_{key}_number", f"number of {key}",
+                                                                labels=said_nums) or "")):
+                    p["amount"] = num["value"]
+                if "other" in params and (oc := pick(rid, f"{rid}_{key}_column", f"column of {key}")):
+                    p["other"] = _col(*oc.split("."))
+                if params & {"value", "text", "new", "old"}:
+                    tx = texts(db, schema, r, values, tuple(key.split(".")))
+                    said_tx = {f"x{i}": t for i, t in enumerate(tx)}
+                    if xi := pick(rid, f"{rid}_{key}_text", f"text of {key}", labels=said_tx):
+                        p |= {k: _lit(tx[int(xi[1:])]) for k in ("value", "text", "new") if k in params}
+                    if "old" in params and (old := pick(rid, f"{rid}_{key}_old", f"replaced text of {key}",
+                                                        labels=said_tx)):
+                        p["old"] = _lit(tx[int(old[1:])])
+                missing = [x["name"] for x in e["parameters"] if x["required"] and x["name"] not in p] if e else ["all"]
+                value = None if missing else BUILDERS[e["builder_key"]](p, e["config"])
+                if value is None:                               # none of the catalog's, or a part missing ("move the
                     out[rid]["assignments"].append({"column": key, "value": None, "pending": "formula"})
-                    continue                                # the formula steps build it, or it is asked
-                if value is None:
-                    out[rid]["flagged"] = True
-                    warnings.append({"request": rid, "problem": f"change of {key}: a part is missing", "how": how})
-                    continue
-                out[rid]["assignments"].append({"column": key, "value": value})
+                    continue                                    # date 7 days later"): the formula builds it, or asks
+                out[rid]["assignments"].append({"column": key, "value": value, "operation": e["id"]})
             if not out[rid]["assignments"]:
                 warnings.append({"request": rid, "problem": "no column changed"})
         if st == "select":
@@ -549,16 +477,16 @@ def statement(r, main, part) -> dict | None:
     return None
 
 
-async def run(jev, db, prompt, requests, schema, sources: dict, values: list[dict], numeric_by_formula=False) -> dict:
-    """sources: step 4's section["requests"]; values: step 3's section["values"]. numeric_by_formula (the pipeline,
-    2026-10-15): a number column's change is left to the formula steps, its template questions are not asked."""
+async def run(jev, db, prompt, requests, schema, sources: dict, values: list[dict]) -> dict:
+    """sources: step 4's section["requests"]; values: step 3's section["values"]. A number column's change is left to
+    the formula steps (2026-10-15); another column's is one of the catalog's changes (2026-10-25)."""
     a1, a2 = {}, {}
     try:
         st = state(prompt, requests, schema, sources, values)
         a1 = await ask(jev, st, questions_1(requests, schema, sources))
-        a2 = await ask(jev, st, questions_2(db, requests, schema, sources, values, a1, numeric_by_formula))
+        a2 = await ask(jev, st, questions_2(db, requests, schema, sources, values, a1))
     except Exception as e:                                    # API error: nothing is guessed
         a1 = a1 or {"error": repr(e)}
-    section = build(db, requests, schema, sources, values, a1, a2, numeric_by_formula)
+    section = build(db, requests, schema, sources, values, a1, a2)
     section["jev"] = {"call_1": a1, "call_2": a2}
     return section

@@ -477,7 +477,7 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
     if problem := read_only(incoming, reqs, s4["requests"]):  # the one rule for an upload: never written
         return stop(problem, "sources", requests=s1, operation=s2, sources=s4)
     step("step 5 · parts")
-    s5 = await parts.run(model, db, prompt, reqs, store, s4["requests"], s3["values"], numeric_by_formula=True)
+    s5 = await parts.run(model, db, prompt, reqs, store, s4["requests"], s3["values"])
     pause("parts", parts=s5)
     def converted(asked, errors, **sections):                # step 6b, and after the formula: a stop or a question
         if errors:
