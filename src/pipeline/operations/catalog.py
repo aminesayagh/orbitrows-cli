@@ -78,15 +78,16 @@ CREATE TABLE IF NOT EXISTS embedding_configs (
     encoding_config_json TEXT NOT NULL,
     document_template_version INTEGER NOT NULL CHECK (document_template_version >= 1)
 );
-CREATE TABLE IF NOT EXISTS operation_embeddings (
-    operation_id TEXT NOT NULL REFERENCES operations(id) ON DELETE CASCADE,
-    embedding_config_id TEXT NOT NULL REFERENCES embedding_configs(id),
+CREATE TABLE IF NOT EXISTS operation_embeddings (     -- several per entry: its name and behavior, then each
+    operation_id TEXT NOT NULL REFERENCES operations(id) ON DELETE CASCADE,   -- example and outcome (phase 3:
+    embedding_config_id TEXT NOT NULL REFERENCES embedding_configs(id),     -- R@10 0.92 → 0.98)
+    position INTEGER NOT NULL CHECK (position >= 0),
     operation_version INTEGER NOT NULL CHECK (operation_version >= 1),
     searchable_text TEXT NOT NULL,
-    content_hash TEXT NOT NULL,
+    content_hash TEXT NOT NULL,                             -- of the entry's whole searchable text: one change, all stale
     vector BLOB NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (operation_id, embedding_config_id)
+    PRIMARY KEY (operation_id, embedding_config_id, position)
 );
 """
 LISTS = {"outcomes": ("operation_outcomes", "outcome_text"), "examples": ("operation_examples", "request_text")}

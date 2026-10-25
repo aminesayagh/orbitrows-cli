@@ -127,3 +127,22 @@ def test_an_entry_builds_the_sql_it_describes(shipped, entry_id):
     got, expected = rounded(db.execute(sql)), rounded(db.execute(want))
     assert got == expected and (got or entry_id in ("WITHIN_LAST_DAYS", "OLDER_THAN_DAYS")), (sql, got, expected)
     # a bound from today: empty, or every row, as the demo's dates age (both sides compute the same date)
+
+
+def test_the_shipped_vectors_are_those_of_the_entries_as_they_are(shipped):
+    """An entry changed without its vectors recomputed (index.embed) would be left out of the search: never ship it."""
+    from orbitrows.pipeline.operations.index import Index
+    index = Index(shipped)
+    assert index.stale == [] and set(index.ids) == {e["id"] for e in catalog.entries(shipped)}
+
+
+def test_a_changed_entry_is_left_out_of_the_search_until_embedded_again(tmp_path):
+    import shutil
+    from orbitrows.pipeline.operations.index import Index
+    copy = tmp_path / "operations.db"
+    shutil.copy(catalog.PATH, copy)
+    db = catalog.connect(copy, write=True)
+    entry = catalog.get(db, "CLAMP_MAX")
+    catalog.save(db, {**entry, "examples": entry["examples"] + ["keep the scores at 100 at most"]})
+    assert Index(db).stale == ["CLAMP_MAX"]                    # its old vectors are never matched
+    db.close()

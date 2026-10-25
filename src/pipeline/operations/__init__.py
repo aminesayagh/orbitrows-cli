@@ -6,4 +6,6 @@ Design: vault 02_projects/pilotstore/operation-selection-implementation.
     inventory.py   phase 1: SQLGlot's expressions, each tried on SQLite (what the engine really runs)
     catalog.py     phase 2: operations.db, the catalog shipped with the CLI (its single source), read-only at run time
     builders.py    phase 2: the registered builders, an entry's resolved parameters → our AST
+    index.py       phase 3: each entry's vectors (in the catalog), the matrix, retrieve(text, k)
+    evaluation.py  phase 3: held-out requests and Recall@K (the developer's: it loads the model)
 """
