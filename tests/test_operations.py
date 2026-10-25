@@ -49,6 +49,44 @@ CHECKS = {
                          "SELECT variant_id, price_mad * 1.1 FROM variants"),
     "CLAMP_MAX": ("variants", {"column": PRICE, "limit": 150}, "SELECT variant_id, MIN(price_mad, 150) FROM variants"),
     "SET_VALUE": ("variants", {"column": PRICE, "value": lit(99)}, "SELECT variant_id, 99 FROM variants"),
+    "COMPARE_DIFFERENCE": ("variants", {"column": PRICE, "operator": ">=", "amount": 100, "other": COST},
+                           "SELECT variant_id FROM variants WHERE price_mad - cost_mad >= 100"),
+    "COMPARE_TABLE_MINIMUM": ("variants", {"column": PRICE, "operator": "="},
+                              "SELECT variant_id FROM variants WHERE price_mad = (SELECT MIN(price_mad) FROM variants)"),
+    "COMPARE_TABLE_MAXIMUM": ("variants", {"column": PRICE, "operator": "="},
+                              "SELECT variant_id FROM variants WHERE price_mad = (SELECT MAX(price_mad) FROM variants)"),
+    "SUM_LINKED_RECORDS": ("variants", {"column": col("variants", "variant_id"), "operator": "<", "number": 30,
+                                        "linked": {"table": "t_inventory", "key": "c_variant_id",
+                                                   "value": "c_quantity"}},
+                           "SELECT variant_id FROM variants v WHERE (SELECT SUM(quantity) FROM inventory i "
+                           "WHERE i.variant_id = v.variant_id) < 30"),
+    "OLDER_THAN_DAYS": ("sales", {"column": col("sales", "sold_on"), "days": 40},
+                        "SELECT sale_id FROM sales WHERE sold_on < date('now', '-40 days')"),
+    "DECREASE_PERCENT": ("variants", {"column": PRICE, "percent": 15}, "SELECT variant_id, price_mad * 0.85 FROM variants"),
+    "ADD_AMOUNT": ("variants", {"column": PRICE, "amount": 5}, "SELECT variant_id, price_mad + 5 FROM variants"),
+    "SUBTRACT_AMOUNT": ("variants", {"column": PRICE, "amount": 5}, "SELECT variant_id, price_mad - 5 FROM variants"),
+    "MULTIPLY_BY": ("variants", {"column": PRICE, "factor": 0.5}, "SELECT variant_id, price_mad * 0.5 FROM variants"),
+    "SET_FROM_COLUMN": ("variants", {"column": PRICE, "other": COST, "amount": 20},
+                        "SELECT variant_id, cost_mad + 20 FROM variants"),
+    "ROUND_DECIMALS": ("variants", {"column": col("variants", "weight_g"), "digits": 0},
+                       "SELECT variant_id, ROUND(weight_g) FROM variants"),
+    "ROUND_TO_NEAREST": ("variants", {"column": PRICE, "step": 50}, "SELECT variant_id, ROUND(price_mad / 50.0) * 50 "
+                                                                    "FROM variants"),
+    "CLAMP_MIN": ("variants", {"column": PRICE, "limit": 100}, "SELECT variant_id, MAX(price_mad, 100) FROM variants"),
+    "ADD_PREFIX": ("variants", {"column": col("variants", "sku"), "text": lit("NEW-")},
+                   "SELECT variant_id, 'NEW-' || sku FROM variants"),
+    "ADD_SUFFIX": ("variants", {"column": col("variants", "sku"), "text": lit("-FR")},
+                   "SELECT variant_id, sku || '-FR' FROM variants"),
+    "REPLACE_TEXT": ("products", {"column": col("products", "description"), "old": lit("cotton"),
+                                  "new": lit("organic cotton")},
+                     "SELECT product_id, REPLACE(description, 'cotton', 'organic cotton') FROM products"),
+    "UPPER_CASE": ("products", {"column": col("products", "brand")}, "SELECT product_id, UPPER(brand) FROM products"),
+    "LOWER_CASE": ("products", {"column": col("products", "brand")}, "SELECT product_id, LOWER(brand) FROM products"),
+    "TRIM_SPACES": ("products", {"column": col("products", "description")},
+                    "SELECT product_id, TRIM(description) FROM products"),
+    "SHIFT_DATE": ("sales", {"column": col("sales", "sold_on"), "amount": -1, "unit": "months"},
+                   "SELECT sale_id, DATE(sold_on, '-1 months') FROM sales"),
+    "CLEAR_VALUE": ("variants", {"column": col("variants", "barcode")}, "SELECT variant_id, NULL FROM variants"),
     "FILL_EMPTY": ("variants", {"column": col("variants", "color"), "value": lit("none"), "column_type": "TEXT"},
                    "SELECT variant_id, COALESCE(NULLIF(TRIM(color), ''), 'none') FROM variants"),
 }
@@ -87,5 +125,5 @@ def test_an_entry_builds_the_sql_it_describes(shipped, entry_id):
                   store_of(db))[0]
     rounded = lambda rows: sorted(tuple(round(x, 6) if isinstance(x, float) else x for x in r) for r in rows)
     got, expected = rounded(db.execute(sql)), rounded(db.execute(want))
-    assert got == expected and (got or entry_id == "WITHIN_LAST_DAYS"), (sql, got, expected)   # the last 30 days:
-    # empty once the demo's sales are older (both sides compute the same date)
+    assert got == expected and (got or entry_id in ("WITHIN_LAST_DAYS", "OLDER_THAN_DAYS")), (sql, got, expected)
+    # a bound from today: empty, or every row, as the demo's dates age (both sides compute the same date)

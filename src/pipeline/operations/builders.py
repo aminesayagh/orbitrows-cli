@@ -53,6 +53,11 @@ def relative_difference(p, config):
     return compare(p["operator"], share, lit(p["percent"]))
 
 
+def difference(p, config):
+    """at least 50 between the two: (column − other) OP amount."""
+    return compare(p["operator"], arith("-", p["column"], p["other"]), lit(p["amount"]))
+
+
 def table_aggregate(p, config):
     """priced above the average: column OP (SELECT AVG(column) FROM its table); config {"function": avg | min | max}."""
     table, alias = p["column"]["source"], f"{p['column']['source']}_all"
@@ -69,6 +74,16 @@ def count_linked(p, config):
     return compare(p["operator"], count, lit(p["number"]))
 
 
+def sum_linked(p, config):
+    """customers whose orders total over 1000: (SELECT SUM(linked.value) FROM linked WHERE linked.key = column) OP
+    number. No linked record: no total (NULL), the record is not kept."""
+    alias = f"{p['linked']['table']}_s"
+    where = compare("=", {"type": "column", "source": alias, "reference": p["linked"]["key"]}, p["column"])
+    value = {"type": "column", "source": alias, "reference": p["linked"]["value"]}
+    total = one_value(p["linked"]["table"], alias, {"type": "aggregate", "function": "sum", "argument": value}, where)
+    return compare(p["operator"], total, lit(p["number"]))
+
+
 def within_days(p, config):
     """sold in the last 30 days (config {"direction": "within"}): column >= date('now', '-30 days'); older than 30
     days ("older"): column < that date."""
@@ -81,6 +96,31 @@ def within_days(p, config):
 def percent_change(p, config):
     """raise by 15% (config {"sign": 1}), lower by 15% (-1): column × (1 ± percent / 100)."""
     return arith("*", p["column"], lit(1 + config["sign"] * p["percent"] / 100))
+
+
+def add_amount(p, config):
+    """add 5 (config {"sign": 1}), take 5 off (-1): column ± amount."""
+    return arith("+" if config["sign"] > 0 else "-", p["column"], lit(p["amount"]))
+
+
+def multiply(p, config):
+    """double (factor 2), halve (0.5), triple: column × factor."""
+    return arith("*", p["column"], lit(p["factor"]))
+
+
+def from_column(p, config):
+    """set the price to the cost plus 20: other (+ amount, when one is given)."""
+    return arith("+", p["other"], lit(p["amount"])) if p.get("amount") else p["other"]
+
+
+def round_digits(p, config):
+    """round to 2 decimals: ROUND(column, digits); to whole numbers: ROUND(column)."""
+    return func("round", p["column"], lit(int(p["digits"]))) if p.get("digits") else func("round", p["column"])
+
+
+def round_to_step(p, config):
+    """round to the nearest 5: ROUND(column / step) × step."""
+    return arith("*", func("round", arith("/", p["column"], lit(p["step"]))), lit(p["step"]))
 
 
 def clamp(p, config):
@@ -103,5 +143,35 @@ def fill_empty(p, config):
     return func("coalesce", col, p["value"])
 
 
-BUILDERS = {f.__name__: f for f in (percent_of_column, multiple_of_column, relative_difference, table_aggregate,
-                                    count_linked, within_days, percent_change, clamp, set_value, fill_empty)}
+def affix(p, config):
+    """add 'NEW-' in front (config {"side": "start"}) or ' (old)' at the end ("end"): the text joined to the value.
+    An empty value stays empty."""
+    parts = [p["text"], p["column"]] if config["side"] == "start" else [p["column"], p["text"]]
+    return {"type": "concat", "parts": parts}
+
+
+def replace_text(p, config):
+    """replace 'cotton' with 'organic cotton': REPLACE(column, old, new), every occurrence, case as written."""
+    return func("replace", p["column"], p["old"], p["new"])
+
+
+def text_function(p, config):
+    """capitals (config {"function": "upper"}), lower case ("lower"), without the outer spaces ("trim")."""
+    return func(config["function"], p["column"])
+
+
+def shift_date(p, config):
+    """move 7 days later: DATE(column, '+7 days'); 1 month earlier: DATE(column, '-1 months'); unit days, months or
+    years (SQLite's modifiers)."""
+    return func("date", p["column"], lit(f"{int(p['amount']):+d} {p['unit']}"))
+
+
+def clear(p, config):
+    """empty the barcode: no value (NULL)."""
+    return lit(None)
+
+
+BUILDERS = {f.__name__: f for f in (
+    percent_of_column, multiple_of_column, relative_difference, difference, table_aggregate, count_linked, sum_linked,
+    within_days, percent_change, add_amount, multiply, from_column, round_digits, round_to_step, clamp, set_value,
+    fill_empty, affix, replace_text, text_function, shift_date, clear)}
