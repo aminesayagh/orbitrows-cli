@@ -512,10 +512,7 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
     step("step 6 · conditions")
     s6 = await conditions.run(model, prompt, reqs, store, s4["requests"], s3["values"], s5["requests"], db, spans)
     pause("conditions", conditions=s6)
-    step("step 6 · grouping, sort, limit")
-    g = await grouping.run(model, prompt, reqs, store, s4["requests"], s6, s6.get("parameters", {}))
-    pause("grouping", grouping=g)
-    step("step 5 · numeric changes")
+    step("step 5 · numeric changes")                         # before grouping (the PoC ran it after): its branches
     unlinked = []                                             # (request, a pending assignment of an update from an
     updates = {r["id"] for r in reqs if r["statement"] == "update"}   # upload, step 9's copy)
 
@@ -526,7 +523,7 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
         return x
     own = {rid: {**p, "assignments": [mine(rid, x) for x in p.get("assignments", [])]}
            for rid, p in s5["requests"].items()}
-    f5 = await formula.run(model, prompt, reqs, store, s4["requests"], s3["values"], own, s6, g, db)
+    f5 = await formula.run(model, prompt, reqs, store, s4["requests"], s3["values"], own, s6, {"requests": {}}, db)
     open_ = []                                                # no value from the message's words: resolved below
     for rid, x, copy in unlinked:
         about = lambda w: w.get("request") == rid and x["column"] in w.get("problem", "")
@@ -537,6 +534,13 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
             f5["warnings"] = [w for w in f5["warnings"] if not about(w)]
             open_.append((rid, x))
     pause("formula", formula=f5)
+    step("step 6 · grouping, sort, limit")                     # the WHERE's tree, without the CASE's branches: a
+    tree_of = json.loads(json.dumps(s6))                       # branch ("but for the black ones") chooses no rows
+    for rid, done in f5.get("branches", {}).items():
+        c = tree_of["requests"].get(rid) or {}
+        c["predicates"] = [x for x in c.get("predicates", []) if x["condition"] not in done]
+    g = await grouping.run(model, prompt, reqs, store, s4["requests"], tree_of, s6.get("parameters", {}))
+    pause("grouping", grouping=g)
     if open_:
         matching = []
         if errors := await resolve(model, prompt, db, store, incoming, open_, matching):

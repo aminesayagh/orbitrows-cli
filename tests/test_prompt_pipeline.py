@@ -36,8 +36,8 @@ async def test_run_returns_every_step_and_the_program(monkeypatch):
     assert list(out) == ["prompt", "requests", "operation", "values", "sources", "parts", "conditions", "grouping",
                          "formula", "assembly"]
     assert json.loads(json.dumps(out["assembly"], default=str)) == saved["assembly"]
-    assert [s for s, *_ in seen] == ["requests", "operation", "values", "sources", "parts", "conditions", "grouping",
-                                     "formula"]
+    assert [s for s, *_ in seen] == ["requests", "operation", "values", "sources", "parts", "conditions", "formula",
+                                     "grouping"]                # formula first: its branches stay out of the tree
     assert all(m for _, m, _ in seen)                          # every step asks the caller's model
     assert [s for s, _, g in seen if g] == ["requests", "values", "conditions"]   # GLiNER2: steps 1, 3 and 6
     assert steps[-1] == "step 7 · assembly"
@@ -86,7 +86,7 @@ async def test_a_question_pauses_the_run_and_the_answer_lets_it_go_on(monkeypatc
     settle(calls, p.questions[0]["question"]["call"], "rows", "yes")
     seen.clear()
     out = await pipeline.run(saved["prompt"], Recorded(inner, calls), baseline())   # replayed: no new call
-    assert len(inner.asked) == 1 and seen[-1] == "formula" and "assembly" in out
+    assert len(inner.asked) == 1 and seen[-1] == "grouping" and "assembly" in out
     assert [w["problem"] for w in out["values"]["warnings"]] == ["a code rule"]   # the answer is certain: no question
 
 
@@ -300,3 +300,37 @@ def test_an_identifier_written_with_digits_stays_text_in_the_view():
         INSERT INTO in_offer_1 VALUES ('6110000000052', '3'), ('0610000000999', '12');""")
     assert pipeline.cell_type(db, "in_offer_1", "barcode") == "TEXT"
     assert pipeline.cell_type(db, "in_offer_1", "qty") == "INTEGER"
+
+
+async def test_a_branch_of_the_formula_is_left_out_of_the_where_s_tree(monkeypatch):
+    """"…but for the black ones…": color = 'black' is the CASE's branch, so grouping only joins the other conditions."""
+    saved = json.loads(CASE.read_text())["result"]["pipeline"]
+    monkeypatch.setattr(pipeline.extractor, "connect", lambda: "gliner2")
+    monkeypatch.setattr(coref, "mentions", lambda prompts, name: [[]])
+    black = {"type": "comparison", "operator": "=", "left": {"type": "column", "source": "t_variants",
+                                                            "reference": "c_color"}, "right": {"type": "literal",
+                                                                                               "value": "black"}}
+    orbit = {"type": "comparison", "operator": "=", "left": {"type": "column", "source": "t_products",
+                                                            "reference": "c_brand"}, "right": {"type": "literal",
+                                                                                               "value": "Orbit"}}
+    cond = {"requests": {"r1": {"columns": [], "predicates": [{"column": "t_variants.c_color", "condition": black},
+                                                             {"column": "t_products.c_brand", "condition": orbit}]}},
+            "warnings": []}
+    joined = []
+    for module, section in ((request_graph, "requests"), (operation, "operation"), (values, "values"),
+                            (sources, "sources"), (parts, "parts")):
+        monkeypatch.setattr(module, "run", lambda *a, section=section, **k: _section(saved[section]))
+    monkeypatch.setattr(conditions, "run", lambda *a, **k: _section(cond))
+    monkeypatch.setattr(formula, "run", lambda *a, **k: _section({"requests": {}, "warnings": [],
+                                                                    "branches": {"r1": [black]}}))
+
+    async def tree(model, prompt, reqs, store, sources_, c, params):
+        joined.append([x["condition"] for x in c["requests"]["r1"]["predicates"]])
+        return saved["grouping"]
+    monkeypatch.setattr(grouping, "run", tree)
+    await pipeline.run(saved["prompt"], Model(), baseline())
+    assert joined == [[orbit]]                                 # black is the CASE's, not the WHERE's
+
+
+async def _section(section):
+    return json.loads(json.dumps(section))

@@ -118,7 +118,9 @@ def without(where, conds):
 
 
 async def run(jev, prompt, requests, schema, sources, values, parts, conditions, grouping, db=None) -> dict:
-    out, warnings = {}, []
+    """… → {"requests", "warnings", "branches": {request: the conditions that became a CASE's branches}}: the CLI's
+    pipeline runs this before grouping, which then leaves them out of the WHERE's tree (grouping: {"requests": {}})."""
+    out, warnings, found = {}, [], {}
     for r in requests:
         rid, part = r["id"], parts.get(r["id"]) or {}
         if r.get("statement") != "update":
@@ -207,6 +209,8 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
                 value = {"type": "function", "name": "round", "arguments": [value]}
             a["value"], a["from"] = value, "formula"
             a.pop("pending", None)
+        if branches:
+            found[rid] = branches
         if branches and grouping["requests"].get(rid):     # a branch lives in the CASE, not in the WHERE
             g = grouping["requests"][rid]
             g["where"] = without(g.get("where"), branches)
@@ -214,4 +218,4 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
             cols = {p["column"] for p in cond6.get("predicates", []) if p["condition"] in branches}   # positive by
             conditions["warnings"][:] = [w for w in conditions["warnings"] if not (w.get("request") == rid and (
                 any(w["problem"] == f"negation of {c} uncertain" for c in cols) or w["problem"] == "all rows uncertain"))]
-    return {"requests": out, "warnings": warnings}
+    return {"requests": out, "warnings": warnings, "branches": found}
