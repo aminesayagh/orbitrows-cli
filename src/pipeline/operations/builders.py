@@ -44,10 +44,13 @@ def multiple_of_column(p, config):
     return compare(p["operator"], p["column"], arith("*", p["other"], lit(p["factor"])))
 
 
-def margin_percent(p, config):
-    """a margin over 40%: (column − other) / column × 100 OP percent (a column of 0 or NULL: no margin, no row)."""
-    margin = arith("*", arith("/", arith("-", p["column"], p["other"]), p["column"]), lit(100))
-    return compare(p["operator"], margin, lit(p["percent"]))
+def relative_difference(p, config):
+    """the difference as a share of one value (config {"base": "column"}: (column − other) / column × 100, a margin
+    on a price; "other": (column − other) / other × 100, a markup on a cost, a growth) OP percent. A base of 0 or NULL
+    has no share: no row."""
+    base = p["column"] if config["base"] == "column" else p["other"]
+    share = arith("*", arith("/", arith("-", p["column"], p["other"]), base), lit(100))
+    return compare(p["operator"], share, lit(p["percent"]))
 
 
 def table_aggregate(p, config):
@@ -100,5 +103,5 @@ def fill_empty(p, config):
     return func("coalesce", col, p["value"])
 
 
-BUILDERS = {f.__name__: f for f in (percent_of_column, multiple_of_column, margin_percent, table_aggregate,
+BUILDERS = {f.__name__: f for f in (percent_of_column, multiple_of_column, relative_difference, table_aggregate,
                                     count_linked, within_days, percent_change, clamp, set_value, fill_empty)}
