@@ -16,7 +16,11 @@ def store(monkeypatch):
     db.execute("CREATE TABLE offer (sku TEXT PRIMARY KEY REFERENCES variants (sku), recommended INTEGER)")  # whole numbers
     db.executemany("INSERT INTO variants VALUES (?, ?)", [("A", 10), ("B", 20), ("C", 30), (None, 5)])
     db.executemany("INSERT INTO offer VALUES (?, ?)", [("A", 8), ("B", 25), ("C", 30), ("E", 1), ("F", 2)])
-    return db, [n.model_dump() for n in schema_from_sqlite(db)]
+    schema = [n.model_dump() for n in schema_from_sqlite(db)]
+    for n in schema:                                          # offer is an upload: its link is the view's (virtual),
+        for fk in n["definition"]["foreign_keys"]:            # so "not in variants" is a real choice (E, F)
+            fk["virtual"] = True
+    return db, schema
 
 
 def built(db, schema, text, main, stage_1, stage_2) -> list:
@@ -64,3 +68,13 @@ def test_records_with_no_matching_record_in_a_linked_table(store):
     rows = built(db, schema, "offers not in variants", "t_offer",
                  {"r1_all": 0.02, "r1_has_t_variants": ("has_not", {"has_not": 0.96})}, {})
     assert rows == [["E", 1.0], ["F", 2.0]]                   # the NULL sku in variants does not defeat NOT IN
+
+
+def test_a_required_key_to_its_parent_is_never_asked_as_a_matching_record():
+    """Every variant has its product (a declared, required foreign key): "a matching product?" is no choice to ask."""
+    db = sqlite3.connect(":memory:")
+    db.execute("CREATE TABLE products (product_id INTEGER PRIMARY KEY, brand TEXT)")
+    db.execute("CREATE TABLE variants (sku TEXT PRIMARY KEY, product_id INTEGER NOT NULL REFERENCES products (product_id))")
+    schema = [n.model_dump() for n in schema_from_sqlite(db)]
+    assert "t_products" not in conditions.keyed_to(schema, "t_variants")
+    assert "t_variants" in conditions.keyed_to(schema, "t_products")   # "products without variants" stays a choice

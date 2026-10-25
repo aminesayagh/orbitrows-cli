@@ -119,11 +119,18 @@ def has_options(other: str) -> dict:
 
 def keyed_to(schema, table) -> dict:
     """{other table: (this table's column, its column)} for each table linked to `table` by a foreign key, either way
-    (the first key when there are several)."""
+    (the first key when there are several), where having a matching record there is a choice the request can make:
+    not along a declared, required foreign key to its parent (every variant has its product: the schema says so), but
+    along an upload's link (marked virtual: its rows may name records the store doesn't have) or an optional one."""
     out = {}
-    for t, x in {d["definition"]["table_id"]: d["definition"] for d in schema}.items():
+    d = {x["definition"]["table_id"]: x["definition"] for x in schema}
+    for t, x in d.items():
         for fk in x.get("foreign_keys", []):
             (c,), ref = fk["columns"], fk["references"]
+            required = not fk.get("virtual") and not next(
+                (col.get("nullable", True) for col in x["columns"] if col["column_id"] == c), True)
+            if t == table and ref["table"] != table and required:
+                continue                                      # guaranteed by the schema: never the request's choice
             if t == table and ref["table"] != table:
                 out.setdefault(ref["table"], (c, ref["columns"][0]))
             elif ref["table"] == table and t != table:
@@ -466,6 +473,15 @@ def count(db, schema, table, cond) -> tuple[int | None, str | None]:
         return None, str(e)[:200]
 
 
+def every(db, schema, table, n) -> bool:
+    """Does a condition that selects n rows keep every record of its table? Then it chooses nothing ("has a product",
+    of variants that all have one): dropped, the request's result the same and its tree simpler."""
+    stmt = {"id": "q", "type": "select", "from": {"type": "database_table", "reference": table, "alias": table},
+            "columns": [{"expression": {"type": "aggregate", "function": "count"}, "alias": "n"}],
+            "scope": {"type": "all_rows"}}
+    return n is not None and n > 0 and db.execute(program([stmt], schema)[0]).fetchone()[0] == n
+
+
 def build_2(db, requests, schema, stage1, values, params, parts, answers, section) -> None:
     """Adds the predicates of stage 2 to stage 1's section. Two conditions are dropped, with their warnings (the
     request stays flagged only for what remains):
@@ -473,6 +489,7 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
         searched it and found nothing ("name = brand" when SQL found "Volt" in brand); a missing value stays flagged;
       - in a request that starts from another's records ("those"), a condition its own words give no value for:
         it is the other request's (r1's "heavier than 60 g" is not r2's).
+    A condition that keeps every record of its table chooses nothing: dropped (every()).
     Two condition columns compared with each other ("recommended below our price") are one comparison: kept once,
     from the column whose operator Jev was surer of (read from both, it may come out reversed, and the two together
     would match nothing)."""
@@ -552,6 +569,9 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                     cond = {"type": "any", "children": [
                         {"type": "null_check", "expression": _col(key), "operator": "is_null"}, cond]}
             n, err = count(db, schema, key.split(".")[0], cond)
+            if not err and every(db, schema, key.split(".")[0], n):
+                drop(rid, key, f"the condition on {key} keeps every record: it chooses nothing")
+                continue
             if err:
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": f"condition on {key} refused", "error": err})
@@ -568,6 +588,8 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
         for h in stage1.get(rid, {}).get("linked", []):        # a matching record in a linked table, or none
             key, cond = existence(schema, h["of"], h["table"], h["has"])
             n, err = count(db, schema, key.split(".")[0], cond)
+            if not err and every(db, schema, key.split(".")[0], n):   # every variant has its product: no condition
+                continue
             if err:
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": f"matching record in {h['table']} refused", "error": err})

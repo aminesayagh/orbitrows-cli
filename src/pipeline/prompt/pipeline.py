@@ -64,10 +64,11 @@ def with_incoming(db, store: list[dict], incoming: list[dict]) -> list[dict]:
             if unique(db, t["id"], t["sql_name"], key):       # one-to-one: the store record reaches the row too
                 mine["primary_key"] = mine.get("primary_key") or [f"c_{key}"]
                 tables[table]["foreign_keys"] = tables[table].get("foreign_keys", []) + [
-                    {"columns": [f"c_{column}"], "references": {"table": mine["table_id"], "columns": [f"c_{key}"]}}]
+                    {"columns": [f"c_{column}"], "references": {"table": mine["table_id"], "columns": [f"c_{key}"]},
+                     "virtual": True}]                         # this view's, not the database's: nothing guaranteed
             mine["foreign_keys"] = mine.get("foreign_keys", []) + [
                 {"columns": [f"c_{key}"], "references": {"table": tables[table]["table_id"],
-                                                         "columns": [f"c_{column}"]}}]
+                                                         "columns": [f"c_{column}"]}, "virtual": True}]
         out.append(by_name[t["sql_name"]])
     return out
 
