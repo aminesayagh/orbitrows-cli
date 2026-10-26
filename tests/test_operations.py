@@ -221,3 +221,26 @@ def test_a_total_over_no_linked_record_is_zero():
                   "columns": [{"expression": col("variants", "variant_id"), "alias": "id"}],
                   "scope": {"type": "filtered", "where": BUILDERS["linked_aggregate"](p, {})}}], store_of(db))[0]
     assert 115 in [r[0] for r in db.execute(q)]
+
+
+def linked(function, where=None, operator=">", number=0):
+    db = baseline()
+    p = {"column": col("products", "product_id"), "function": function, "operator": operator, "number": number,
+         "linked": {"table": "t_variants", "key": "c_product_id"}, **({"where": where} if where else {})}
+    q = program([{"id": "q", "type": "select", "from": {"type": "database_table", "reference": "t_products",
+                                                        "alias": "t_products"},
+                  "columns": [{"expression": col("products", "product_id"), "alias": "id"}],
+                  "scope": {"type": "filtered", "where": BUILDERS["linked_aggregate"](p, {})}}], store_of(db))[0]
+    return sorted(r[0] for r in db.execute(q))
+
+
+BLACK = {"type": "comparison", "operator": "=", "left": col("variants", "color"), "right": lit("black")}
+
+
+def test_a_filter_on_the_linked_records_counts_only_those():
+    assert linked("count", BLACK, ">", 1) == [1]                 # the Orbit Tee: two black variants
+
+
+def test_all_linked_records_meet_the_filter_and_an_empty_value_breaks_it():
+    """All black: the mouse and the cap; the cable's variants have no color: not black, never left out."""
+    assert linked("all", BLACK) == [4, 7]

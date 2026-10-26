@@ -72,21 +72,47 @@ def table_aggregate(p, config):
                    one_value(table, alias, {"type": "aggregate", "function": config["function"], "argument": inner}))
 
 
-AGGREGATES = ("count", "count_distinct", "sum", "avg", "min", "max")
+AGGREGATES = ("count", "count_distinct", "sum", "avg", "min", "max", "all")
+
+
+def inside(cond, table, alias):
+    """A condition on the linked table's columns, read inside its subquery (the table's columns → the alias's)."""
+    import json
+    return json.loads(json.dumps(cond).replace(f'"source": "{table}"', f'"source": "{alias}"'))
+
+
+def columns_in(node) -> list:
+    if isinstance(node, dict):
+        return [node] if node.get("type") == "column" else [c for v in node.values() for c in columns_in(v)]
+    return [c for v in node for c in columns_in(v)] if isinstance(node, list) else []
 
 
 def linked_aggregate(p, config):
     """products with more than 3 variants, customers whose orders total over 1000, products whose cheapest variant is
-    under 100: (SELECT AGG(linked.value) FROM linked WHERE linked.key = column) OP number, AGG one of AGGREGATES
-    (p["function"]; count needs no value column). Over no linked record: a count is 0, a total 0 (COALESCE: "stock
-    under 10" keeps the variant with no stock line), an average, lowest or highest has no value: not kept."""
-    f, alias = p["function"], f"{p['linked']['table']}_agg"
-    where = compare("=", {"type": "column", "source": alias, "reference": p["linked"]["key"]}, p["column"])
+    under 100: (SELECT AGG(linked.value) FROM linked WHERE linked.key = column [AND where]) OP number, AGG one of
+    AGGREGATES (p["function"]; count needs no value column); p["where"]: a condition on the linked records, inside
+    ("more than 2 black variants": only the black ones are counted). Over no linked record: a count is 0, a total 0
+    (COALESCE: "stock under 10" keeps the variant with no stock line), an average, lowest or highest has no value: not
+    kept. "all" (every linked record meets p["where"]): at least one linked record, and none that breaks it, a record
+    whose value is empty breaking it too (never silently left out: NOT (NULL = x) is not true)."""
+    f, table = p["function"], p["linked"]["table"]
+    alias = f"{table}_agg"
+    key = compare("=", {"type": "column", "source": alias, "reference": p["linked"]["key"]}, p["column"])
+    where = inside(p["where"], table, alias) if p.get("where") else None
+
+    def count(extra=None):
+        w = {"type": "all", "children": [key, extra]} if extra else key
+        return one_value(table, alias, {"type": "aggregate", "function": "count"}, w)
+    if f == "all":
+        empty = [{"type": "null_check", "expression": c, "operator": "is_null"} for c in columns_in(where)]
+        breaks = {"type": "any", "children": [{"type": "not", "operand": where}, *empty]} if empty else \
+            {"type": "not", "operand": where}
+        return {"type": "all", "children": [compare(">", count(), lit(0)), compare("=", count(breaks), lit(0))]}
     value = {"type": "column", "source": alias, "reference": p["linked"].get("value")} if f != "count" else None
     agg = {"type": "aggregate", "function": "count" if f == "count_distinct" else f, "distinct": f == "count_distinct"}
     if value:
         agg["argument"] = value
-    total = one_value(p["linked"]["table"], alias, agg, where)
+    total = one_value(table, alias, agg, {"type": "all", "children": [key, where]} if where else key)
     if f == "sum":
         total = func("coalesce", total, lit(0))
     return compare(p["operator"], total, given(p["number"]))

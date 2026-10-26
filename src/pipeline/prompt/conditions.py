@@ -150,7 +150,7 @@ DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 
 COMPARES = ("Only those whose records of {0} compare with a number: how many there are, or a total, an average, "
             "a lowest or a highest value of them ('more than 3 {0}', 'whose {0} total over 1000', 'whose cheapest "
-            "of the {0} is under 100').")
+            "of the {0} is under 100'), or whether all of them meet a condition ('whose {0} are all black').")
 
 
 def has_options(other: str) -> dict:
@@ -726,6 +726,8 @@ AGGREGATE = {"count": "How many of them there are ('more than 3 variants').",
              "avg": "The average of one of their columns ('whose variants average over 200').",
              "min": "The lowest value of one of their columns ('whose cheapest variant is under 100').",
              "max": "The highest value of one of their columns ('whose latest order is before 2026').",
+             "all": "Whether every one of them meets the request's condition on them ('whose variants are all black', "
+                    "'all priced under 150').",
              "none": "None of these."}
 OPS = {"<": "lower than", "<=": "at most", ">": "greater than", ">=": "at least", "=": "exactly", "!=": "not exactly"}
 
@@ -741,14 +743,30 @@ def questions_2c(requests, schema, section, params) -> dict:
             q[f"{k}|aggregate"] = choice(CONTEXT, f"In {said}, what does it compare of the records of {other} linked to "
                                                   f"each record?", AGGREGATE)
             if not h.get("column"):                           # a column stage 1 chose: known
-                q[f"{k}|column"] = choice(CONTEXT, f"In {said}, which column of {other} does that read (for a count "
-                                                   f"of the records themselves, none)?",
-                                          columns_of(schema, [h["table"]]) | {"none": "None: it counts the records."})
+                q[f"{k}|column"] = choice(CONTEXT, f"In {said}, when it totals, averages, or takes the lowest or "
+                                                   f"highest of a value of the {other} ('the stock': the quantity; "
+                                                   f"'the cheapest': the price), which column of {other} holds that "
+                                                   f"value?", columns_of(schema, [h["table"]]) | {
+                                              "none": f"None: it only counts the {other}, or checks that all of them "
+                                                      f"meet a condition."})
             q[f"{k}|op"] = choice(CONTEXT, f"In {said}, how is that compared with the number?", OPS)
+            for c in on_table(section.get(rid, {}), h["table"]):   # a condition on those records: which ones count
+                q[f"{k}|inside|{c['column']}"] = choice(
+                    CONTEXT, f"In {said}, the condition on {c['column'].split('.')[1][2:]} of {other}: does it choose "
+                             f"which of the {other} are counted or compared, or the records themselves?",
+                    {"inside": f"Only the {other} that meet it are counted or compared ('more than 2 black {other}': "
+                               f"the black ones; 'whose {other} are all black': each of them must be black).",
+                     "outside": f"It is a condition of its own: the records have such {other}, whatever is counted "
+                                f"('with a black one and more than 3 {other} in all')."})
             nums = {f"n{i}": p["text"] for i, p in enumerate(params.get(rid, [])) if p["value"] is not None}
             q[f"{k}|number"] = choice(CONTEXT, f"In {said}, which number is it compared with?",
                                       nums | {k2: d for k2, (_, d) in FACTORS.items()} | {"none": "None."})
     return q
+
+
+def on_table(g: dict, table: str) -> list[dict]:
+    """The request's conditions on a column of `table` (stage 2's predicates, not a matching record's)."""
+    return [c for c in g.get("predicates", []) if c["column"].split(".")[0] == table and not c.get("linked")]
 
 
 def comparisons(schema, main, g: dict) -> list[dict]:
@@ -792,16 +810,29 @@ def build_2c(db, requests, schema, section, params, answers) -> None:
             number = FACTORS[n][0] if n in FACTORS else params[rid][int(n[1:])]["value"] \
                 if n and n[1:].isdigit() and int(n[1:]) < len(params.get(rid, [])) else None
             why = ("no aggregate fits" if f is None else
-                   f"its {f} needs a column of {h['table']}" if f != "count" and not column else
+                   f"its {f} needs a column of {h['table']}" if f not in ("count", "all") and not column else
                    f"a {f} of the text column {column}" if f in ("sum", "avg") and typ not in ("INTEGER", "REAL") else
-                   "no number to compare with" if number is None else "no comparison" if op is None else None)
+                   "no number to compare with" if number is None and f != "all" else
+                   "no comparison" if op is None and f != "all" else None)
+            within = [c for c in on_table(out[rid], h["table"]) if pick(f"inside|{c['column']}") == "inside"]
+            if f == "all" and not within:
+                why = "'all' with no condition on the records it reads"
             if why:
                 out[rid]["refused"] = f"{said}: {why}"
                 warnings.append({"request": rid, "problem": f"not supported: {out[rid]['refused']}"})
                 continue
-            p = {"column": _col(f"{h['of']}.{h['link'][0]}"), "function": f, "operator": op, "number": number,
+            for c in within:                                  # read inside the aggregate, not a condition of its own
+                out[rid]["predicates"].remove(c)
+            for c in on_table(out[rid], h["table"]):          # the comparison itself, read from its column too ("total
+                right = (c["condition"].get("right") or {}).get("value")   # stock under 10": quantity < 10): kept once
+                if c["column"] == column and c["operator"] == op and right == number:
+                    out[rid]["predicates"].remove(c)
+            p = {"column": _col(f"{h['of']}.{h['link'][0]}"), "function": f, "operator": op or "=", "number":
+                 number if number is not None else 0,
                  "linked": {"table": h["table"], "key": h["link"][1], **({"value": column.split(".")[1]}
-                                                                       if column and f != "count" else {})}}
+                                                                       if column and f not in ("count", "all") else {})},
+                 **({"where": within[0]["condition"] if len(within) == 1 else
+                     {"type": "all", "children": [c["condition"] for c in within]}} if within else {})}
             cond = BUILDERS["linked_aggregate"](p, {})
             if err := refused(db, schema, h["of"], cond):
                 out[rid]["flagged"] = True
