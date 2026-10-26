@@ -25,8 +25,7 @@ answer or a broken map is a question, never a guess.
                                 computed value: "the column the computed value starts from")
                  rules          more rules for what a number does, from the caller (a read's: a number of records
                                 to keep is none)
-                 numbers_outside  a number pass 1 surely calls none is not a lost step (a read: its limit, "the 3
-                                variants"); for a change every number belongs to the computation or a condition
+                 (a number pass 1 surely calls none is never a lost step: "the 3 variants", "one of the products")
 """
 from orbitrows.pipeline.prompt import SURE
 from .links import resolve
@@ -52,8 +51,8 @@ async def compose(jev, text: str, context: dict) -> dict:
     p1 = await extract(jev, text, context)
     branch_ids = {x["left"]["pred"] for x in p1["records"] if x["role"] == "branch_condition"}
     pos = [p | {"sql": positive(p["node"])} if p["id"] in branch_ids else p for p in preds]
-    outside = [(o["start"], o["end"]) for o in p1.get("occurrences", []) if context.get("numbers_outside") and
-               (a := p1["answers"].get(f"{o['occ']}_kind")) and a[0] == "none" and a[1].get("none", 0) >= SURE]
+    outside = [(o["start"], o["end"]) for o in p1.get("occurrences", [])   # a number Jev surely calls none is not
+               if (a := p1["answers"].get(f"{o['occ']}_kind")) and a[0] == "none" and a[1].get("none", 0) >= SURE]
     p2 = await resolve(jev, text, {"target": target, "predicates": pos, "outside": outside}, p1["records"])
     weak = [x for x in p1["records"] if (x["role"] == "where" and p1["answers"].get(
                 f"{x['left']['pred']}_role", (None, {}))[1].get("where", 1) < SURE) or x["role"] == "unresolved_condition"]

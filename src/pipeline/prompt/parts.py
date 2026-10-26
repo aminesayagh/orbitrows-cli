@@ -27,10 +27,10 @@ Section "parts" of cases/<id>.json: {"requests": {"r1": {"assignments": [{"colum
 """
 import re
 
-from text_to_num import alpha2digit
 
 from orbitrows.pipeline.store.profile import listed
 from orbitrows.pipeline.operations.builders import BUILDERS
+from orbitrows.units.quantity import find, plain
 from orbitrows.sql.sql import check, program
 from . import SURE
 from .asking import question
@@ -133,16 +133,15 @@ def _lit(v):
 
 
 def numbers(text: str) -> list[dict]:
-    """The numbers written in a request: [{"id": "n1", "text": "5%", "value": 5.0, "percent": True}]. Number words are
-    read too, English and French ("by ten percent", "de quinze pour cent": Codex review, bug 6), by text2num's
-    alpha2digit, as the parameters algorithm does; ordinals ("the 2nd", "a third") rank, they are not amounts."""
-    words = re.sub(r"\b(?:per\s?cent|pour\s?cent|pourcent)\b", "%", text, flags=re.I)   # before French reads "cent"
-    words = alpha2digit(alpha2digit(words, "en", threshold=0), "fr", threshold=0)
+    """The numbers written in a request: [{"id": "n1", "text": "5%", "value": 5, "percent": True}], read by the shared
+    reader (units/quantity: digits and number words, "by ten percent"); ordinals ("the 2nd", "the third") rank, they
+    are not amounts."""
     out = []
-    for m in re.finditer(r"(?<![\w.])(\d+(?:[.,]\d+)?)(?!st\b|nd\b|rd\b|th\b|e\b|er\b|ème\b)(\s*%)?", words):
-        v = float(m.group(1).replace(",", "."))
-        out.append({"id": f"n{len(out) + 1}", "text": m.group(0).strip(), "value": int(v) if v.is_integer() else v,
-                    "percent": bool(m.group(2))})
+    for q in find(text):
+        if q["kind"] in ("number", "percentage"):
+            pct = q["kind"] == "percentage"
+            out.append({"id": f"n{len(out) + 1}", "text": q["text"], "value": plain(q["value"] * 100 if pct else q["value"]),
+                        "percent": pct})
     return out
 
 

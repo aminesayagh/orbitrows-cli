@@ -137,7 +137,6 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
                                     "the cost', 'the prices with 20% tax': the price).")
                 up["rules"] = ["A number of records the read keeps or shows ('the 3 variants', 'the top 5', 'the 2 "
                                "sales') is none: it is not part of the computed value."]
-                up["numbers_outside"] = True
             done = await compose(jev, text, up)               # the expressions module (pipeline/expressions)
             p1, p2 = done["pass_1"], done["pass_2"]
             key = f"{rid}.{target}"

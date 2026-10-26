@@ -46,6 +46,23 @@ FORMULA_KINDS = [   # the formula's kinds of a number, a text, a date, a letter 
     "The final value must never go above this number ('never above 300', 'capped at 12').",
     "The final value must never go below this number ('never below 20', 'at least 3').",
 ]
+NUMBER_READING = {   # 2026-10-26: every step reads numbers with units/quantity (quantity_parser): the old
+    # regexes, word lists and text2num calls are gone
+    "pipeline/prompt/grouping.py": [
+        "[^\\W\\d_]+(?:-[^\\W\\d_]+)*",
+    ],
+    "pipeline/prompt/parts.py": [
+        "\\b(?:per\\s?cent|pour\\s?cent|pourcent)\\b", "fr",
+        "(?<![\\w.])(\\d+(?:[.,]\\d+)?)(?!st\\b|nd\\b|rd\\b|th\\b|e\\b|er\\b|ème\\b)(\\s*%)?", "en",
+    ],
+    "pipeline/expressions/words.py": [
+        "(?<![\\w.])(\\d+(?:[.,]\\d+)?)(?!\\w)(", "value", "start", "end", "percent", "\\b(?:", ")\\b", "\\b", "a", "an",
+        "one", "un", "une", "i", "by", "to", "of", "de", "à", "par", "at", "than", "plus", "minus", "times", "fois",
+    ],
+    "units/parameters.py": [
+        "[^\\W\\d_][\\w-]*",
+    ],
+}
 PARTS_TEMPLATES = [   # and its outputs' fixed list (the catalog's outputs since 2026-10-25)
     "outputs",   # one use fewer: the pending (computed) outputs are left out of the check, 2026-10-26
     "value", "count", "count_distinct", "sum", "avg", "min", "max", "Its values, as they are.",
@@ -151,6 +168,6 @@ def test_what_was_tuned_is_kept():
                                 check=True).stdout
         mine = "\n".join((SRC / m).read_text() for m in [module, *MOVED.get(module, [])])
         if missing := [v for v in tuned(kept(theirs, (SRC / module).read_text()) if module in TRIMMED else theirs)
-                       - tuned(mine) if v not in GONE | REPLACED.get(module, set())]:
+                       - tuned(mine) if v not in GONE | REPLACED.get(module, set()) | set(NUMBER_READING.get(module, []))]:
             lost[module] = missing
     assert not lost, lost

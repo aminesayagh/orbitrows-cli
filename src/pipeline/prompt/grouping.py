@@ -19,15 +19,14 @@ import json
 import re
 from itertools import combinations
 
-from text_to_num import text2num
 
 from . import SURE
 from .asking import question
 from orbitrows.sql.sql import program
 from orbitrows.services.model.client import ask, choice
+from orbitrows.units.quantity import find
 from .conditions import tables_of
 from .parts import columns_of
-from orbitrows.units.header import NAME_LOCALES
 
 CONTEXT = ("A merchant wrote a prompt to edit or read their store database (tables and columns in `tables`). It was "
            "split into the requests in `requests`; each request's conditions are found. Each request now needs how "
@@ -141,18 +140,13 @@ def questions(requests, schema, sources, section, params) -> dict:
 
 
 def limits(text: str, params: list[dict]) -> list[tuple[str, int]]:
-    """Numbers a limit may be: the parameters', and the number words text2num reads anywhere in the request (GLiNER2
-    may not propose "two" in "the two heaviest")."""
+    """Numbers a limit may be: the parameters', and the whole numbers the shared reader finds anywhere in the request
+    (units/quantity; GLiNER2 may not propose "two" in "the two heaviest")."""
     out = [(p["text"], int(p["value"])) for p in params if p["value"] is not None and float(p["value"]).is_integer()]
-    for w in re.findall(r"[^\W\d_]+(?:-[^\W\d_]+)*", text):
-        for lang in NAME_LOCALES:
-            try:
-                v = text2num(w.casefold(), lang)
-            except (ValueError, KeyError, IndexError, NotImplementedError):
-                continue
-            if v >= 1 and all(t.casefold() != w.casefold() for t, _ in out):
-                out.append((w, v))
-            break
+    for q in find(text):
+        if q["kind"] == "number" and q["value"].denominator == 1 and q["value"] >= 1 and \
+                all(t.casefold() != q["text"].casefold() for t, _ in out):
+            out.append((q["text"], int(q["value"])))
     return out
 
 

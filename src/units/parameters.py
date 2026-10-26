@@ -16,10 +16,10 @@ One algorithm, no Jev (decided 2026-10-11; benchmark v2/bench/parameters):
 import re
 
 from babel.numbers import get_currency_symbol
-from text_to_num import text2num
 
 from .dictionary import NUMBER, PIECE, plain, to_number
-from .header import currencies, lookup, NAME_LOCALES
+from .header import currencies, lookup
+from .quantity import find, plain as as_number
 
 LABELS = {
     "amount": "a number with its unit, currency or percent sign when one is written: '10%', '750 grams', '20 €', "
@@ -72,17 +72,15 @@ def resolve(token: str, store: str | None = None) -> dict | None:
 
 
 def words_value(text: str, start: int, end: int) -> tuple[float | None, int]:
-    """A number written in words inside text[start:end] ("twenty-five percent", "quinze pour cent"): text2num on the
-    longest run of words it reads, in the dictionary's languages; (value, where the number ends) or (None, start)."""
-    toks = [(m.start(), m.end()) for m in re.finditer(r"[^\W\d_][\w-]*", text[start:end])]
-    for i in range(len(toks)):
-        for k in range(len(toks), i, -1):
-            words = text[start + toks[i][0]:start + toks[k - 1][1]]
-            for lang in NAME_LOCALES:
-                try:
-                    return text2num(words, lang), start + toks[k - 1][1]
-                except (ValueError, KeyError, IndexError, NotImplementedError):
-                    continue
+    """A number written in words inside text[start:end] ("twenty-five percent", "twice", "a third"): the shared reader
+    (units/quantity) on the span; (value, where the number ends) or (None, start). A percentage's word stays outside
+    (its unit, read next: "twenty-five" → 25, "percent" → %)."""
+    for q in find(text[start:end]):
+        if q["kind"] in ("number", "multiplier", "percentage"):
+            if q["kind"] == "percentage":
+                bare = re.sub(r"\s*(?:%|per\s?cent|percent)$", "", q["text"], flags=re.I)
+                return as_number(q["value"] * 100), start + q["start"] + len(bare)
+            return as_number(q["value"]), start + q["end"]
     return None, start
 
 

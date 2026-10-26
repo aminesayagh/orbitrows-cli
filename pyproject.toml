@@ -16,6 +16,7 @@ dependencies = [
     "numpy>=2.5.3",
     "pint>=0.26.1",
     "pydantic>=2.13.5",
+    "quantity-parser",
     "rapidfuzz>=3.14.6",
     "sentence-transformers>=5.7.0",
     "spacy==3.8.16",
@@ -59,3 +60,4 @@ explicit = true
 torch = [{ index = "pytorch-cpu" }]
 en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
 fr-core-news-sm = { url = "https://github.com/explosion/spacy-models/releases/download/fr_core_news_sm-3.8.0/fr_core_news_sm-3.8.0-py3-none-any.whl" }
+quantity-parser = { path = "../text_to_number", editable = true }

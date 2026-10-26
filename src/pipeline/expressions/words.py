@@ -7,18 +7,10 @@ import functools
 import re
 
 from pydantic import BaseModel
-from text_to_num import text2num
+
+from orbitrows.units.quantity import find, plain
 
 WORD = re.compile(r"[^\W\d_]+(?:['’-][^\W\d_]+)*")
-
-PERCENT = r"\s*(?:%|per\s?cent\b|percent\b|pour\s?cent\b|pourcent\b)"
-
-FACTOR_VERBS = {r"halv(?:e|es|ed|ing)|in\s+half|by\s+half": 0.5, r"doubl(?:e|es|ed|ing)": 2, r"tripl(?:e|es|ed|ing)": 3,
-                r"quadrupl(?:e|es|ed|ing)": 4}                  # the verb is the operation: "halve the cost"
-
-FACTORS = {"twice": 2, "half": 0.5, "a third": 0.333333, "one third": 0.333333,
-           "a quarter": 0.25, "one quarter": 0.25, "deux fois": 2, "le double": 2, "la moitié": 0.5, "moitié": 0.5,
-           "un tiers": 0.333333, "un quart": 0.25}
 
 
 class Record(BaseModel):
@@ -41,40 +33,23 @@ def nlp(lang: str):
 
 
 def occurrences(text: str, lang: str, skip: list[tuple[int, int]]) -> list[dict]:
-    """Every number written in the text (digits, number words, factor words), with offsets; numbers inside a condition
-    phrase are the condition's (skip)."""
+    """Every number written in the text, read by the shared reader (units/quantity: digits, number words, fractions,
+    factors, percentages, exact); numbers inside a condition phrase are the condition's (skip). Whether a number is
+    part of the change is Jev's (pass 1's "none"), never a word rule. A percentage keeps its number with "percent" set
+    (15, not 3/20); kinds, from the reader's: digits · words · factor (a fraction in words: "half", "a third") ·
+    factor_verb (a multiplier: "double", "twice", "halve", "2.5x"); an ordinal ranks, it is no amount."""
     out = []
-    for m in re.finditer(rf"(?<![\w.])(\d+(?:[.,]\d+)?)(?!\w)({PERCENT})?", text, re.I):
-        out.append({"text": m.group(0).strip(), "start": m.start(), "end": m.start() + len(m.group(0).rstrip()),
-                    "value": float(m.group(1).replace(",", ".")), "percent": bool(m.group(2)), "kind": "digits"})
-    for pat, v in FACTOR_VERBS.items():
-        for m in re.finditer(rf"\b(?:{pat})\b", text, re.I):
-            out.append({"text": m.group(0), "start": m.start(), "end": m.end(), "value": v, "percent": False,
-                        "kind": "factor_verb"})
-    for phrase, v in sorted(FACTORS.items(), key=lambda kv: -len(kv[0])):
-        for m in re.finditer(rf"\b{re.escape(phrase)}\b", text, re.I):
-            if not any(o["start"] <= m.start() < o["end"] for o in out):
-                out.append({"text": m.group(0), "start": m.start(), "end": m.end(), "value": v, "percent": False,
-                            "kind": "factor"})
-    for m in WORD.finditer(text):
-        w = m.group(0).casefold()
-        if w in ("a", "an", "one", "un", "une", "i") or any(o["start"] <= m.start() < o["end"] for o in out):
+    for q in find(text):
+        if q["kind"] == "ordinal":
             continue
-        try:
-            v = float(text2num(w, lang))
-        except ValueError:
-            continue
-        pct = re.match(PERCENT, text[m.end():], re.I)
-        before = text[:m.start()].split()[-1:] or [""]
-        if pct or before[0].casefold() in ("by", "to", "of", "de", "à", "par", "at", "than", "plus", "minus", "times", "fois"):
-            end = m.end() + (len(pct.group(0)) if pct else 0)
-            out.append({"text": text[m.start():end], "start": m.start(), "end": end, "value": v, "percent": bool(pct),
-                        "kind": "words"})
+        pct, written = q["kind"] == "percentage", q["text"][:1].isdigit() or q["text"].startswith("-")
+        kind = "factor_verb" if q["kind"] == "multiplier" else \
+            "factor" if not written and q["form"] in ("fraction", "mixed_number") else "digits" if written else "words"
+        out.append({"text": q["text"], "start": q["start"], "end": q["end"],
+                    "value": plain(q["value"] * 100 if pct else q["value"]), "percent": pct, "kind": kind})
     out = [o for o in out if not any(s <= o["start"] < e for s, e in skip)]
-    out.sort(key=lambda o: o["start"])
     for i, o in enumerate(out, 1):
         o["occ"] = f"n{i}"
-        o["value"] = int(o["value"]) if float(o["value"]).is_integer() else o["value"]
     return out
 
 

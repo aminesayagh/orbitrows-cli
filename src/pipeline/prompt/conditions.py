@@ -60,6 +60,7 @@ from .asking import question
 from orbitrows.services.model.client import ask, choice, yes_no
 from .parts import columns_of, main_table
 from .relations import chained, linked, paths, relationships
+from orbitrows.units.quantity import find, plain
 
 CONTEXT = ("A merchant wrote a prompt to edit or read their store database (tables and columns in `tables`). It was "
            "split into the requests in `requests`, each with its statement, its table, the values it names and where "
@@ -688,9 +689,11 @@ def catalog_candidates(text: str) -> list[str]:
 
 _CATALOG = {}
 NUMBERS = ("percentage", "number", "duration_days")            # an entry's parameters a request's number fills
-FACTORS = {"w2": (2, "2 (twice, double)"), "w3": (3, "3 (three times, triple)"), "w1.5": (1.5, "1.5 (one and a "
-           "half times)"), "w0.5": (0.5, "0.5 (half)"), "w0.33": (1 / 3, "a third"), "w0.25": (0.25, "a quarter")}
-# ponytail: the factors a request writes in words, offered next to its numbers (Jev chooses, code never reads them)
+def factors(text: str) -> dict:
+    """The multipliers and fractions a request writes ("twice", "two and a half times", "a third", "2.5x"), read by the
+    shared reader (units/quantity), offered next to its numbers: {"w0": (value, "'twice' (2)")}; Jev chooses."""
+    return {f"w{i}": (plain(q["value"]), f"'{q['text']}' ({plain(q['value'])})") for i, q in enumerate(
+        x for x in find(text) if x["kind"] == "multiplier" or x["form"] in ("fraction", "mixed_number"))}
 
 
 AGGREGATE = {"count": "How many of them there are ('more than 3 variants').",
@@ -733,7 +736,7 @@ def questions_2c(requests, schema, section, params) -> dict:
                                 f"('with a black one and more than 3 {other} in all')."})
             nums = {f"n{i}": p["text"] for i, p in enumerate(params.get(rid, [])) if p["value"] is not None}
             q[f"{k}|number"] = choice(CONTEXT, f"In {said}, which number is it compared with?",
-                                      nums | {k2: d for k2, (_, d) in FACTORS.items()} | {"none": "None."})
+                                      nums | {k2: d for k2, (_, d) in factors(r["text"]).items()} | {"none": "None."})
     return q
 
 
@@ -790,7 +793,8 @@ def build_2c(db, requests, schema, section, params, answers) -> None:
                 continue
             f, column, op, n = pick("aggregate"), h.get("column") or pick("column"), pick("op"), pick("number")
             typ = column and column_info(schema, column)["sql_type"]
-            number = FACTORS[n][0] if n in FACTORS else params[rid][int(n[1:])]["value"] \
+            words = factors(r["text"])
+            number = words[n][0] if n in words else params[rid][int(n[1:])]["value"] \
                 if n and n[1:].isdigit() and int(n[1:]) < len(params.get(rid, [])) else None
             why = ("no aggregate fits" if f is None else
                    f"its {f} needs a column of {h['table']}" if f not in ("count", "all") and not column else
@@ -848,7 +852,8 @@ def questions_2b(requests, schema, section, params) -> dict:
             nums = {f"n{i}": p["text"] for i, p in enumerate(params.get(rid, [])) if p["value"] is not None}
             q[f"{rid}|{key}|number"] = choice(CONTEXT, f"In {said}, which number does that computation use (a "
                                                        f"percentage, a factor, an amount, a number of days)?",
-                                              nums | {k: d for k, (_, d) in FACTORS.items()} | {"none": "None."})
+                                              nums | {k: d for k, (_, d) in factors(r["text"]).items()} |
+                                              {"none": "None."})
         computed = [c["column"] for c in section.get(rid, {}).get("computed", [])]
         for a, b in ((a, b) for i, a in enumerate(computed) for b in computed[i + 1:]):   # read from both sides
             na, nb = (x.split(".")[1][2:] for x in (a, b))
@@ -885,8 +890,9 @@ def build_2b(db, requests, schema, section, params, answers) -> None:
             p = {"column": _col(key), "operator": c["operator"], "column_type": column_info(schema, key)["sql_type"]}
             if other not in (None, "none"):
                 p["other"] = _col(other)
-            if entry and n in FACTORS:
-                f = FACTORS[n][0]
+            words = factors(r["text"])
+            if entry and n in words:
+                f = words[n][0]
                 p |= {x["name"]: f * 100 if x["type"] == "percentage" else f for x in entry["parameters"]
                       if x["type"] in ("percentage", "number")}
             elif entry and n not in (None, "none") and n[1:].isdigit() and int(n[1:]) < len(params.get(rid, [])):
