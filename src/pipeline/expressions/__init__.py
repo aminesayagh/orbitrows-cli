@@ -23,6 +23,10 @@ answer or a broken map is a question, never a guess.
                  texts          [{"text", "start"}] the texts the request writes
                  target_use     what the target is for the request, when it is not the changed column (a read's
                                 computed value: "the column the computed value starts from")
+                 rules          more rules for what a number does, from the caller (a read's: a number of records
+                                to keep is none)
+                 numbers_outside  a number pass 1 surely calls none is not a lost step (a read: its limit, "the 3
+                                variants"); for a change every number belongs to the computation or a condition
 """
 from orbitrows.pipeline.prompt import SURE
 from .links import resolve
@@ -48,7 +52,9 @@ async def compose(jev, text: str, context: dict) -> dict:
     p1 = await extract(jev, text, context)
     branch_ids = {x["left"]["pred"] for x in p1["records"] if x["role"] == "branch_condition"}
     pos = [p | {"sql": positive(p["node"])} if p["id"] in branch_ids else p for p in preds]
-    p2 = await resolve(jev, text, {"target": target, "predicates": pos}, p1["records"])
+    outside = [(o["start"], o["end"]) for o in p1.get("occurrences", []) if context.get("numbers_outside") and
+               (a := p1["answers"].get(f"{o['occ']}_kind")) and a[0] == "none" and a[1].get("none", 0) >= SURE]
+    p2 = await resolve(jev, text, {"target": target, "predicates": pos, "outside": outside}, p1["records"])
     weak = [x for x in p1["records"] if (x["role"] == "where" and p1["answers"].get(
                 f"{x['left']['pred']}_role", (None, {}))[1].get("where", 1) < SURE) or x["role"] == "unresolved_condition"]
     two_values = sum(1 for x in p1["records"] if x["function"] == "set") >= 2 or any(
@@ -62,7 +68,7 @@ async def compose(jev, text: str, context: dict) -> dict:
             w | {"role": "branch", "function": "case", "rule_id": "repair.two_values_one_condition"}]
         recs.sort(key=lambda x: x["start"])
         pos = [p | {"sql": positive(p["node"])} if p["id"] == w["left"]["pred"] else p for p in pos]
-        again = await resolve(jev, text, {"target": target, "predicates": pos}, recs)
+        again = await resolve(jev, text, {"target": target, "predicates": pos, "outside": outside}, recs)
         if again["status"] == "ok":
             p1 = {**p1, "records": recs}
             p2 = again | {"repaired": again.get("repaired", []) + [f"'{w['text']}' read as a branch: two final "

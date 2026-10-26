@@ -49,6 +49,10 @@ COMPUTE_RULES = [
     "stock', 'how many', 'the average price'): those are not computed values.",
     "Answer no for a computation that only chooses the records ('the variants priced over twice their cost').",
 ]
+SORT_RULES = [
+    "Answer no for an order by one column as it is ('the cheapest', 'newest first', 'by price') or a read that is not "
+    "ordered.",
+]
 SHOW_RULES = [
     "A value the request's records do not hold themselves may be stored in the record they belong to: 'the names of "
     "the order lines' are their products' names, 'the city of those orders' is their customer's city: answer yes "
@@ -260,6 +264,10 @@ def questions_1(requests, schema, sources) -> dict:
                                                    f"the column as it is ('the price minus the cost', 'the prices with "
                                                    f"20% tax', 'the price rounded to 10', 'the names in capitals')?",
                                           COMPUTE_RULES)
+            q[f"{rid}_sorts_computed"] = yes_no(CONTEXT, f"Does {said(r)} order its records by a value it computes from "
+                                                         f"columns, rather than by one column as it is ('by price minus "
+                                                         f"cost', 'the largest margin first', 'by quantity times "
+                                                         f"price')?", SORT_RULES)
         if st == "insert" and main:
             for key, text in columns_of(schema, [main]).items():
                 q[f"{rid}_gives_{key}"] = yes_no(CONTEXT, f"Does {said(r)} give the value of: {text}", GIVE_RULES)
@@ -301,10 +309,12 @@ def questions_2(db, requests, schema, sources, values, a1) -> dict:
                                                 {f"x{i}": f"'{t}'" for i, t in enumerate(tx)} | NONE)
                 q[f"{rid}_{key}_old"] = choice(CONTEXT, f"Which text of {name} does {said(r)} replace, if it "
                                                         f"replaces one?", {f"x{i}": f"'{t}'" for i, t in enumerate(tx)} | NONE)
-        if st == "select" and main and a1.get(f"{rid}_computes", 0.0) >= 0.5:
-            q[f"{rid}_computed_from"] = choice(CONTEXT, f"Which column does the value {said(r)} computes start from "
-                                                        f"('the price minus the cost': the price)?",
-                                               columns_of(schema, [main]) | NONE)
+        if st == "select" and main and (a1.get(f"{rid}_computes", 0.0) >= 0.5 or
+                                        a1.get(f"{rid}_sorts_computed", 0.0) >= 0.5):
+            q[f"{rid}_computed_from"] = choice(CONTEXT, f"Which column does the value {said(r)} computes (to show it or "
+                                                        f"to order by it) start from: the first column it names ('the "
+                                                        f"price minus the cost': the price; 'the quantity times the unit "
+                                                        f"price': the quantity)?", columns_of(schema, [main]) | NONE)
         if st == "select" and main:
             tables = read_tables(schema, sources, rid, main)
             for key in [k.split("_shows_")[1] for k, p in a1.items() if k.startswith(f"{rid}_shows_") and p >= 0.5]:
@@ -422,9 +432,12 @@ def build(db, requests, schema, sources, values, a1, a2) -> dict:
                 e = BUILDERS[shown["builder_key"]]({"column": _col(*key.split("."))}, shown["config"])
                 outs.append({"column": key, "aggregate": aggregate_of(shown), "expression": e,
                              "operation": shown["id"]})
-            if unsure_yes(rid, f"{rid}_computes", "shows a computed value", 0.5) and \
+            shows_it = unsure_yes(rid, f"{rid}_computes", "shows a computed value", 0.5)
+            sorts_it = unsure_yes(rid, f"{rid}_sorts_computed", "orders by a computed value", 0.5)
+            if (shows_it or sorts_it) and \
                     (start := pick(rid, f"{rid}_computed_from", "the column the computed value starts from")):
-                outs.append({"column": start, "aggregate": "computed", "expression": None, "pending": "expression"})
+                outs.append({"column": start, "aggregate": "computed", "expression": None, "pending": "expression"}
+                            | ({"sort": True} if sorts_it else {}))   # shown too: what the records are ordered by
             if not outs:
                 whole = unsure_yes(rid, f"{rid}_whole", "whole records", 0.5)
             out[rid]["outputs"] = "all" if whole and not any(o["aggregate"] != "value" for o in outs) else outs
@@ -496,10 +509,10 @@ def statement(r, main, part) -> dict | None:
         return {"id": rid, "type": "update", "target": t, "scope": {"type": "all_rows"},
                 "assignments": [{"column": _col(*a["column"].split(".")), "value": a["value"]}
                                 for a in part["assignments"]]}
-    if isinstance(part.get("outputs"), list) and part["outputs"] and all(
-            o["column"] is None or o["column"].startswith(f"{main}.") for o in part["outputs"]):
-        return {"id": rid, "type": "select", "from": t, "scope": {"type": "all_rows"},
-                "columns": [{"expression": o["expression"], "alias": f"o{i}"} for i, o in enumerate(part["outputs"])]}
+    ready = [o for o in part["outputs"] if not o.get("pending")] if isinstance(part.get("outputs"), list) else []
+    if ready and all(o["column"] is None or o["column"].startswith(f"{main}.") for o in ready):   # a computed value:
+        return {"id": rid, "type": "select", "from": t, "scope": {"type": "all_rows"},          # built and checked
+                "columns": [{"expression": o["expression"], "alias": f"o{i}"} for i, o in enumerate(ready)]}   # later
     if part.get("insert", {}).get("columns"):
         return {"id": rid, "type": "insert", "target": t, "columns": part["insert"]["columns"],
                 "values": [part["insert"]["values"]]}

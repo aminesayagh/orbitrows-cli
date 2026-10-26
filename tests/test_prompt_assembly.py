@@ -74,3 +74,22 @@ def test_a_value_a_read_computes_is_shown_as_its_own_column():
     sql = out["program"][0]["sql"][0]
     assert "computed_price_mad" in sql and sorted(db.execute(sql).fetchall(), key=repr) == sorted(
         db.execute("SELECT price_mad - cost_mad FROM variants").fetchall(), key=repr), sql   # no cost: NULL
+
+
+def test_a_read_ordered_by_a_value_it_computes_sorts_by_that_expression():
+    """"The 3 variants with the largest price minus cost": grouping's order names the computed value (step 5's)."""
+    db = baseline()
+    price = {"type": "column", "source": "t_variants", "reference": "c_price_mad"}
+    cost = {"type": "column", "source": "t_variants", "reference": "c_cost_mad"}
+    margin = {"type": "arithmetic", "operator": "-", "left": price, "right": cost}
+    reqs = [{"id": "r1", "text": "the 3 largest price minus cost", "statement": "select"}]
+    out = assemble.assemble(
+        db, store_of(db), reqs, {"r1": {"statement": "select"}},
+        {"r1": {"from": {"type": "database_table", "reference": "t_variants"}}},
+        {"r1": {"outputs": [{"column": "t_variants.c_price_mad", "aggregate": "computed", "expression": margin,
+                             "sort": True}]}},
+        {"r1": {}}, {"r1": {"where": None, "order_by": [{"computed": True, "direction": "desc"}], "limit": 3}}, [])
+    assert not out["errors"], out
+    sql = out["program"][0]["sql"][0]
+    assert [r[0] for r in db.execute(sql)] == [r[0] for r in db.execute(
+        "SELECT price_mad - cost_mad FROM variants ORDER BY price_mad - cost_mad DESC LIMIT 3")], sql

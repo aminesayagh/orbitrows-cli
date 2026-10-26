@@ -405,9 +405,14 @@ def statement(r, st, main, schema, src, part, cond6, group6, built, warnings, nu
         if group6.get("group_by"):
             sel["group_by"] = [g for g in (shown(f"{x['source']}.{x['reference']}", main, a, schema, names, warnings, rid)
                                            for x in group6["group_by"]) if g is not None]
+        computed = next((o["expression"] for o in (outs if isinstance(outs, list) else [])
+                         if o.get("sort") and o.get("expression")), None)
         order = [{"expression": e, "direction": o["direction"]} for o in group6.get("order_by", [])
-                 if (e := shown(f"{o['expression']['source']}.{o['expression']['reference']}", main, a, schema, names,
-                                warnings, rid)) is not None]
+                 if (e := (rewrite(cases(computed), {main: a}) if computed else None) if o.get("computed") else
+                     shown(f"{o['expression']['source']}.{o['expression']['reference']}", main, a, schema, names,
+                           warnings, rid)) is not None]
+        if any(o.get("computed") for o in group6.get("order_by", [])) and computed is None:
+            warnings.append({"request": rid, "problem": "the order by a computed value: not built"})
         if order:
             sel["order_by"] = order
         if group6.get("limit") is not None:

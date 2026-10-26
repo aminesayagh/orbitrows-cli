@@ -47,6 +47,7 @@ FORMULA_KINDS = [   # the formula's kinds of a number, a text, a date, a letter 
     "The final value must never go below this number ('never below 20', 'at least 3').",
 ]
 PARTS_TEMPLATES = [   # and its outputs' fixed list (the catalog's outputs since 2026-10-25)
+    "outputs",   # one use fewer: the pending (computed) outputs are left out of the check, 2026-10-26
     "value", "count", "count_distinct", "sum", "avg", "min", "max", "Its values, as they are.",
     "How many values (count).", "How many different values.", "Their total (sum).", "Their average.",
     "The smallest (minimum).", "The largest (maximum).", "aggregate", "argument",

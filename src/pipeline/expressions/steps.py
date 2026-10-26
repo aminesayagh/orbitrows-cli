@@ -58,6 +58,10 @@ USE = {
     "base": "It is the value a numbered step starts from or applies to ('by 15%', 'twice their cost', 'cost plus 10%').",
     "added": "Its value is added to the result, with no number of its own ('plus the reserved stock', 'add the cost').",
     "subtracted": "Its value is subtracted from the result, with no number of its own ('minus the cost').",
+    "multiplied": "The result is multiplied by its value, with no number of its own ('the quantity times the unit "
+                  "price', 'multiplied by the rate').",
+    "divided": "The result is divided by its value, with no number of its own ('the price divided by the weight', "
+               "'per unit of weight').",
     "set_to": "The value becomes this column's value ('set the cost to the price').",
     "upper_limit": "The result must never go above this column's value ('never above the cost').",
     "lower_limit": "The result must never go below this column's value ('never below the cost', 'keep the old price if "
@@ -122,7 +126,7 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
     q = {}
     for o in occs:
         q[f"{o['occ']}_kind"] = choice(CONTEXT, f"What does the number {o['occ']} ('{o['text']}') do?", kinds(),
-                                       KIND_RULES)
+                                       KIND_RULES + upstream.get("rules", []))
         clause = text[slice(*segment_of(segments(text), o["start"]))].strip()
         q[f"{o['occ']}_column"] = choice(CONTEXT, f"The step with {o['occ']} ('{o['text']}', in '{clause}'): do its own "
                                                   f"words name the column it changes or starts from? Which one?",
@@ -260,10 +264,10 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
                                                           for r in records):
             continue                                            # the clause's limit is already written
         col = {"column": c["column"]}
-        if use in ("added", "subtracted"):
+        if use in ("added", "subtracted", "multiplied", "divided"):
             m = re.search(r"(\w+\s+){0,2}$", text[:c["start"]])
-            add("calculation", "+" if use == "added" else "-", {"unresolved": True}, col, m.start() if m else c["start"],
-                c["end"], f"jev.column_{use}")
+            add("calculation", {"added": "+", "subtracted": "-", "multiplied": "*", "divided": "/"}[use],
+                {"unresolved": True}, col, m.start() if m else c["start"], c["end"], f"jev.column_{use}")
         elif use == "set_to":
             add("calculation", "set", None, col, c["start"], c["end"], "jev.column_set_to")
         else:

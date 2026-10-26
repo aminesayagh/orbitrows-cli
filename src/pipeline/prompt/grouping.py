@@ -7,7 +7,7 @@ read's sort, limit and group columns (plan S5, S7). Stages 1–2 are conditions.
           for a read stage 1 found sorted / limited / grouped: the sort column and its direction, the limit (a number of the
           request, read by the parameters algorithm, or one for a singular "the cheapest variant"), the group column
     code  the AST: the one tree the pairs' answers fit (tree_of), {"type": "all" | "any", "children"}, or the single
-          condition; order_by [{expression, direction}];
+          condition; order_by [{expression, direction}], or [{computed: true, direction}] for a value step 5 computes;
           limit; group_by [expression]; below 0.7 an answer is kept and flagged
     ponytail: one sort column (a second one, "by brand then price", when a case needs it); n·(n-1)/2 pair questions
     (15 for six conditions, in the one call)
@@ -125,8 +125,10 @@ def questions(requests, schema, sources, section, params) -> dict:
                      "or": "A record meeting only one of them can be kept: they are, or belong to, alternatives "
                            "joined by OR."}, TREE_RULES)
         cols = columns_of(schema, tables_of(requests, sources, rid))
-        if g.get("sorted"):
-            q[f"{rid}|sort"] = choice(CONTEXT, f"By which column does {said} order its records?", cols)
+        if g.get("sorted") or g.get("computed_sort"):
+            q[f"{rid}|sort"] = choice(CONTEXT, f"By which column does {said} order its records?", cols | (
+                {"computed": "By the value it computes from columns (step 5's: 'by price minus cost')"}
+                if g.get("computed_sort") else {}))
             q[f"{rid}|direction"] = choice(CONTEXT, f"In which direction does {said} order them?", DIRECTION)
         if g.get("limited"):
             nums = {f"n{i}": f"'{t}' ({v})" for i, (t, v) in enumerate(limits(r["text"], params.get(rid, [])))}
@@ -191,9 +193,11 @@ def build(requests, section, params, answers) -> dict:
                 warnings.append({"request": rid, "problem": "how the conditions combine: no tree fits, AND kept"})
                 shape = ("all", list(range(len(conds))))
             out[rid]["where"] = build_tree(shape, conds)
-        if g.get("sorted"):
+        if g.get("sorted") or g.get("computed_sort"):
             col, d = pick(rid, "sort"), pick(rid, "direction")
-            if col:
+            if col == "computed":                             # the value step 5 computes (the expressions module)
+                out[rid]["order_by"] = [{"computed": True, "direction": d or "asc"}]
+            elif col:
                 out[rid]["order_by"] = [{"expression": _col(col), "direction": d or "asc"}]
         if g.get("limited"):
             nums = limits(r["text"], params.get(rid, []))

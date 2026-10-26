@@ -525,6 +525,9 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
     for rid, done in f5.get("branches", {}).items():
         c = tree_of["requests"].get(rid) or {}
         c["predicates"] = [x for x in c.get("predicates", []) if x["condition"] not in done]
+    for rid, part in s5["requests"].items():                  # step 5 found an order by a value it computes: the
+        if isinstance(part.get("outputs"), list) and any(o.get("sort") for o in part["outputs"]):   # sort question
+            tree_of["requests"].setdefault(rid, {})["computed_sort"] = True                      # offers it
     g = await grouping.run(model, prompt, reqs, store, s4["requests"], tree_of, s6.get("parameters", {}))
     pause("grouping", grouping=g)
     if open_:

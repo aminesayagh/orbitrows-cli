@@ -149,6 +149,8 @@ def unused_numbers(text, upstream, recs, links) -> list[str]:
     used = reached(recs, links)
     out = []
     for o in occurrences(text, "en", [s for s in spans if s[0] >= 0]):
+        if (o["start"], o["end"]) in upstream.get("outside", []):   # surely not the computation's (a read's limit)
+            continue
         steps = [r for r in recs if r["role"] in VALUE and
                  ((r.get("start") is not None and r["start"] <= o["start"] < r["end"])
                   or (r.get("start") is None and (i := text.find(r["text"])) >= 0 and i <= o["start"] < i + len(r["text"])))]
