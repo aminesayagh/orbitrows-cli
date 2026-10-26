@@ -59,6 +59,7 @@ from . import SURE
 from .asking import question
 from orbitrows.services.model.client import ask, choice, yes_no
 from .parts import columns_of, main_table
+from .relations import chained, linked, paths, relationships
 
 CONTEXT = ("A merchant wrote a prompt to edit or read their store database (tables and columns in `tables`). It was "
            "split into the requests in `requests`, each with its statement, its table, the values it names and where "
@@ -165,77 +166,11 @@ def has_options(other: str) -> dict:
                        "on its column)."}
 
 
-def relationships(schema, table) -> list[dict]:
-    """Every link between `table` and another table by a foreign key, either way (all of them: two keys may reach the
-    same table, an order's billing and shipping address), where having a matching record there is a choice the
-    request can make: not along a declared, required foreign key to its parent (every variant has its product: the
-    schema says so), but along an upload's link (marked virtual: its rows may name records the store doesn't have) or
-    an optional one. [{"key": the question's name, "other", "mine": this table's column, "theirs": the other's,
-    "children": the other's records point to this one (they can be counted, totalled…)}]."""
-    out = []
-    d = {x["definition"]["table_id"]: x["definition"] for x in schema}
-    for t, x in d.items():
-        for fk in x.get("foreign_keys", []):
-            (c,), ref = fk["columns"], fk["references"]
-            required = not fk.get("virtual") and not next(
-                (col.get("nullable", True) for col in x["columns"] if col["column_id"] == c), True)
-            if t == table and ref["table"] != table and not required:
-                out.append({"other": ref["table"], "mine": c, "theirs": ref["columns"][0], "children": False})
-            elif ref["table"] == table and t != table:
-                out.append({"other": t, "mine": ref["columns"][0], "theirs": c, "children": True})
-    for r in out:                                             # one link to a table: its name; several: with its key
-        twins = sum(1 for x in out if x["other"] == r["other"])
-        r["key"] = r["other"] if twins == 1 else f"{r['other']}~{r['theirs'] if r['children'] else r['mine']}"
-    return out
-
-
-def paths(schema, table, reads) -> list[dict]:
-    """The links two steps away to a table the request reads (step 4), through a middle table whose records point to
-    `table` and whose own linked records point to them (products ← variants ← inventory): found from the keys, each
-    its own question (two paths to one table are two choices, never the first taken). [{"key": "final^middle",
-    "other": the final table, "mine": `table`'s column, "theirs": the final table's column pointing to the middle,
-    "children": True, "via": {"table": the middle, "key": its column pointing to `table`, "id": its column the
-    final table points to}}]."""
-    out = []
-    for first in relationships(schema, table):
-        if not first["children"]:
-            continue
-        for second in relationships(schema, first["other"]):
-            if second["children"] and second["other"] not in (table, first["other"]) and second["other"] in reads:
-                out.append({"key": f"{second['other']}^{first['other']}", "other": second["other"],
-                            "mine": first["mine"], "theirs": second["theirs"], "children": True,
-                            "via": {"table": first["other"], "key": first["theirs"], "id": second["mine"]}})
-    return out
-
-
 def keyed_to(schema, table) -> dict:
     """{other table: (this table's column, its column)}: the first link to each table (relationships())."""
     out = {}
     for r in relationships(schema, table):
         out.setdefault(r["other"], (r["mine"], r["theirs"]))
-    return out
-
-
-def linked(schema, table) -> dict:
-    """{other table: chain of keys [(from table, column, to table, column)]} for each table a record of `table` has
-    one record of: many-to-one keys (a variant's product), and a key the other table holds as its own primary key
-    (one-to-one: an offer per variant SKU)."""
-    d = {x["definition"]["table_id"]: x["definition"] for x in schema}
-    steps = []
-    for t, x in d.items():
-        for fk in x.get("foreign_keys", []):
-            (c,), ref = fk["columns"], fk["references"]
-            steps.append((t, c, ref["table"], ref["columns"][0]))
-            if x.get("primary_key") == [c]:
-                steps.append((ref["table"], ref["columns"][0], t, c))
-    out, todo = {table: []}, [table]
-    while todo:
-        t = todo.pop(0)
-        for s in steps:
-            if s[0] == t and s[2] not in out:
-                out[s[2]] = out[t] + [s]
-                todo.append(s[2])
-    out.pop(table)
     return out
 
 
@@ -253,37 +188,34 @@ def through(schema, cond, table) -> dict:
     chains = linked(schema, table)
     for other in sorted({s for s in re.findall(r'"source": "([^"]+)"', json.dumps(cond)) if s in chains}):
         chain, n = chains[other], json.dumps(cond).count('"type": "select"')
-        aliases = [f"{s[2]}_l{n}{i}" for i, s in enumerate(chain)]
-        inner = json.loads(json.dumps(cond).replace(f'"source": "{other}"', f'"source": "{aliases[-1]}"'))
-        for i in range(len(chain) - 1, -1, -1):
-            t_from, c_from, t_to, c_to = chain[i]
-            inner = {"type": "membership", "operator": "in", "query": _sub(t_to, aliases[i], c_to, inner),
-                     "expression": {"type": "column", "source": aliases[i - 1] if i else table, "reference": c_from}}
-        cond = inner
+        cond = chained(chain, lambda a, c=cond, o=other: json.loads(json.dumps(c).replace(f'"source": "{o}"',
+                                                                                         f'"source": "{a}"')),
+                       table, lambda i, t, n=n: f"{t}_l{n}{i}", _sub)
     return cond
 
 
 def existence_via(table, mine, via, other, theirs, has: bool) -> tuple[str, dict]:
     """Two links away ("products never sold": products ← variants ← sales): mine [NOT] IN (SELECT the middle's key to
     this table FROM middle WHERE its id IN (SELECT the final table's key WHERE it IS NOT NULL))."""
-    a, m = f"{other}_has", f"{via['table']}_has"
-    known = {"type": "column", "source": a, "reference": theirs}
-    final = _sub(other, a, theirs, {"type": "null_check", "expression": known, "operator": "is_not_null"})
-    middle = _sub(via["table"], m, via["key"], {"type": "membership", "operator": "in", "expression": {
-        "type": "column", "source": m, "reference": via["id"]}, "query": final})
-    return f"{table}.{mine}", {"type": "membership", "operator": "in" if has else "not_in",
-                               "expression": _col(f"{table}.{mine}"), "query": middle}
+    chain = [(table, mine, via["table"], via["key"]), (via["table"], via["id"], other, theirs)]
+    return f"{table}.{mine}", known_in(chain, has)
 
 
 def existence(schema, table, other, has: bool, link=None) -> tuple[str, dict]:
     """(the key column, its condition): key [NOT] IN (SELECT the other table's key WHERE it IS NOT NULL), along
     `link` ((mine, theirs): the relationship chosen), else the first one."""
     mine, theirs = link or keyed_to(schema, table)[other]
-    a = f"{other}_has"
-    known = {"type": "column", "source": a, "reference": theirs}
-    return f"{table}.{mine}", {"type": "membership", "operator": "in" if has else "not_in", "expression": _col(
-        f"{table}.{mine}"), "query": _sub(other, a, theirs, {"type": "null_check", "expression": known,
-                                                             "operator": "is_not_null"})}
+    return f"{table}.{mine}", known_in([(table, mine, other, theirs)], has)
+
+
+def known_in(chain, has: bool) -> dict:
+    """The first table's key [NOT] IN the chain's records whose key to it is known (a NULL key never defeats NOT IN)."""
+    last = chain[-1]
+    cond = chained(chain, lambda a: {"type": "null_check", "expression": {"type": "column", "source": a,
+                                                                         "reference": last[3]},
+                                     "operator": "is_not_null"},
+                   chain[0][0], lambda i, t: f"{t}_has", _sub)
+    return cond | {"operator": "in" if has else "not_in"}
 
 
 def rows_from(r: dict) -> str | None:

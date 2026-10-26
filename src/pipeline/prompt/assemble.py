@@ -21,10 +21,10 @@ Section "assembly": {"program": [{"request", "ast", "sql", "rows_from"?, "return
 "errors": [...]}.
 """
 import json
-from collections import deque
 
 from orbitrows.sql.sql import check, program
 from .parts import main_table as parts_main_table
+from .relations import chained, path
 
 ROWS = ("select", "update", "delete")
 
@@ -38,34 +38,6 @@ def defs(schema):
 def pk(schema, table):
     d = defs(schema).get(table)
     return d["primary_key"][0] if d and d.get("primary_key") else None
-
-
-def edges(schema):
-    """Foreign keys both ways: (from table, from column, to table, to column, "up" = child → parent | "down")."""
-    out = []
-    for t, d in defs(schema).items():
-        for fk in d.get("foreign_keys", []):
-            (c,), ref = fk["columns"], fk["references"]
-            out.append((t, c, ref["table"], ref["columns"][0], "up"))
-            out.append((ref["table"], ref["columns"][0], t, c, "down"))
-    ups = {e[:4] for e in out if e[4] == "up"}                # a key both ways (an upload's, one-to-one): up each way
-    return [e for e in out if e[4] == "up" or e[:4] not in ups]
-
-
-def path(schema, src, dst):
-    """The shortest chain of foreign keys from src to dst, or None."""
-    if src == dst:
-        return []
-    seen, todo = {src}, deque([(src, [])])
-    while todo:
-        t, p = todo.popleft()
-        for e in edges(schema):
-            if e[0] == t and e[2] not in seen:
-                if e[2] == dst:
-                    return p + [e]
-                seen.add(e[2])
-                todo.append((e[2], p + [e]))
-    return None
 
 
 # ---- AST helpers ----------------------------------------------------------------------------------------------
@@ -193,28 +165,8 @@ def lift(cond, main, main_alias, schema, names, warnings, rid):
     if chain is None:
         warnings.append({"request": rid, "problem": f"no foreign-key path from {main} to {other}"})
         return None
-    inner = None
-    for i in range(len(chain) - 1, -1, -1):           # from the far table back to the main one
-        t_from, c_from, t_to, c_to, _ = chain[i]
-        a_to = names.alias(t_to)
-        where = rewrite(cond, {other: a_to}) if i == len(chain) - 1 else inner
-        q = select(names, t_to, a_to, [col(a_to, c_to)], where)
-        a_from = main_alias if i == 0 else None
-        inner = {"type": "membership", "operator": "in", "expression": col(a_from or f"__{t_from}", c_from), "query": q}
-    # the outer column of each level is the alias of the level above: fill them from the main table down
-    return _fill_outer(inner, main_alias)
-
-
-def _fill_outer(node, outer_alias):
-    """Each membership's expression column waits for the alias of the select around it."""
-    expr = node["expression"]
-    if expr["source"].startswith("__"):
-        expr["source"] = outer_alias
-    q = node["query"]
-    w = q["scope"].get("where")
-    if w and w.get("type") == "membership" and w["expression"]["source"].startswith("__"):
-        _fill_outer(w, q["from"]["alias"])
-    return node
+    return chained(chain, lambda a: rewrite(cond, {other: a}), main_alias, lambda i, t: names.alias(t),
+                   lambda t, a, c, w: select(names, t, a, [col(a, c)], w))
 
 
 def filled(node, table) -> list:

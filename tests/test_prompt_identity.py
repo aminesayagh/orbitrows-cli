@@ -13,7 +13,7 @@ import pytest
 COMMIT = "8c923a8"
 SRC = Path(__file__).resolve().parents[1] / "src"
 PORTED = {f"pipeline/prompt/{p.name}": f"v2/prompt_ast/{p.name}" for p in sorted((SRC / "pipeline" / "prompt").glob("*.py"))
-          if p.name not in ("pipeline.py", "asking.py", "source_route.py")} | {  # source_route is new, not a PoC port
+          if p.name not in ("pipeline.py", "asking.py", "source_route.py", "relations.py")} | {  # new, not PoC ports
     "pipeline/expressions/words.py": "v2/prompt_ast/operations.py",          # the formula's passes: their own module
     "pipeline/expressions/steps.py": "v2/prompt_ast/operations_jev.py",      # since 2026-10-26
     "pipeline/expressions/links.py": "v2/prompt_ast/operations_map.py",
@@ -85,7 +85,8 @@ REPLACED = {"pipeline/prompt/grouping.py": {   # the one tree question over ever
     "_back", "') ask to get information back?", "reports_back", "reports back uncertain",
     "Does request ", "id", "text", "request", "problem", "probability", 0.0, 0.5},   # one use fewer of each
     # 2026-10-25: no row is read before the session runs the program (the test runs and counts are gone)
-    "pipeline/prompt/assemble.py": {"select", "update", "delete", "SAVEPOINT assemble", "ROLLBACK TO assemble",
+    "pipeline/prompt/assemble.py": {"where",   # 2026-10-26: lift's chain is written by relations.chained
+                                    "select", "update", "delete", "SAVEPOINT assemble", "ROLLBACK TO assemble",
                                     "RELEASE assemble", "request", "ast", "rows", "predicates", "changes no record",
                                     "returns", ": each condition matches records, but not together"},
     "pipeline/prompt/conditions.py": {"rows", "no record matches the condition on "},
@@ -98,7 +99,9 @@ REPLACED = {"pipeline/prompt/grouping.py": {   # the one tree question over ever
     "pipeline/expressions/links.py": {"type", "value", "operator", "left", "right", "arithmetic", "name",
                                           "arguments", "function", "concat", "round", "upper", "parts", "date",
                                           "least", "greatest", "coalesce", "substr"}}
-MOVED = {"pipeline/prompt/formula.py": ["pipeline/expressions/__init__.py"]}   # code moved as it was: its texts are
+MOVED = {"pipeline/prompt/formula.py": ["pipeline/expressions/__init__.py"],
+         "pipeline/prompt/conditions.py": ["pipeline/prompt/relations.py"],   # the links' resolver (2026-10-26)
+         "pipeline/prompt/assemble.py": ["pipeline/prompt/relations.py"]}   # code moved as it was: its texts are
 # looked for there too (2026-10-26: compose(), the branch's positive condition and the A47 repair)
 TRIMMED = {"pipeline/expressions/words.py"}   # the PoC's option A (word rules), never called, removed 2026-10-25: its
 # kept definitions (the formula's helpers) are compared, each as the PoC wrote it
