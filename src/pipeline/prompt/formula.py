@@ -167,8 +167,8 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
                              | {k: q[k] for k in ("question",) if k in q} for q in p2["questions"]]
                 if a.get("pending"):                        # no template value behind it: not built, asked
                     part["outputs" if reads else "assignments"].remove(a)
-                    warnings.append({"request": rid, "problem": f"the {'value computed from' if reads else 'change of'} "
-                                                                f"{target} is not built until the questions above are "
+                    what = f"the value computed from {target}" if reads else f"the change of {target}"
+                    warnings.append({"request": rid, "problem": f"{what} is not built until the questions above are "
                                                                 f"answered"})
                 continue                                    # (an old template value, if any, stays, asked)
             value = to_dml(p2["set"])

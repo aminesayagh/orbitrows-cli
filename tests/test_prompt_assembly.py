@@ -72,5 +72,5 @@ def test_a_value_a_read_computes_is_shown_as_its_own_column():
         {"r1": {}}, {"r1": {"where": None}}, [])
     assert not out["errors"], out
     sql = out["program"][0]["sql"][0]
-    assert "computed_price_mad" in sql and sorted(db.execute(sql).fetchall()) == sorted(
-        db.execute("SELECT price_mad - cost_mad FROM variants").fetchall()), sql
+    assert "computed_price_mad" in sql and sorted(db.execute(sql).fetchall(), key=repr) == sorted(
+        db.execute("SELECT price_mad - cost_mad FROM variants").fetchall(), key=repr), sql   # no cost: NULL
