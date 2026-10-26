@@ -132,7 +132,8 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
             q[f"{k}_names"] = choice(CONTEXT, f"Which column does the word '{c['text']}' ('…{ctx(c)}…') name?",
                                      {**upstream["table_columns"], "none": "It does not name a column."})
         q[f"{k}_use"] = choice(CONTEXT, f"What does the request do with the column word '{c['text']}' "
-                                        f"('…{text[max(0, c['start'] - 25):c['end'] + 15]}…')?", USE)
+                                        f"('…{text[max(0, c['start'] - 25):c['end'] + 15]}…')?",
+                                        USE | ({"target": upstream["target_use"]} if upstream.get("target_use") else {}))
     for p in preds:
         if p["start"] >= 0:
             q[f"{p['id']}_role"] = choice(CONTEXT, f"What does the request do with the records '{p['text']}'?", ROLE,
@@ -443,7 +444,9 @@ async def extract_textdate(jev, text: str, upstream: dict, lang: str = "en") -> 
             q[f"{k}_names"] = choice(TEXT_CONTEXT, f"Which column does the word '{c['text']}' ('…{ctx(c)}…') name?",
                                      {**upstream["table_columns"], "none": "It does not name a column."})
         q[f"{k}_use"] = choice(TEXT_CONTEXT, f"What does the request do with the column word '{c['text']}' "
-                                             f"('…{ctx(c)}…')?", TEXT_USE)
+                                             f"('…{ctx(c)}…')?",
+                                             TEXT_USE | ({"target": upstream["target_use"]} if upstream.get("target_use")
+                                                         else {}))
     for p in preds:
         if p["start"] >= 0:
             q[f"{p['id']}_role"] = choice(TEXT_CONTEXT, f"What does the request do with the records '{p['text']}'?",

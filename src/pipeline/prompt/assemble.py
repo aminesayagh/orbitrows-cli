@@ -325,19 +325,20 @@ def statement(r, st, main, schema, src, part, cond6, group6, built, warnings, nu
         return {"id": rid, "type": "insert", "target": target, "columns": ins["columns"], "values": [ins["values"]]}
     where = typed(lift((group6 or {}).get("where"), main, a, schema, names, warnings, rid), numbers, {a: main})
     scope = {"type": "filtered", "where": where} if where else {"type": "all_rows"}
+
+    def cases(v):                                       # a CASE's condition (the formula's) is lifted like WHERE
+        if isinstance(v, list):
+            return [cases(x) for x in v]
+        if not isinstance(v, dict):
+            return v
+        if v.get("type") == "case":
+            return {**v, "branches": [{"when": lift(b["when"], main, a, schema, names, warnings, rid),
+                                       "then": cases(b["then"])} for b in v["branches"]], "else": cases(v["else"])}
+        return {k: cases(x) for k, x in v.items()}
     if st == "update":
         part = {**part, "assignments": [x for x in part.get("assignments", []) if not x.get("pending")]}
         if not part.get("assignments"):                 # a value still pending (formula not run): never SET … NULL
             return None
-        def cases(v):                                   # a CASE's condition (step 5's formula) is lifted like WHERE
-            if isinstance(v, list):
-                return [cases(x) for x in v]
-            if not isinstance(v, dict):
-                return v
-            if v.get("type") == "case":
-                return {**v, "branches": [{"when": lift(b["when"], main, a, schema, names, warnings, rid),
-                                           "then": cases(b["then"])} for b in v["branches"]], "else": cases(v["else"])}
-            return {k: cases(x) for k, x in v.items()}
         sets, reached = [], {}
         for x in part["assignments"]:
             v = rewrite(cases(x["value"]), {main: a})
@@ -380,6 +381,13 @@ def statement(r, st, main, schema, src, part, cond6, group6, built, warnings, nu
         for o in outs:
             if o["column"] is None:                         # count of records
                 columns.append({"expression": {"type": "aggregate", "function": "count"}, "alias": "count"})
+                continue
+            if o["aggregate"] == "computed":                # a value computed from the column (the expressions module)
+                if o.get("pending") or not o.get("expression"):
+                    warnings.append({"request": rid, "problem": f"the value computed from {o['column']}: not built"})
+                    continue
+                columns.append({"expression": rewrite(cases(o["expression"]), {main: a}),
+                                "alias": f"computed_{o['column'].split('.')[1][2:]}"})
                 continue
             if o["aggregate"] != "value" and (e := totalled(o, main, a, schema, names)):
                 columns.append({"expression": e, "alias": f"{o['aggregate']}_{o['column'].split('.')[1][2:]}"})

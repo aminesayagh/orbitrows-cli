@@ -21,6 +21,8 @@ answer or a broken map is a question, never a guess.
                  table_columns  {column id: name} the columns a step may start from
                  stored_values  a text target's values when it has few (a status's)
                  texts          [{"text", "start"}] the texts the request writes
+                 target_use     what the target is for the request, when it is not the changed column (a read's
+                                computed value: "the column the computed value starts from")
 """
 from orbitrows.pipeline.prompt import SURE
 from .links import resolve

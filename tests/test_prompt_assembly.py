@@ -56,3 +56,21 @@ def test_a_read_of_the_rows_a_change_made_takes_the_ids_its_returning_gives():
     assert not out["errors"], out
     first, second = (p["sql"][0] for p in out["program"])
     assert first.endswith('RETURNING "variant_id"') and ":rows_r1" in second, (first, second)
+
+
+def test_a_value_a_read_computes_is_shown_as_its_own_column():
+    """"Show the price minus the cost": the expressions module's tree (stage 3) is one column of the read."""
+    db = baseline()
+    price = {"type": "column", "source": "t_variants", "reference": "c_price_mad"}
+    cost = {"type": "column", "source": "t_variants", "reference": "c_cost_mad"}
+    margin = {"type": "arithmetic", "operator": "-", "left": price, "right": cost}
+    reqs = [{"id": "r1", "text": "show the price minus the cost", "statement": "select"}]
+    out = assemble.assemble(
+        db, store_of(db), reqs, {"r1": {"statement": "select"}},
+        {"r1": {"from": {"type": "database_table", "reference": "t_variants"}}},
+        {"r1": {"outputs": [{"column": "t_variants.c_price_mad", "aggregate": "computed", "expression": margin}]}},
+        {"r1": {}}, {"r1": {"where": None}}, [])
+    assert not out["errors"], out
+    sql = out["program"][0]["sql"][0]
+    assert "computed_price_mad" in sql and sorted(db.execute(sql).fetchall()) == sorted(
+        db.execute("SELECT price_mad - cost_mad FROM variants").fetchall()), sql

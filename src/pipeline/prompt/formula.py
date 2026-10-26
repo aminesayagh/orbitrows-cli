@@ -102,12 +102,16 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
     out, warnings, found = {}, [], {}
     for r in requests:
         rid, part = r["id"], parts.get(r["id"]) or {}
-        if r.get("statement") != "update":
+        reads = r.get("statement") == "select"
+        if r.get("statement") != "update" and not reads:
             continue
-        # number columns (no template: pending) and, with a db, text and date columns (the template stays behind)
-        assigns = [a for a in part.get("assignments", []) if coltype(schema, a["column"])[0] in NUMERIC
-                   or (db is not None and coltype(schema, a["column"])[0] == "TEXT")]
-        main = ((sources.get(rid) or {}).get("target") or {}).get("reference")
+        if reads:                                       # a value a read computes (step 5: pending): the expression
+            outs = part.get("outputs")                  # module's second use (2026-10-26)
+            assigns = [o for o in outs if o.get("pending") == "expression"] if isinstance(outs, list) else []
+        else:   # number columns (no template: pending) and, with a db, text and date columns (the template stays behind)
+            assigns = [a for a in part.get("assignments", []) if coltype(schema, a["column"])[0] in NUMERIC
+                       or (db is not None and coltype(schema, a["column"])[0] == "TEXT")]
+        main = ((sources.get(rid) or {}).get("from" if reads else "target") or {}).get("reference")
         if not assigns or not main:
             continue
         off, text = r["start"], prompt[r["start"]:r["end"]]
@@ -128,6 +132,9 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
                   "stored_values": stored_values(schema, db, target) if kind == "text" else [],
                   "texts": [{"text": v["text"], "start": v["start"] - off} for v in values
                             if v["request"] == rid and v["role"] == "written" and v.get("start") is not None]}
+            if reads:                                       # nothing changes: the column the value starts from
+                up["target_use"] = ("It is the column the computed value starts from, named as such ('the price minus "
+                                    "the cost', 'the prices with 20% tax': the price).")
             done = await compose(jev, text, up)               # the expressions module (pipeline/expressions)
             p1, p2 = done["pass_1"], done["pass_2"]
             key = f"{rid}.{target}"
@@ -159,11 +166,16 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
                 warnings += [{"request": rid, "problem": f"formula of {target}: {q['problem']}"}
                              | {k: q[k] for k in ("question",) if k in q} for q in p2["questions"]]
                 if a.get("pending"):                        # no template value behind it: not built, asked
-                    part["assignments"].remove(a)
-                    warnings.append({"request": rid, "problem": f"the change of {target} is not built until the "
-                                                                f"questions above are answered"})
+                    part["outputs" if reads else "assignments"].remove(a)
+                    warnings.append({"request": rid, "problem": f"the {'value computed from' if reads else 'change of'} "
+                                                                f"{target} is not built until the questions above are "
+                                                                f"answered"})
                 continue                                    # (an old template value, if any, stays, asked)
             value = to_dml(p2["set"])
+            if reads:                                       # shown, not stored: as computed
+                a["expression"], a["from"] = value, "formula"
+                a.pop("pending", None)
+                continue
             if coltype(schema, target)[0] == "INTEGER":     # a whole-number column takes whole values
                 value = {"type": "function", "name": "round", "arguments": [value]}
             a["value"], a["from"] = value, "formula"
