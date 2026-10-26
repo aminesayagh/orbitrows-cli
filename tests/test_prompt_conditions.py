@@ -143,3 +143,39 @@ def test_a_computation_no_operation_supports_leaves_the_request_unbuilt(store, c
     db, schema = store
     out = computed(db, schema, "variants priced above the median", "none")
     assert out["program"] == [] and any("no operation supports" in q["problem"] for q in out["questions"]), out
+
+
+def linked_count(store_db, aggregate, column, number):
+    """offer's records point to variants by sku (the fixture): "variants with more than N offers" through stage 1's
+    "compares" and stage 2c, answers given → assembly's output."""
+    db, schema = store_db
+    requests = [{"id": "r1", "text": "variants with more than 0 offers", "statement": "select"}]
+    sources = {"r1": {"from": {"type": "database_table", "reference": "t_variants"}, "reads": []}}
+    rel = next(r for r in conditions.relationships(schema, "t_variants") if r["other"] == "t_offer")
+    section = conditions.build(requests, schema, sources, [], {"r1_all": 0.02,
+                                                               f"r1_has_{rel['key']}": ("compares", {"compares": 0.95})})
+    params = {"r1": [{"text": str(number), "value": number, "unit": None}]}
+    conditions.build_2(db, requests, schema, section["requests"], [], params, {}, {}, section)
+    section["requests"]["r1"]["comparisons"] = conditions.comparisons(schema, "t_variants", section["requests"]["r1"])
+    k = f"r1|{rel['key']}"
+    assert {f"{k}|aggregate", f"{k}|column", f"{k}|op", f"{k}|number"} <= set(
+        conditions.questions_2c(requests, schema, section["requests"], params))
+    conditions.build_2c(db, requests, schema, section, params,
+                        {f"{k}|aggregate": (aggregate, {aggregate: 0.95}), f"{k}|column": (column, {column: 0.9}),
+                         f"{k}|op": (">", {">": 0.95}), f"{k}|number": ("n0", {"n0": 0.95})})
+    tree = grouping.build(requests, section, {}, {})["requests"]
+    return assemble.assemble(db, schema, requests, {"r1": {"statement": "select"}}, sources, {"r1": {"outputs": "all"}},
+                             section["requests"], tree)
+
+
+def test_records_compared_by_how_many_linked_records_they_have(store):
+    out = linked_count(store, "count", "none", 0)
+    assert not out["errors"], out
+    rows = sorted((list(r) for r in store[0].execute(out["program"][0]["sql"][0])), key=str)
+    assert rows == [["A", 10.0], ["B", 20.0], ["C", 30.0]], rows      # one offer each; the NULL sku has none
+
+
+def test_a_comparison_over_linked_records_that_cannot_be_built_leaves_the_request_unbuilt(store):
+    """A total of a text column: refused, never the request without its condition."""
+    out = linked_count(store, "sum", "t_offer.c_sku", 0)
+    assert out["program"] == [] and any("not built" in q["problem"] for q in out["questions"]), out

@@ -39,10 +39,6 @@ CHECKS = {
                                 "SELECT variant_id FROM variants WHERE (price_mad - cost_mad) * 100.0 / cost_mad > 110"),
     "COMPARE_TABLE_AVERAGE": ("variants", {"column": PRICE, "operator": ">"},
                               "SELECT variant_id FROM variants WHERE price_mad > (SELECT AVG(price_mad) FROM variants)"),
-    "COUNT_LINKED_RECORDS": ("products", {"column": col("products", "product_id"), "operator": ">", "number": 1,
-                                          "linked": {"table": "t_variants", "key": "c_product_id"}},
-                             "SELECT product_id FROM products p WHERE (SELECT COUNT(*) FROM variants v "
-                             "WHERE v.product_id = p.product_id) > 1"),
     "WITHIN_LAST_DAYS": ("sales", {"column": col("sales", "sold_on"), "days": 30},
                          "SELECT sale_id FROM sales WHERE sold_on >= date('now', '-30 days')"),
     "INCREASE_PERCENT": ("variants", {"column": PRICE, "percent": 10},
@@ -55,11 +51,6 @@ CHECKS = {
                               "SELECT variant_id FROM variants WHERE price_mad = (SELECT MIN(price_mad) FROM variants)"),
     "COMPARE_TABLE_MAXIMUM": ("variants", {"column": PRICE, "operator": "="},
                               "SELECT variant_id FROM variants WHERE price_mad = (SELECT MAX(price_mad) FROM variants)"),
-    "SUM_LINKED_RECORDS": ("variants", {"column": col("variants", "variant_id"), "operator": "<", "number": 30,
-                                        "linked": {"table": "t_inventory", "key": "c_variant_id",
-                                                   "value": "c_quantity"}},
-                           "SELECT variant_id FROM variants v WHERE (SELECT SUM(quantity) FROM inventory i "
-                           "WHERE i.variant_id = v.variant_id) < 30"),
     "OLDER_THAN_DAYS": ("sales", {"column": col("sales", "sold_on"), "days": 40},
                         "SELECT sale_id FROM sales WHERE sold_on < date('now', '-40 days')"),
     "DECREASE_PERCENT": ("variants", {"column": PRICE, "percent": 15}, "SELECT variant_id, price_mad * 0.85 FROM variants"),
@@ -106,6 +97,11 @@ CHECKS = {
                               "SELECT variant_id, price_mad + cost_mad * 0.1 FROM variants"),
     "SUBTRACT_PERCENT_OF_COLUMN": ("variants", {"column": PRICE, "percent": 10, "other": COST},
                                    "SELECT variant_id, price_mad - cost_mad * 0.1 FROM variants"),
+    "COMPARE_LINKED_AGGREGATE": ("products", {"column": col("products", "product_id"), "function": "count",
+                                              "operator": ">", "number": 1,
+                                              "linked": {"table": "t_variants", "key": "c_product_id"}},
+                                 "SELECT product_id FROM products p WHERE (SELECT COUNT(*) FROM variants v "
+                                 "WHERE v.product_id = p.product_id) > 1"),
     "FILL_EMPTY": ("variants", {"column": col("variants", "color"), "value": lit("none"), "column_type": "TEXT"},
                    "SELECT variant_id, COALESCE(NULLIF(TRIM(color), ''), 'none') FROM variants"),
 }
@@ -194,3 +190,34 @@ def test_every_function_the_catalog_lets_the_ast_call_compiles_and_runs_on_sqlit
                                             "arguments": [price] * dml.ARITY[name][0]}, "alias": "v"}],
                 "scope": {"type": "all_rows"}}
         db.execute(program([stmt], store_of(db))[0]).fetchall()
+
+
+
+@pytest.mark.parametrize("function,operator,number,linked,sql", [
+    ("count_distinct", ">", 1, ("t_variants", "c_product_id", "c_color"), "COUNT(DISTINCT color) FROM variants v "
+     "WHERE v.product_id = p.product_id) > 1"),
+    ("min", "<", 100, ("t_variants", "c_product_id", "c_price_mad"), "MIN(price_mad) FROM variants v "
+     "WHERE v.product_id = p.product_id) < 100"),
+])
+def test_the_linked_aggregate_builds_each_aggregate(function, operator, number, linked, sql):
+    db = baseline()
+    p = {"column": col("products", "product_id"), "function": function, "operator": operator, "number": number,
+         "linked": dict(zip(("table", "key", "value"), linked))}
+    node = BUILDERS["linked_aggregate"](p, {})
+    q = program([{"id": "q", "type": "select", "from": {"type": "database_table", "reference": "t_products",
+                                                        "alias": "t_products"},
+                  "columns": [{"expression": col("products", "product_id"), "alias": "id"}],
+                  "scope": {"type": "filtered", "where": node}}], store_of(db))[0]
+    assert sorted(db.execute(q)) == sorted(db.execute(f"SELECT product_id FROM products p WHERE (SELECT {sql}"))
+
+
+def test_a_total_over_no_linked_record_is_zero():
+    """"Stock under 10": the variant with no stock line (115) is kept, its total counted as 0."""
+    db = baseline()
+    p = {"column": col("variants", "variant_id"), "function": "sum", "operator": "<", "number": 10,
+         "linked": {"table": "t_inventory", "key": "c_variant_id", "value": "c_quantity"}}
+    q = program([{"id": "q", "type": "select", "from": {"type": "database_table", "reference": "t_variants",
+                                                        "alias": "t_variants"},
+                  "columns": [{"expression": col("variants", "variant_id"), "alias": "id"}],
+                  "scope": {"type": "filtered", "where": BUILDERS["linked_aggregate"](p, {})}}], store_of(db))[0]
+    assert 115 in [r[0] for r in db.execute(q)]

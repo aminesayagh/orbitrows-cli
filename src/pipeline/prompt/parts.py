@@ -49,6 +49,10 @@ COMPUTE_RULES = [
     "stock', 'how many', 'the average price'): those are not computed values.",
     "Answer no for a computation that only chooses the records ('the variants priced over twice their cost').",
 ]
+COUNT_RULES = [
+    "Answer no when a number of records only chooses which records are shown ('the suppliers with at least 3 "
+    "products', 'the products with more than 2 variants'): the read shows those records, it does not count them.",
+]
 SORT_RULES = [
     "Answer no for an order by one column as it is ('the cheapest', 'newest first', 'by price') or a read that is not "
     "ordered.",
@@ -257,7 +261,7 @@ def questions_1(requests, schema, sources) -> dict:
                                                 f"values to show ('list the cheap tees': yes; 'show their names': no; "
                                                 f"'how many': no)?")
             q[f"{rid}_counts"] = yes_no(CONTEXT, f"Does {said(r)} count the records themselves ('how many sales', "
-                                                 f"'the number of products')?")
+                                                 f"'the number of products')?", COUNT_RULES)
             for key, text in shown_columns(schema, tables, main).items():
                 q[f"{rid}_shows_{key}"] = yes_no(CONTEXT, f"Does {said(r)} show or compute from: {text}", SHOW_RULES)
             q[f"{rid}_computes"] = yes_no(CONTEXT, f"Does {said(r)} show a value it computes from a column, rather than "

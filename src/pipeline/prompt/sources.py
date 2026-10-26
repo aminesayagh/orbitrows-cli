@@ -44,6 +44,10 @@ RULES = [
     "`stored_in`: where the store holds a value the request names ('Kora' → brands.name): the request uses that "
     "table to choose its rows, it does not change it.",
     "Answer for this request only.",
+    "The records a request shows or changes are the ones it is about, even when a condition counts, totals or "
+    "compares their linked records: 'the products whose variants average over 200', 'the suppliers with more than 3 "
+    "products', 'the variants whose total stock is under 10' are about the products, the suppliers, the variants; "
+    "the variants, the products, the stock lines are only read.",
 ]
 USE_RULES = [
     "Answer yes when the request changes or reads this table, or names one of its values or columns to choose its "

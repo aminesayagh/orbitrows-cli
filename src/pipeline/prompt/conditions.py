@@ -148,6 +148,11 @@ NEGATE_RULES = [
 DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 
 
+COMPARES = ("Only those whose records of {0} compare with a number: how many there are, or a total, an average, "
+            "a lowest or a highest value of them ('more than 3 {0}', 'whose {0} total over 1000', 'whose cheapest "
+            "of the {0} is under 100').")
+
+
 def has_options(other: str) -> dict:
     return {"has": f"Only those with a matching record in {other} ('already in {other}', 'that exist in {other}').",
             "has_not": f"Only those with no matching record in {other} ('not in {other} yet', 'missing from "
@@ -156,24 +161,35 @@ def has_options(other: str) -> dict:
                        "on its column)."}
 
 
-def keyed_to(schema, table) -> dict:
-    """{other table: (this table's column, its column)} for each table linked to `table` by a foreign key, either way
-    (the first key when there are several), where having a matching record there is a choice the request can make:
-    not along a declared, required foreign key to its parent (every variant has its product: the schema says so), but
-    along an upload's link (marked virtual: its rows may name records the store doesn't have) or an optional one."""
-    out = {}
+def relationships(schema, table) -> list[dict]:
+    """Every link between `table` and another table by a foreign key, either way (all of them: two keys may reach the
+    same table, an order's billing and shipping address), where having a matching record there is a choice the
+    request can make: not along a declared, required foreign key to its parent (every variant has its product: the
+    schema says so), but along an upload's link (marked virtual: its rows may name records the store doesn't have) or
+    an optional one. [{"key": the question's name, "other", "mine": this table's column, "theirs": the other's,
+    "children": the other's records point to this one (they can be counted, totalled…)}]."""
+    out = []
     d = {x["definition"]["table_id"]: x["definition"] for x in schema}
     for t, x in d.items():
         for fk in x.get("foreign_keys", []):
             (c,), ref = fk["columns"], fk["references"]
             required = not fk.get("virtual") and not next(
                 (col.get("nullable", True) for col in x["columns"] if col["column_id"] == c), True)
-            if t == table and ref["table"] != table and required:
-                continue                                      # guaranteed by the schema: never the request's choice
-            if t == table and ref["table"] != table:
-                out.setdefault(ref["table"], (c, ref["columns"][0]))
+            if t == table and ref["table"] != table and not required:
+                out.append({"other": ref["table"], "mine": c, "theirs": ref["columns"][0], "children": False})
             elif ref["table"] == table and t != table:
-                out.setdefault(t, (ref["columns"][0], c))
+                out.append({"other": t, "mine": ref["columns"][0], "theirs": c, "children": True})
+    for r in out:                                             # one link to a table: its name; several: with its key
+        twins = sum(1 for x in out if x["other"] == r["other"])
+        r["key"] = r["other"] if twins == 1 else f"{r['other']}~{r['theirs'] if r['children'] else r['mine']}"
+    return out
+
+
+def keyed_to(schema, table) -> dict:
+    """{other table: (this table's column, its column)}: the first link to each table (relationships())."""
+    out = {}
+    for r in relationships(schema, table):
+        out.setdefault(r["other"], (r["mine"], r["theirs"]))
     return out
 
 
@@ -224,9 +240,10 @@ def through(schema, cond, table) -> dict:
     return cond
 
 
-def existence(schema, table, other, has: bool) -> tuple[str, dict]:
-    """(the key column, its condition): key [NOT] IN (SELECT the other table's key WHERE it IS NOT NULL)."""
-    mine, theirs = keyed_to(schema, table)[other]
+def existence(schema, table, other, has: bool, link=None) -> tuple[str, dict]:
+    """(the key column, its condition): key [NOT] IN (SELECT the other table's key WHERE it IS NOT NULL), along
+    `link` ((mine, theirs): the relationship chosen), else the first one."""
+    mine, theirs = link or keyed_to(schema, table)[other]
     a = f"{other}_has"
     known = {"type": "column", "source": a, "reference": theirs}
     return f"{table}.{mine}", {"type": "membership", "operator": "in" if has else "not_in", "expression": _col(
@@ -286,9 +303,12 @@ def questions(requests, schema, sources) -> dict:
             q[f"{rid}_chooses_{key}"] = yes_no(CONTEXT, f"Does {said} keep or exclude records by what this column "
                                                         f"holds, or by its being empty: {text}", CHOOSE_RULES)
         names = {t["definition"]["table_id"]: t["definition"]["sql_name"] for t in schema}
-        for other in keyed_to(schema, main_table(requests, sources, rid)):
-            q[f"{rid}_has_{other}"] = choice(CONTEXT, f"Does {said} keep its records by whether a record of "
-                                                      f"{names[other]} matches them?", has_options(names[other]))
+        for rel in relationships(schema, main_table(requests, sources, rid)):
+            other, by = rel["other"], f" (by {rel['theirs'][2:]})" if "~" in rel["key"] else ""
+            q[f"{rid}_has_{rel['key']}"] = choice(CONTEXT, f"Does {said} keep its records by whether a record of "
+                                                           f"{names[other]} matches them{by}?",
+                                                  has_options(names[other]) | ({"compares": COMPARES.format(
+                                                      names[other])} if rel["children"] else {}))
         if r["statement"] == "select":
             for m, text in MODIFIERS.items():
                 q[f"{rid}_{m}"] = yes_no(CONTEXT, f"In {said}: {text}")
@@ -327,14 +347,16 @@ def build(requests, schema, sources, values, answers) -> dict:
             elif yes(rid, f"{rid}_chooses_{key}", f"chooses by {key}"):
                 cols.append(key)
         has, main = [], main_table(requests, sources, rid)
-        for other in keyed_to(schema, main):                  # a matching record there, or none
-            c, probs = answers.get(f"{rid}_has_{other}", (None, {}))
-            if c in ("has", "has_not"):
-                has.append({"table": other, "has": c == "has", "of": main})
+        for rel in relationships(schema, main):               # a matching record there, none, or how many / much
+            other, key = rel["other"], f"{rid}_has_{rel['key']}"
+            c, probs = answers.get(key, (None, {}))
+            if c in ("has", "has_not", "compares"):
+                has.append({"table": other, "has": c != "has_not", "of": main, "link": [rel["mine"], rel["theirs"]],
+                            "key": rel["key"], **({"compares": True} if c == "compares" else {})})
             if c is not None and probs.get(c, 1) < SURE:
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": f"a matching record in {other} uncertain", "answer": c,
-                                 "probability": round(probs.get(c, 0), 2)} | question(answers, f"{rid}_has_{other}"))
+                                 "probability": round(probs.get(c, 0), 2)} | question(answers, key))
         all_rows = yes(rid, f"{rid}_all", "all rows")
         if all_rows and (cols or has):
             warnings.append({"request": rid, "problem": "every record, yet conditions found", "columns": cols,
@@ -665,7 +687,9 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
             if other:
                 compared[(rid, frozenset((key, other)))] = (built, sure_op)
         for h in stage1.get(rid, {}).get("linked", []):        # a matching record in a linked table, or none
-            key, cond = existence(schema, h["of"], h["table"], h["has"])
+            if h.get("compares"):
+                continue                                       # how many / how much: stage 2c (build_2b)
+            key, cond = existence(schema, h["of"], h["table"], h["has"], h.get("link"))
             if err := refused(db, schema, key.split(".")[0], cond):
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": f"matching record in {h['table']} refused", "error": err})
@@ -694,6 +718,97 @@ NUMBERS = ("percentage", "number", "duration_days")            # an entry's para
 FACTORS = {"w2": (2, "2 (twice, double)"), "w3": (3, "3 (three times, triple)"), "w1.5": (1.5, "1.5 (one and a "
            "half times)"), "w0.5": (0.5, "0.5 (half)"), "w0.33": (1 / 3, "a third"), "w0.25": (0.25, "a quarter")}
 # ponytail: the factors a request writes in words, offered next to its numbers (Jev chooses, code never reads them)
+
+
+AGGREGATE = {"count": "How many of them there are ('more than 3 variants').",
+             "count_distinct": "How many different values of one of their columns ('in more than 2 colors').",
+             "sum": "The total of one of their columns ('whose orders total over 1000', 'stock under 10').",
+             "avg": "The average of one of their columns ('whose variants average over 200').",
+             "min": "The lowest value of one of their columns ('whose cheapest variant is under 100').",
+             "max": "The highest value of one of their columns ('whose latest order is before 2026').",
+             "none": "None of these."}
+OPS = {"<": "lower than", "<=": "at most", ">": "greater than", ">=": "at least", "=": "exactly", "!=": "not exactly"}
+
+
+def questions_2c(requests, schema, section, params) -> dict:
+    """Stage 2c, per linked table whose records the request compares (stage 1's "compares"): the aggregate, the
+    column of theirs it reads, the operator, the number; asked in stage 2b's call."""
+    q, names = {}, {t["definition"]["table_id"]: t["definition"]["sql_name"] for t in schema}
+    for r in requests:
+        rid, said = r["id"], f"request {r['id']} ('{r['text']}')"
+        for h in section.get(rid, {}).get("comparisons", []):
+            k, other = f"{rid}|{h['key']}", names[h["table"]]
+            q[f"{k}|aggregate"] = choice(CONTEXT, f"In {said}, what does it compare of the records of {other} linked to "
+                                                  f"each record?", AGGREGATE)
+            if not h.get("column"):                           # a column stage 1 chose: known
+                q[f"{k}|column"] = choice(CONTEXT, f"In {said}, which column of {other} does that read (for a count "
+                                                   f"of the records themselves, none)?",
+                                          columns_of(schema, [h["table"]]) | {"none": "None: it counts the records."})
+            q[f"{k}|op"] = choice(CONTEXT, f"In {said}, how is that compared with the number?", OPS)
+            nums = {f"n{i}": p["text"] for i, p in enumerate(params.get(rid, [])) if p["value"] is not None}
+            q[f"{k}|number"] = choice(CONTEXT, f"In {said}, which number is it compared with?",
+                                      nums | {k2: d for k2, (_, d) in FACTORS.items()} | {"none": "None."})
+    return q
+
+
+def comparisons(schema, main, g: dict) -> list[dict]:
+    """The comparisons over linked records of one request: stage 1's "compares" ({"key", "table", "of", "link"}),
+    and a computed condition stage 1 found on a column of a table whose records point to the main one ("whose
+    variants average over 200": the price, of the variants), its column then known ({"column"})."""
+    out = [h for h in g.get("linked", []) if h.get("compares")]
+    for c in g.get("computed", []):
+        table = c["column"].split(".")[0]
+        rel = next((x for x in relationships(schema, main) if x["children"] and x["other"] == table), None) \
+            if main and table != main else None
+        if rel and not any(h["table"] == table for h in out):
+            out.append({"key": c["column"], "table": table, "of": main, "link": [rel["mine"], rel["theirs"]],
+                        "column": c["column"], "from_computed": True})
+    return out
+
+
+def build_2c(db, requests, schema, section, params, answers) -> None:
+    """Each comparison over linked records built by the catalog's linked aggregate; below SURE a question; a part
+    missing or unfit (a total of a text column): the request is refused, never run without the condition."""
+    from orbitrows.pipeline.operations.builders import BUILDERS
+    out, warnings = section["requests"], section["warnings"]
+    for r in requests:
+        rid = r["id"]
+        for h in out.get(rid, {}).pop("comparisons", []):
+            k, said = f"{rid}|{h['key']}", f"the comparison over the records of {h['table']}"
+
+            def pick(name):
+                v, probs = answers.get(f"{k}|{name}", (None, {}))
+                if v is not None and probs.get(v, 1) < SURE:
+                    out[rid]["flagged"] = True
+                    warnings.append({"request": rid, "problem": f"{name} of {said} uncertain", "answer": v,
+                                     "probability": round(probs.get(v, 0), 2)} | question(answers, f"{k}|{name}"))
+                return None if v == "none" else v
+            if "error" in answers:                            # the model's call failed: said as such
+                out[rid]["refused"] = f"{said}: the comparison could not be read (model error), nothing is guessed"
+                warnings.append({"request": rid, "problem": out[rid]["refused"], "error": answers["error"]})
+                continue
+            f, column, op, n = pick("aggregate"), h.get("column") or pick("column"), pick("op"), pick("number")
+            typ = column and column_info(schema, column)["sql_type"]
+            number = FACTORS[n][0] if n in FACTORS else params[rid][int(n[1:])]["value"] \
+                if n and n[1:].isdigit() and int(n[1:]) < len(params.get(rid, [])) else None
+            why = ("no aggregate fits" if f is None else
+                   f"its {f} needs a column of {h['table']}" if f != "count" and not column else
+                   f"a {f} of the text column {column}" if f in ("sum", "avg") and typ not in ("INTEGER", "REAL") else
+                   "no number to compare with" if number is None else "no comparison" if op is None else None)
+            if why:
+                out[rid]["refused"] = f"{said}: {why}"
+                warnings.append({"request": rid, "problem": f"not supported: {out[rid]['refused']}"})
+                continue
+            p = {"column": _col(f"{h['of']}.{h['link'][0]}"), "function": f, "operator": op, "number": number,
+                 "linked": {"table": h["table"], "key": h["link"][1], **({"value": column.split(".")[1]}
+                                                                       if column and f != "count" else {})}}
+            cond = BUILDERS["linked_aggregate"](p, {})
+            if err := refused(db, schema, h["of"], cond):
+                out[rid]["flagged"] = True
+                warnings.append({"request": rid, "problem": f"{said} refused", "error": err})
+            out[rid].setdefault("predicates", []).append({"column": f"{h['of']}.{h['link'][0]}", "operator": op,
+                                                          "negated": False, "condition": cond, "linked": h["table"],
+                                                          "operation": "COMPARE_LINKED_AGGREGATE"})
 
 
 def questions_2b(requests, schema, section, params) -> dict:
@@ -832,12 +947,20 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
             a2 = {"error": repr(e)}
         build_2(db, requests, schema, section["requests"], values, params, parts, a2, section)
         a2b = {}
-        if q := questions_2b(requests, schema, section["requests"], params):   # stage 2b: computed conditions
+        for r in requests:                                    # stage 2c's comparisons over linked records; a
+            g = section["requests"].get(r["id"]) or {}        # computed one among them is not stage 2b's
+            if found := comparisons(schema, main_table(requests, sources, r["id"]), g):
+                g["comparisons"] = found
+                routed = {h["column"] for h in found if h.get("from_computed")}
+                g["computed"] = [c for c in g.get("computed", []) if c["column"] not in routed]
+        if q := questions_2b(requests, schema, section["requests"], params) | \
+                questions_2c(requests, schema, section["requests"], params):   # stages 2b, 2c: one call
             try:
                 a2b = await ask(jev, st, q)
             except Exception as e:
                 a2b = {"error": repr(e)}
         build_2b(db, requests, schema, section, params, a2b)
+        build_2c(db, requests, schema, section, params, a2b)
         section["parameters"] = params
         section["jev"] = {"stage_1": answers, "stage_2": a2, "stage_2b": a2b}
         return section

@@ -72,22 +72,24 @@ def table_aggregate(p, config):
                    one_value(table, alias, {"type": "aggregate", "function": config["function"], "argument": inner}))
 
 
-def count_linked(p, config):
-    """products with more than 3 variants: (SELECT COUNT(*) FROM linked WHERE linked.key = column) OP number."""
-    alias = f"{p['linked']['table']}_n"
-    where = compare("=", {"type": "column", "source": alias, "reference": p["linked"]["key"]}, p["column"])
-    count = one_value(p["linked"]["table"], alias, {"type": "aggregate", "function": "count"}, where)
-    return compare(p["operator"], count, lit(p["number"]))
+AGGREGATES = ("count", "count_distinct", "sum", "avg", "min", "max")
 
 
-def sum_linked(p, config):
-    """customers whose orders total over 1000: (SELECT SUM(linked.value) FROM linked WHERE linked.key = column) OP
-    number. No linked record: no total (NULL), the record is not kept."""
-    alias = f"{p['linked']['table']}_s"
+def linked_aggregate(p, config):
+    """products with more than 3 variants, customers whose orders total over 1000, products whose cheapest variant is
+    under 100: (SELECT AGG(linked.value) FROM linked WHERE linked.key = column) OP number, AGG one of AGGREGATES
+    (p["function"]; count needs no value column). Over no linked record: a count is 0, a total 0 (COALESCE: "stock
+    under 10" keeps the variant with no stock line), an average, lowest or highest has no value: not kept."""
+    f, alias = p["function"], f"{p['linked']['table']}_agg"
     where = compare("=", {"type": "column", "source": alias, "reference": p["linked"]["key"]}, p["column"])
-    value = {"type": "column", "source": alias, "reference": p["linked"]["value"]}
-    total = one_value(p["linked"]["table"], alias, {"type": "aggregate", "function": "sum", "argument": value}, where)
-    return compare(p["operator"], total, lit(p["number"]))
+    value = {"type": "column", "source": alias, "reference": p["linked"].get("value")} if f != "count" else None
+    agg = {"type": "aggregate", "function": "count" if f == "count_distinct" else f, "distinct": f == "count_distinct"}
+    if value:
+        agg["argument"] = value
+    total = one_value(p["linked"]["table"], alias, agg, where)
+    if f == "sum":
+        total = func("coalesce", total, lit(0))
+    return compare(p["operator"], total, given(p["number"]))
 
 
 def within_days(p, config):
@@ -214,6 +216,6 @@ def aggregate(p, config):
 
 
 BUILDERS = {f.__name__: f for f in (
-    percent_of_column, multiple_of_column, relative_difference, difference, table_aggregate, count_linked, sum_linked,
+    percent_of_column, multiple_of_column, relative_difference, difference, table_aggregate, linked_aggregate,
     within_days, percent_change, add_amount, multiply, divide, share_of_column, from_column, round_digits, round_to_step, clamp,
     set_value, fill_empty, capitalize, affix, replace_text, text_function, shift_date, clear, aggregate)}
