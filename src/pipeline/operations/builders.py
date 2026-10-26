@@ -93,11 +93,20 @@ def linked_aggregate(p, config):
     AGGREGATES (p["function"]; count needs no value column); p["where"]: a condition on the linked records, inside
     ("more than 2 black variants": only the black ones are counted). Over no linked record: a count is 0, a total 0
     (COALESCE: "stock under 10" keeps the variant with no stock line), an average, lowest or highest has no value: not
-    kept. "all" (every linked record meets p["where"]): at least one linked record, and none that breaks it, a record
+    kept. p["linked"]["through"] ({"table", "key": its column pointing to `column`'s row, "id": its column the
+    linked table points to}): the linked records are two links away, through that middle table. "all" (every linked
+    record meets p["where"]): at least one linked record, and none that breaks it, a record
     whose value is empty breaking it too (never silently left out: NOT (NULL = x) is not true)."""
     f, table = p["function"], p["linked"]["table"]
     alias = f"{table}_agg"
     key = compare("=", {"type": "column", "source": alias, "reference": p["linked"]["key"]}, p["column"])
+    if via := p["linked"].get("through"):                     # two links away (products → variants → inventory):
+        m = f"{via['table']}_via"                             # its key among the middle records of this one
+        key = {"type": "membership", "operator": "in", "expression": key["left"], "query": {
+            "id": m, "type": "select", "from": {"type": "database_table", "reference": via["table"], "alias": m},
+            "columns": [{"expression": {"type": "column", "source": m, "reference": via["id"]}, "alias": "k"}],
+            "scope": {"type": "filtered", "where": compare("=", {"type": "column", "source": m,
+                                                                "reference": via["key"]}, p["column"])}}}
     where = inside(p["where"], table, alias) if p.get("where") else None
 
     def count(extra=None):

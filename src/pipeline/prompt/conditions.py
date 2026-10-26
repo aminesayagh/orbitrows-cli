@@ -79,6 +79,10 @@ CHOOSE_RULES = [
     "another words choose by it), only shows, only sorts by ('the cheapest'), or only groups by ('per brand').",
     "A column of another table counts when the condition is on it: 'the variants of the Kora products' (the brand "
     "or name holding Kora).",
+    "Answer no when the request counts, totals or checks the existence of records in another table rather than "
+    "reading this column: 'never sold', 'without any order', 'more than 3 variants', 'whose total stock is under 20' "
+    "are about having, or how many or how much of, the linked records, not about a date or a quantity column being "
+    "empty or compared on each record.",
 ]
 MODIFIERS = {
     "sorted": "Are the records put in an order ('the cheapest', 'newest first', 'by price', 'the top 3')?",
@@ -185,6 +189,25 @@ def relationships(schema, table) -> list[dict]:
     return out
 
 
+def paths(schema, table, reads) -> list[dict]:
+    """The links two steps away to a table the request reads (step 4), through a middle table whose records point to
+    `table` and whose own linked records point to them (products ← variants ← inventory): found from the keys, each
+    its own question (two paths to one table are two choices, never the first taken). [{"key": "final^middle",
+    "other": the final table, "mine": `table`'s column, "theirs": the final table's column pointing to the middle,
+    "children": True, "via": {"table": the middle, "key": its column pointing to `table`, "id": its column the
+    final table points to}}]."""
+    out = []
+    for first in relationships(schema, table):
+        if not first["children"]:
+            continue
+        for second in relationships(schema, first["other"]):
+            if second["children"] and second["other"] not in (table, first["other"]) and second["other"] in reads:
+                out.append({"key": f"{second['other']}^{first['other']}", "other": second["other"],
+                            "mine": first["mine"], "theirs": second["theirs"], "children": True,
+                            "via": {"table": first["other"], "key": first["theirs"], "id": second["mine"]}})
+    return out
+
+
 def keyed_to(schema, table) -> dict:
     """{other table: (this table's column, its column)}: the first link to each table (relationships())."""
     out = {}
@@ -238,6 +261,18 @@ def through(schema, cond, table) -> dict:
                      "expression": {"type": "column", "source": aliases[i - 1] if i else table, "reference": c_from}}
         cond = inner
     return cond
+
+
+def existence_via(table, mine, via, other, theirs, has: bool) -> tuple[str, dict]:
+    """Two links away ("products never sold": products ← variants ← sales): mine [NOT] IN (SELECT the middle's key to
+    this table FROM middle WHERE its id IN (SELECT the final table's key WHERE it IS NOT NULL))."""
+    a, m = f"{other}_has", f"{via['table']}_has"
+    known = {"type": "column", "source": a, "reference": theirs}
+    final = _sub(other, a, theirs, {"type": "null_check", "expression": known, "operator": "is_not_null"})
+    middle = _sub(via["table"], m, via["key"], {"type": "membership", "operator": "in", "expression": {
+        "type": "column", "source": m, "reference": via["id"]}, "query": final})
+    return f"{table}.{mine}", {"type": "membership", "operator": "in" if has else "not_in",
+                               "expression": _col(f"{table}.{mine}"), "query": middle}
 
 
 def existence(schema, table, other, has: bool, link=None) -> tuple[str, dict]:
@@ -303,8 +338,11 @@ def questions(requests, schema, sources) -> dict:
             q[f"{rid}_chooses_{key}"] = yes_no(CONTEXT, f"Does {said} keep or exclude records by what this column "
                                                         f"holds, or by its being empty: {text}", CHOOSE_RULES)
         names = {t["definition"]["table_id"]: t["definition"]["sql_name"] for t in schema}
-        for rel in relationships(schema, main_table(requests, sources, rid)):
+        main = main_table(requests, sources, rid)
+        for rel in relationships(schema, main) + paths(schema, main, tables_of(requests, sources, rid)):
             other, by = rel["other"], f" (by {rel['theirs'][2:]})" if "~" in rel["key"] else ""
+            if rel.get("via"):
+                by = f" through their {names[rel['via']['table']]}"
             q[f"{rid}_has_{rel['key']}"] = choice(CONTEXT, f"Does {said} keep its records by whether a record of "
                                                            f"{names[other]} matches them{by}?",
                                                   has_options(names[other]) | ({"compares": COMPARES.format(
@@ -347,12 +385,14 @@ def build(requests, schema, sources, values, answers) -> dict:
             elif yes(rid, f"{rid}_chooses_{key}", f"chooses by {key}"):
                 cols.append(key)
         has, main = [], main_table(requests, sources, rid)
-        for rel in relationships(schema, main):               # a matching record there, none, or how many / much
-            other, key = rel["other"], f"{rid}_has_{rel['key']}"
+        for rel in relationships(schema, main) + paths(schema, main, tables_of(requests, sources, rid)):
+            other, key = rel["other"], f"{rid}_has_{rel['key']}"   # a matching record there, none, how many / much
             c, probs = answers.get(key, (None, {}))
             if c in ("has", "has_not", "compares"):
                 has.append({"table": other, "has": c != "has_not", "of": main, "link": [rel["mine"], rel["theirs"]],
-                            "key": rel["key"], **({"compares": True} if c == "compares" else {})})
+                            "key": rel["key"], "sure": round(probs.get(c, 0), 2),
+                            **({"compares": True} if c == "compares" else {}),
+                            **({"via": rel["via"]} if rel.get("via") else {})})
             if c is not None and probs.get(c, 1) < SURE:
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": f"a matching record in {other} uncertain", "answer": c,
@@ -689,7 +729,8 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
         for h in stage1.get(rid, {}).get("linked", []):        # a matching record in a linked table, or none
             if h.get("compares"):
                 continue                                       # how many / how much: stage 2c (build_2b)
-            key, cond = existence(schema, h["of"], h["table"], h["has"], h.get("link"))
+            key, cond = existence_via(h["of"], h["link"][0], h["via"], h["table"], h["link"][1], h["has"]) \
+                if h.get("via") else existence(schema, h["of"], h["table"], h["has"], h.get("link"))
             if err := refused(db, schema, key.split(".")[0], cond):
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": f"matching record in {h['table']} refused", "error": err})
@@ -791,7 +832,17 @@ def build_2c(db, requests, schema, section, params, answers) -> None:
     out, warnings = section["requests"], section["warnings"]
     for r in requests:
         rid = r["id"]
-        for h in out.get(rid, {}).pop("comparisons", []):
+        found = out.get(rid, {}).pop("comparisons", [])
+        said_as = {h["key"]: (answers.get(f"{rid}|{h['key']}|op", (None,))[0],
+                              answers.get(f"{rid}|{h['key']}|number", (None,))[0]) for h in found}
+        for h in list(found):                                 # one comparison read on two links ("suppliers whose
+            twin = next((x for x in found if x is not h and said_as[x["key"]] == said_as[h["key"]]   # products have
+                         and None not in said_as[h["key"]]), None)                          # more than 4 variants")
+            if twin and (twin.get("sure", 0), -found.index(twin)) > (h.get("sure", 0), -found.index(h)):
+                found.remove(h)
+                out[rid].setdefault("dropped", []).append({"column": h["table"], "why": f"the same comparison, read "
+                                                                                        f"over {twin['table']}"})
+        for h in found:
             k, said = f"{rid}|{h['key']}", f"the comparison over the records of {h['table']}"
 
             def pick(name):
@@ -814,6 +865,10 @@ def build_2c(db, requests, schema, section, params, answers) -> None:
                    f"a {f} of the text column {column}" if f in ("sum", "avg") and typ not in ("INTEGER", "REAL") else
                    "no number to compare with" if number is None and f != "all" else
                    "no comparison" if op is None and f != "all" else None)
+            for c in on_table(out[rid], h["table"]):          # the comparison itself, read again from a column
+                right = (c["condition"].get("right") or {}).get("value")   # ("total stock under 20": quantity < 20,
+                if f != "all" and c["operator"] == op and right == number:   # reserved < 20): kept once; for
+                    out[rid]["predicates"].remove(c)                          # "all" it is the condition itself
             within = [c for c in on_table(out[rid], h["table"]) if pick(f"inside|{c['column']}") == "inside"]
             if f == "all" and not within:
                 why = "'all' with no condition on the records it reads"
@@ -823,14 +878,11 @@ def build_2c(db, requests, schema, section, params, answers) -> None:
                 continue
             for c in within:                                  # read inside the aggregate, not a condition of its own
                 out[rid]["predicates"].remove(c)
-            for c in on_table(out[rid], h["table"]):          # the comparison itself, read from its column too ("total
-                right = (c["condition"].get("right") or {}).get("value")   # stock under 10": quantity < 10): kept once
-                if c["column"] == column and c["operator"] == op and right == number:
-                    out[rid]["predicates"].remove(c)
             p = {"column": _col(f"{h['of']}.{h['link'][0]}"), "function": f, "operator": op or "=", "number":
                  number if number is not None else 0,
                  "linked": {"table": h["table"], "key": h["link"][1], **({"value": column.split(".")[1]}
-                                                                       if column and f not in ("count", "all") else {})},
+                                                                       if column and f not in ("count", "all") else {}),
+                            **({"through": h["via"]} if h.get("via") else {})},
                  **({"where": within[0]["condition"] if len(within) == 1 else
                      {"type": "all", "children": [c["condition"] for c in within]}} if within else {})}
             cond = BUILDERS["linked_aggregate"](p, {})

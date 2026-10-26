@@ -244,3 +244,16 @@ def test_a_filter_on_the_linked_records_counts_only_those():
 def test_all_linked_records_meet_the_filter_and_an_empty_value_breaks_it():
     """All black: the mouse and the cap; the cable's variants have no color: not black, never left out."""
     assert linked("all", BLACK) == [4, 7]
+
+
+def test_a_linked_aggregate_two_links_away_goes_through_the_middle_table():
+    """Products whose total stock is under 20: inventory → variants → products; a product with no stock counts 0."""
+    db = baseline()
+    p = {"column": col("products", "product_id"), "function": "sum", "operator": "<", "number": 20,
+         "linked": {"table": "t_inventory", "key": "c_variant_id", "value": "c_quantity",
+                    "through": {"table": "t_variants", "key": "c_product_id", "id": "c_variant_id"}}}
+    q = program([{"id": "q", "type": "select", "from": {"type": "database_table", "reference": "t_products",
+                                                        "alias": "t_products"},
+                  "columns": [{"expression": col("products", "product_id"), "alias": "id"}],
+                  "scope": {"type": "filtered", "where": BUILDERS["linked_aggregate"](p, {})}}], store_of(db))[0]
+    assert sorted(r[0] for r in db.execute(q)) == [2, 4, 5, 6, 7, 9, 10, 11, 12]

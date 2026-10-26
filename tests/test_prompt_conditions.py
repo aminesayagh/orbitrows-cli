@@ -179,3 +179,22 @@ def test_a_comparison_over_linked_records_that_cannot_be_built_leaves_the_reques
     """A total of a text column: refused, never the request without its condition."""
     out = linked_count(store, "sum", "t_offer.c_sku", 0)
     assert out["program"] == [] and any("not built" in q["problem"] for q in out["questions"]), out
+
+
+def test_a_table_two_links_away_is_reached_through_its_middle_table_only_when_read():
+    """products ← variants ← sales: a path when the request reads sales (step 4), none otherwise; "never sold" is the
+    products none of whose variants has a sale."""
+    from fixtures.orbitrow.load import baseline
+    from orbitrows.pipeline.prompt.pipeline import store_of
+    from orbitrows.sql.sql import program
+    db = baseline()
+    schema = store_of(db)
+    found = {p["key"]: p for p in conditions.paths(schema, "t_products", ["t_products", "t_sales"])}
+    assert set(found) == {"t_sales^t_variants"} and not conditions.paths(schema, "t_products", ["t_products"])
+    p = found["t_sales^t_variants"]
+    key, cond = conditions.existence_via("t_products", p["mine"], p["via"], p["other"], p["theirs"], has=False)
+    q = program([{"id": "q", "type": "select", "from": {"type": "database_table", "reference": "t_products",
+                                                        "alias": "t_products"},
+                  "columns": [{"expression": {"type": "column", "source": "t_products", "reference": "c_product_id"},
+                               "alias": "id"}], "scope": {"type": "filtered", "where": cond}}], schema)[0]
+    assert sorted(r[0] for r in db.execute(q)) == [6, 7, 12]
