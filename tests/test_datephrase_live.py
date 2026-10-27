@@ -39,6 +39,11 @@ def show(r):
     ("the year 2027", {"kind": "period", "anchor": "absolute"}, "not_temporal"),   # Duckling reads only "the year"
     ("tomorrow", {"kind": "date", "anchor": "absolute"}, "not_temporal ANCHOR_MISMATCH"),
     ("cotton", {}, "not_temporal"),
+    # a month or a day without its year, labelled past: the latest before the reference (this year's when passed)
+    ("August", {"kind": "period", "anchor": "relative", "direction": "past"}, "2026-08-01..2026-09-01"),
+    ("September 15", {"kind": "date", "anchor": "relative", "direction": "past"}, "2026-09-15"),
+    ("October 30", {"kind": "date", "anchor": "relative", "direction": "past"}, "2025-10-30"),
+    ("next month", {"kind": "period", "anchor": "relative", "direction": "past"}, "not_temporal DIRECTION_MISMATCH"),
 ])
 def test_live(text, labels, expected):
     assert show(read_temporal(text, context=NOW, **labels)) == expected

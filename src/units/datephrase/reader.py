@@ -133,6 +133,13 @@ def read_temporal(
             defaults.append("week_start:monday")
         if ctx.week_start == "sunday":  # Duckling's weeks start on Monday
             value = PeriodValue(value.start - timedelta(days=1), value.end - timedelta(days=1), "week")
+    if not _fits(value, direction, ref_date) and direction == "past" and _only_year_free(phrase, locale, dims, kind):
+        # a month or a day without its year ("August", "September 15"): Duckling reads the next one; the past one is
+        # the one Duckling reads from a year before (the owner's convention: a day that has passed is this year's)
+        again = _whole(_duckling(phrase, locale, dims, ref - relativedelta(years=1)), phrase)
+        if again and (earlier := _shape(again, kind)) and _fits(earlier, direction, ref_date):
+            value = earlier
+            defaults.append("year:latest_past")
     if not _fits(value, direction, ref_date):
         return done("not_temporal", reason="DIRECTION_MISMATCH")
     if anchor == "absolute" and not isinstance(value, DurationValue) and _counted_from_today(phrase, locale, dims, kind):
@@ -225,6 +232,20 @@ def _counted_from_today(phrase: str, locale: str, dims: list[str], kind: str | N
         probes.append(value.date if isinstance(value, DateValue) else value.start)
     a, b = probes
     return a.year != b.year and a.month != b.month and a.day != b.day
+
+
+def _only_year_free(phrase: str, locale: str, dims: list[str], kind: str | None) -> bool:
+    """Read against the two probe dates: only the year moves ("August", "September 15"), so the phrase names its
+    month and day and leaves the year out. "next month" moves its month too: never moved to another year."""
+    probes = []
+    for ref in PROBES:
+        entity = _whole(_duckling(phrase, locale, dims, ref), phrase)
+        value = entity and _shape(entity, kind)
+        if value is None or isinstance(value, DurationValue):
+            return False
+        probes.append(value.date if isinstance(value, DateValue) else value.start)
+    a, b = probes
+    return a.year != b.year and (a.month, a.day) == (b.month, b.day)
 
 
 def _say(value) -> str:
