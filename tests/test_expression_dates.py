@@ -1,6 +1,9 @@
 import pytest
 
 from orbitrows.pipeline.expressions.steps import iso
+from test_units_dates import NEEDS_DUCKLING
+
+pytestmark = NEEDS_DUCKLING                  # datephrase reads with the Duckling service
 
 
 @pytest.mark.parametrize("text, expected", [

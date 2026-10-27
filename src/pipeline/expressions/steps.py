@@ -359,11 +359,15 @@ TEXT_USE = {"target": "It is the column the request changes.",
 
 
 def iso(date_text: str) -> str | None:
-    """A written date as YYYY-MM-DD, or None: dateparser through ../date_to_number. None also when the reader would
-    ask the user (01/02/2026: January 2 or February 1?): its questions are not forwarded yet. Missing parts and
-    relative dates are filled from the current date (no session date yet, notice.md #17); a time of day is dropped."""
-    from datephrase import read_temporal
-    r = read_temporal(date_text)
+    """A written date as YYYY-MM-DD, or None: datephrase (Duckling) through ../date_to_number. None also when the
+    reader would ask the user (01/02/2026: January 2 or February 1?): its questions are not forwarded yet; or when its
+    service is down. Missing parts and relative dates are filled from the current date (no session date yet,
+    notice.md #17); a time of day is dropped."""
+    from datephrase import EngineUnavailable, read_temporal
+    try:
+        r = read_temporal(date_text)
+    except EngineUnavailable:                               # the service is down: not read (the formula asks)
+        return None
     return r.date.isoformat() if r.date else None
 
 

@@ -1069,10 +1069,14 @@ def build_2b(db, requests, schema, section, params, answers) -> None:
 
 def dated(r, found, answers, section) -> list[dict]:
     """The request's dates read (units/dates), each {"text", "start", "end", "value"}; an unsure classification is a
-    question, and that date is not offered."""
+    question, and that date is not offered; a date the reader refuses refuses the request (never run without it)."""
     out = []
     for i, d in enumerate(found):
         v = dates.read(d["text"], answers, f"{r['id']}|t{i}")
+        if v is None and answers.get(f"{r['id']}|t{i}|kind", (None,))[0] not in (None, "none") and \
+                r["id"] in section["requests"]:
+            section["requests"][r["id"]]["refused"] = f"'{d['text']}' can't be read as a date (the date reader " \
+                                                      f"refuses it)"
         if v and "ask" in v:
             a = v["ask"]
             section["requests"].setdefault(r["id"], {})["flagged"] = True
@@ -1084,20 +1088,35 @@ def dated(r, found, answers, section) -> list[dict]:
     return out
 
 
+def read_dates(requests, found, answers, section) -> list[dict]:
+    """Each request with its dates read ("dates"); with the date reader's service down, a request that writes a date
+    is refused (never run without its date condition), the others go on."""
+    try:
+        return [r | {"dates": dated(r, found.get(r["id"], []), answers, section)} for r in requests]
+    except dates.EngineUnavailable:
+        for rid, spans in found.items():
+            if spans and rid in section["requests"]:
+                section["requests"][rid]["refused"] = f"its dates can't be read: {dates.DOWN}"
+        return [r | {"dates": []} for r in requests]
+
+
 async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], parts: dict, db=None, model=None) -> dict:
     """sources: step 4's section["requests"]; values: step 3's section["values"]; parts: step 5's
     section["requests"]."""
     """db, model: the store and GLiNER2, for stage 2 (without them, stage 1 only)."""
     st, a2 = state(prompt, requests, schema, sources, values, parts), {}
     found = {r["id"]: dates.spans(r["text"], model) for r in requests if r["statement"] in ROWS} if model else {}
-    timed = {k: q for r in requests for i, d in enumerate(found.get(r["id"], []))   # their classification: in this
-             for k, q in dates.questions(f"{r['id']}|t{i}", f"request {r['id']} ('{r['text']}')", d["text"]).items()}
+    try:                                                      # their classification: in this call
+        timed = {k: q for r in requests for i, d in enumerate(found.get(r["id"], [])) for k, q in dates.questions(
+            f"{r['id']}|t{i}", f"request {r['id']} ('{r['text']}')", d["text"]).items()}
+    except dates.EngineUnavailable:                           # read_dates refuses those requests
+        timed = {}
     try:
         answers = await ask(jev, st, questions(requests, schema, sources) | timed)
     except Exception as e:                                    # API error: nothing is guessed
         answers = {"error": repr(e)}
     section = build(requests, schema, sources, values, answers)
-    requests = [r | {"dates": dated(r, found.get(r["id"], []), answers, section)} for r in requests]
+    requests = read_dates(requests, found, answers, section)
     for r in requests:                                        # kept for the formula ("set the date to …", "2 weeks
         if r["dates"] and r["id"] in section["requests"]:    # later"): read once
             section["requests"][r["id"]]["dates"] = r["dates"]
