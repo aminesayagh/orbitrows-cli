@@ -97,9 +97,10 @@ def read(phrase: str, answers: dict, key: str) -> dict | None:
     if kind == "duration":                                    # the longest start of the phrase read as one ("one month
         end = len(phrase)                                     # earlier": GLiNER2 may keep a word); never past a refusal
         r = read_temporal(words_read(phrase), context=ctx, kind="duration")   # with its reason ("two months and five
-        if r.status != "resolved" and not r.reason:          # days": MIXED_UNITS), never dropping a number
-            for end in reversed([m.end() for m in re.finditer(r"\S+", phrase)][:-1]):
-                if find(phrase[end:]):
+        if r.status != "resolved" and not r.reason:          # days": MIXED_UNITS), never dropping a number or a
+            for end in reversed([m.end() for m in re.finditer(r"\S+", phrase)][:-1]):   # length ("plus a week")
+                tail = phrase[end:]
+                if find(tail) or read_temporal(words_read(tail), context=ctx, kind="duration").status == "resolved":
                     break
                 if (r := read_temporal(words_read(phrase[:end]), context=ctx, kind="duration")).status == "resolved":
                     break
