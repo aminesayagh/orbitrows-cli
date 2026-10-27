@@ -16,6 +16,8 @@ def test_dates_read_with_their_classification(monkeypatch):
         "kind": "period", "start": "2026-09-01", "end": "2026-10-01"}
     v = dates.read("twenty-one days earlier", sure(kind="duration", direction="past"), "k")   # number words; the
     assert (v["quantity"], v["unit"], v["date"], v["length"]) == (21, "days", "2026-10-06", 15)   # longest start read
+    for compound in ("two months and five days", "1.5 months"):   # refused by the reader: never read in part
+        assert dates.read(compound, sure(kind="duration", direction="future"), "k") is None
     weak = sure(kind="period", anchor="relative") | {"k|direction": ("past", {"past": 0.55, "future": 0.45})}
     assert dates.read("August", weak, "k")["ask"]["key"] == "k|direction"
     order = sure(kind="date", anchor="absolute") | {"k|order": ("DMY", {"DMY": 0.9, "MDY": 0.1})}
