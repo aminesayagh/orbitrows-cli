@@ -48,8 +48,8 @@ def missing() -> str | None:
               if not (ROOT / path).is_file()]
     if not absent:
         return None
-    return ("CorPipe, the reference finder, isn't set up: missing " + " and ".join(absent) + ". Set it up (README, "
-            f"\"CorPipe setup\"): create {ROOT / PYTHON.parents[1]} (python -m venv), clone "
+    return ("CorPipe, the reference finder, isn't set up: missing " + " and ".join(absent) + ". Run `orbitrows "
+            f"setup`, or set it up by hand (README, \"CorPipe setup\"): create {ROOT / PYTHON.parents[1]} (python -m venv), clone "
             f"https://github.com/ufal/crac2026-corpipe into {(ROOT / CORPIPE).parent}, and install its requirements.txt there.")
 
 

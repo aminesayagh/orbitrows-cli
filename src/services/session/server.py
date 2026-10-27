@@ -32,7 +32,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from orbitrows.pipeline.store.profile import refresh
-from orbitrows.services import duckling, questions
+from orbitrows.services import duckling, questions, ready
 from orbitrows.services.storage import registry
 
 IDLE = 1800                                                   # seconds without a request before it saves and ends
@@ -64,6 +64,7 @@ def prompt(db, text: str, calls: dict) -> dict:
 
     if why := coref.missing():                                # the environment may have changed since the CLI checked
         return {"errors": [{"request": "message", "stage": "setup", "error": why}]}
+    ready.wait()                                              # the session's preload: never a model loaded twice
 
     async def run():
         async with Recorded(connect(), calls) as model:      # the model's client opens on its first call not recorded
@@ -428,8 +429,10 @@ def main(argv: list[str] | None = None) -> int:
     for s in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(s, lambda number, frame: stop.append(signal.Signals(number).name))
     session = Session(args.store_id, handler())               # a bad ORBITROWS_HANDLER fails before the journal moves
-    if session.handle is prompt and (why := duckling.start()):    # the date reader's service (a test's handler
-        log(f"dates can't be read this session: {why}")          # reads no dates)
+    if session.handle is prompt:                              # the real pipeline (a test's handler loads nothing)
+        if why := duckling.start():                           # the date reader's service
+            log(f"dates can't be read this session: {why}")
+        ready.preload()                                       # its models, while the first message is written
     idle = float(os.environ.get("ORBITROWS_IDLE") or IDLE)
     log(f"started, pid {os.getpid()}, owner {args.owner}, idle {idle} s")
     last, reason = time.monotonic(), None

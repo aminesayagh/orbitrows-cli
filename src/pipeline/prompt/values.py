@@ -148,6 +148,15 @@ def search(db, schema: list[dict], text: str, table: str | None = None,
 _ENCODER, _VECTORS = None, {}
 
 
+def encoder():
+    """The meaning model, loaded once per process (the linker's too: one copy)."""
+    global _ENCODER
+    if _ENCODER is None:
+        from sentence_transformers import SentenceTransformer
+        _ENCODER = SentenceTransformer(SEMANTIC_MODEL)
+    return _ENCODER
+
+
 def meaning(db, schema: list[dict], text: str, near: str | None = None) -> list[dict]:
     """Last tier, when no spelling matches: stored values close in meaning, in any language ("rouges" → red,
     "vêtements" → Clothing), by multilingual embeddings over the columns with few distinct values; the phrase and
@@ -156,10 +165,7 @@ def meaning(db, schema: list[dict], text: str, near: str | None = None) -> list[
     column "t_x.c_y" or a table "t_x"), searched first; codes are never compared (a digit or under 3 letters: "L",
     "MUG-RED"): they have no meaning to translate and sit close to everything.
     The values are the profile's (a column with few of them: colours, statuses); each is embedded once per process."""
-    global _ENCODER
-    if _ENCODER is None:
-        from sentence_transformers import SentenceTransformer
-        _ENCODER = SentenceTransformer(SEMANTIC_MODEL)
+    encoder()
     keys = [(f"{tid}.{cid}", str(v)) for tid, tname, cid, cname in text_columns(schema)
             for v in listed(db, tname, cname) if not code(str(v))]
     if new := sorted({v for _, v in keys} - set(_VECTORS)):

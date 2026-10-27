@@ -24,7 +24,7 @@ import numpy as np
 from rapidfuzz import fuzz
 
 from orbitrows.pipeline.store.profile import listed
-from .values import SEMANTIC_MODEL, TYPO, code, text_columns
+from .values import TYPO, code, encoder, text_columns
 
 MAX_WORDS = 3
 CSLS_MIN = 0.45                    # calibrated on words outside the benchmark: translations ≥ 0.49, ordinary ≤ 0.33
@@ -47,9 +47,8 @@ def _store(db, schema):
         if vals := [str(v) for v in listed(db, tname, cname)]:
             cols[f"{tid}.{cid}"] = vals
     short = {k for k, vs in cols.items() if vs and all(len(v.split()) <= 4 and "@" not in v for v in vs)}
-    if "enc" not in _CACHE:
-        from sentence_transformers import SentenceTransformer
-        _CACHE.update(enc=SentenceTransformer(SEMANTIC_MODEL), vectors={})
+    if "enc" not in _CACHE:                                   # values' meaning model: one copy per process
+        _CACHE.update(enc=encoder(), vectors={})
     pool = [(k, v) for k in sorted(short) for v in cols[k] if not code(v)]
     vocab = sorted({w for vs in cols.values() for v in vs for w in WORD.findall(v) if len(w) >= 3} |
                    {c["sql_name"] for t in schema for c in t["definition"]["columns"]} |

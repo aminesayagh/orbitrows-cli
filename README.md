@@ -13,15 +13,26 @@ The design comes from the approved PoC (`../poc`).
 ```bash
 uv sync
 cp .env.example .env   # then fill in TYPESAFE_API_KEY
+uv run --env-file .env orbitrows setup   # once: everything a message needs (a few GB and minutes the first time)
 uv run --env-file .env orbitrows --help
 ```
+
+`orbitrows setup` prepares, and checks, each part a message needs, skipping what is already there:
+
+- **Duckling**, the service dates are read with: started in Docker (container `orbitrows-duckling`, image
+  `rasa/duckling`), unless one already answers at `DATEPHRASE_DUCKLING_URL` (default `127.0.0.1:8000`). Docker must be
+  installed. Each session starts it again when it isn't running. Without it, requests that mention a date are refused;
+  the others run.
+- **CorPipe's environment** (below).
+- **The models**: GLiNER2, the meaning model (paraphrase-multilingual-MiniLM), the operations search model
+  (bge-small-en), spaCy's English model, and CorPipe's. Each session then loads them in the background as soon as it
+  starts, so its first message doesn't wait on them.
 
 ## CorPipe setup
 
 Messages find the words that point to other words ("them", "the copies") with CorPipe, a local model that runs in its
 own Python environment, because its `transformers` version clashes with the CLI's. `orbitrows message` refuses, and
-says what is missing, until it is set up. The PoC documents no commands for it, only the paths it expects, so these
-are the steps that produce them:
+says what is missing, until it is set up. `orbitrows setup` runs these steps; by hand they are:
 
 ```bash
 python -m venv .venv-corpipe                                   # next to pyproject.toml

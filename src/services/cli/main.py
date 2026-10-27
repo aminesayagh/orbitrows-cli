@@ -21,7 +21,7 @@ from orbitrows.pipeline.store import run
 from orbitrows.pipeline import incoming as incoming_pipeline
 from orbitrows.services.cli.crash import report
 from orbitrows.services.csv.reader import EncodingNeeded, read_table
-from orbitrows.services import duckling, questions
+from orbitrows.services import questions, ready
 from orbitrows.services.model.client import Recorded, connect
 from orbitrows.services.session import client as session
 from orbitrows.services.storage import export as exporting
@@ -504,8 +504,8 @@ def parser() -> argparse.ArgumentParser:
     m.add_argument("text", nargs="+")
     u = commands.add_parser("undo", help="revert the session's last change")
     e = commands.add_parser("exit", help="save the session's changes and end it")
-    commands.add_parser("setup", help="download and start what the CLI runs beside it (Duckling, the date reader's "
-                                      "service, in Docker)")
+    commands.add_parser("setup", help="prepare everything a message needs, once: Duckling (dates, in Docker), "
+                                      "CorPipe's environment and the models (a few GB the first time)")
     x = commands.add_parser("export", help="write the store's files, rebuilt from its tables, into a folder")
     x.add_argument("-o", "--output", type=Path, required=True, metavar="folder")
     x.add_argument("--force", action="store_true", help="replace files already in the folder")
@@ -534,9 +534,9 @@ def main(argv: list[str] | None = None) -> int:
             case "export":
                 export(args.output, args.force, args.store)
             case "setup":
-                if why := duckling.setup():
-                    raise Refusal(why)
-                print("Duckling (dates): ready")
+                if failed := ready.setup():
+                    raise Refusal("Not ready: " + "; ".join(failed))
+                print("Ready.")
     except Refusal as e:
         print(e, file=sys.stderr)
         return 1
