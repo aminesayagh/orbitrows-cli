@@ -31,7 +31,7 @@ from . import assemble, conditions, coref, formula, grouping, guard, operation, 
 
 def store_of(db) -> list[dict]:
     """The store's create_table nodes, as the PoC's Orbitrow schema(); `_` tables and columns are the CLI's
-    (classification, history; a file's row order), not the merchant's."""
+    (classification, history; a file's row order), not the user's."""
     known = {name for (name,) in db.execute("SELECT sql_name FROM _store_tables")} if db.execute(
         "SELECT 1 FROM sqlite_schema WHERE name = '_store_tables'").fetchone() else None
     nodes = [n for n in schema_from_sqlite(db) if not n.definition.sql_name.startswith("_")

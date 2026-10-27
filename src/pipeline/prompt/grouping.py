@@ -28,7 +28,7 @@ from orbitrows.units.quantity import find
 from .conditions import tables_of
 from .parts import columns_of
 
-CONTEXT = ("A merchant wrote a prompt to edit or read their store database (tables and columns in `tables`). It was "
+CONTEXT = ("A user wrote a prompt to edit or read their store database (tables and columns in `tables`). It was "
            "split into the requests in `requests`; each request's conditions are found. Each request now needs how "
            "its conditions combine, and for a read, its order, limit and grouping.")
 TREE_RULES = [

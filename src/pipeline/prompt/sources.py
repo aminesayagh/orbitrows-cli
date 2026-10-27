@@ -12,7 +12,7 @@
           A read of an earlier select's rows drops that select's table from its reads: its rows carry it.
           step 3's values: a value of the request the store holds in another table makes that table a read, by code
           (SQLite found it there; Jev also sees it). A value step 3 flagged (found elsewhere than the prompt says)
-          still counts, with a warning: the merchant answers step 3's question once, and these reads follow it.
+          still counts, with a warning: the user answers step 3's question once, and these reads follow it.
           a read taking an earlier select's rows (step 2: request_result): does it read those same records ("of
           those, keep…": from = that request's rows) or other records about them ("the stock of those": a table)?
     code  "earlier" = a request this one waits for, directly or not (a table or a result exists only then); below 0.8
@@ -28,15 +28,15 @@ from . import SURE
 from .asking import question
 from orbitrows.services.model.client import ask, choice, yes_no
 
-CONTEXT = ("A merchant wrote a prompt to edit or read their store database (its tables and columns are in `tables`). "
+CONTEXT = ("A user wrote a prompt to edit or read their store database (its tables and columns are in `tables`). "
            "The prompt was split into the requests in `requests`, each with the kind of statement it needs; "
            "`waits_for` names the request that runs first. Each request now needs the table it works on.")
 RULES = [
-    "The merchant may name a table in their own words ('the catalog', 'the stock'): choose by meaning, using the "
+    "The user may name a table in their own words ('the catalog', 'the stock'): choose by meaning, using the "
     "columns.",
     "The table a request changes is the one holding the column it changes: 'raise the price of the Kora lamp' "
     "changes a price, so the table with the price column, even if the lamp's name is stored in another table.",
-    "When the merchant names the table itself ('put a size column in the shelf table'), choose the table that word "
+    "When the user names the table itself ('put a size column in the shelf table'), choose the table that word "
     "means, even if another table already has a similar column.",
     "A renamed table keeps its place: after 'rename the brands table to labels', 'labels' means the brands table.",
     "`refers_to`: words of the request that point back to something written in another request ('those' → 'the "
@@ -89,7 +89,7 @@ def options(requests: list[dict], r: dict, schema: list[dict], kind: str) -> dic
             opts[f"{a}_result"] = (f"{'Copied from the' if kind != 'main' else 'The'} rows request {a} returns "
                                    f"('{by_id[a]['text']}'), not a stored table.")
     if kind == "rows":
-        opts = {"values": "Written in the prompt: the merchant gives the new rows' values (names, numbers), even when "
+        opts = {"values": "Written in the prompt: the user gives the new rows' values (names, numbers), even when "
                           "one of them must be looked up in another table.", **opts}
     elif kind == "fill":
         opts["empty"] = "The new table starts empty: only its name or columns are described."
@@ -107,7 +107,7 @@ def same_rows(r: dict) -> bool:
 
 
 def stored(values: list[dict]) -> list[dict]:
-    """Step 3's lookups with a column: given by the merchant, or found by SQLite."""
+    """Step 3's lookups with a column: given by the user, or found by SQLite."""
     return [v for v in values if v.get("role") == "lookup" and v.get("column") and v.get("match") != "none"]
 
 
@@ -174,7 +174,7 @@ def build(requests: list[dict], answers: dict, schema: list[dict], values: list[
     def pick(rid, key, problem):
         c, probs = answers.get(key, (None, {}))
         p = probs.get(c, 0)
-        if c == "unclear" or c is None:                       # "unclear" asks the merchant: a question, not an option
+        if c == "unclear" or c is None:                       # "unclear" asks the user: a question, not an option
             warnings.append({"request": rid, "problem": f"{problem}: unclear"}
                             | question(answers, key, skip=["unclear"]))
         elif p < SURE:

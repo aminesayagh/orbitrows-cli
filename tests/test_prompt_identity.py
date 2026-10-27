@@ -4,6 +4,7 @@ the ported module; code around them may change (the questions to the user were a
 the CLI's (../poc), else skipped."""
 import ast
 import os
+import re
 import subprocess
 from collections import Counter
 from pathlib import Path
@@ -105,7 +106,7 @@ REPLACED = {"pipeline/prompt/coref.py": CORPIPE,
     "all", "any", "_all", "_any", "|tree", "How do the conditions of ", " combine?", "tree", "AND", "OR",  # conditions
     "how the conditions combine: no answer, AND kept"},  # only): one AND / OR question per pair now, any size
     "pipeline/prompt/operation.py": {   # "asks for information back?": never read; a change reports what SQLite's
-    "Answer yes when the merchant asks to see or get something back: a list, a count, a total, the new values, a file.",
+    "Answer yes when the user asks to see or get something back: a list, a count, a total, the new values, a file.",
     "A request that only reads always gives information back: yes.",         # execution reports (2026-10-25)
     "A condition or a computation the request needs to make its change is not information back: no.",
     "_back", "') ask to get information back?", "reports_back", "reports back uncertain",
@@ -170,6 +171,12 @@ def poc_repo() -> Path | None:
     return None
 
 
+def reworded(text: str) -> str:
+    """The PoC's texts as the CLI words them: "merchant" became "user" (2026-10-27: the client is any agent, on any
+    table; the user's decision)."""
+    return re.sub(r"\bmerchants\b", "users", re.sub(r"\bmerchant\b", "user", text))
+
+
 def tuned(text: str) -> Counter:
     """The module's texts (with a letter: punctuation alone is formatting) and decimal numbers, docstrings and the
     __main__ block left out."""
@@ -185,8 +192,8 @@ def tuned(text: str) -> Counter:
 def test_what_was_tuned_is_kept():
     poc, lost = poc_repo(), {}
     for module, path in PORTED.items():
-        theirs = subprocess.run(["git", "show", f"{COMMIT}:{path}"], cwd=poc, env=ENV, capture_output=True, text=True,
-                                check=True).stdout
+        theirs = reworded(subprocess.run(["git", "show", f"{COMMIT}:{path}"], cwd=poc, env=ENV, capture_output=True,
+                                         text=True, check=True).stdout)
         mine = "\n".join((SRC / m).read_text() for m in [module, *MOVED.get(module, [])])
         if missing := [v for v in tuned(kept(theirs, (SRC / module).read_text()) if module in TRIMMED else theirs)
                        - tuned(mine) if v not in GONE | REPLACED.get(module, set()) | set(NUMBER_READING.get(module, []))]:

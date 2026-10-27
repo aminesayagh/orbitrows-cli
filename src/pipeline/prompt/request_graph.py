@@ -94,7 +94,7 @@ async def run(jev, prompt: str, mentions: list[dict], model, store: str = coref.
     return graph
 
 
-CUT_CONTEXT = ("A merchant wrote a prompt to edit or read their store database. One of its requests asks for two "
+CUT_CONTEXT = ("A user wrote a prompt to edit or read their store database. One of its requests asks for two "
                "separate actions and must be cut in two: each part one action, with its own words.")
 CUT_RULES = [
     "A formula given to some records IN PLACE OF the formula of the others ('…; the Lego sets get 20% off instead', "

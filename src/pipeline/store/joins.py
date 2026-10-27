@@ -23,7 +23,7 @@ from .context import SAMPLE
 # ponytail: one exact count for every file size; 5 let a 14-row export move a line price (its product key repeats on
 # 8 rows). A chance test (how likely the repeats agree by luck) if real files need a size-aware bar.
 MIN_REPEATS = 10
-ACTIVITY = ("A merchant uploads a table that may be an export joining several tables; the columns that describe "
+ACTIVITY = ("A user uploads a table that may be an export joining several tables; the columns that describe "
             "another kind of record are grouped with that record's key before the schema is built.")
 RULES = [
     "A joined export repeats a record of another kind (a customer, a product, an order) on every row that refers to "

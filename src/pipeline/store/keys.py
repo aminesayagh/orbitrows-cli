@@ -17,7 +17,7 @@ from orbitrows.services.model.client import ask, choice, pick
 from .context import SAMPLE
 from .profile import named, overlap, values
 
-ACTIVITY = ("A merchant uploads several files (tables) together, either related tables of one database or several "
+ACTIVITY = ("A user uploads several files (tables) together, either related tables of one database or several "
             "versions of the same catalog; the keys that identify and link their records are found before the "
             "schema is built.")
 PK_RULES = [

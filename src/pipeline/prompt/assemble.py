@@ -517,7 +517,7 @@ def assemble(db, schema, requests, operation, sources, parts, conditions, groupi
                 continue
         items.append(it)
     errors = compiled(db, schema, items)
-    for it in items:                                    # what the merchant should see before approving
+    for it in items:                                    # what the user should see before approving
         a = it["ast"]
         if a["type"] in ("update", "delete") and a["scope"]["type"] == "all_rows":
             warnings.append({"request": it["request"], "problem": f"changes every record of {store_name.get(it['main'])}",

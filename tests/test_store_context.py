@@ -156,7 +156,7 @@ async def test_context_column_describing_nothing_is_flagged_for_the_merchant():
     out = await context.classify(Stub(ROLES, links), TABLE, schema(), profile(TABLE))
     assert out["context_columns"][2]["describes"] == []
     assert out["warnings"] == [{"column": "currency", "position": 2,
-                                "problem": "context column describes no column: the merchant decides"}]
+                                "problem": "context column describes no column: the user decides"}]
 
 
 async def test_unsure_category_is_unknown_and_a_question():

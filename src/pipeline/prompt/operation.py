@@ -4,7 +4,7 @@ directly, replacing prompt_edit/family_requests.py's operation × element questi
     Jev   one call per prompt, two questions per request: the statement type (STATEMENTS) and whether it holds two
           actions (step 1 cuts it again); evidence: the prompt, the requests with step 1's links, the store's tables
           and columns. What a change reports back is what SQLite's execution reports: not asked
-    code  below 0.8: the likeliest statement is kept and flagged (the merchant is asked); other_object (an index, a
+    code  below 0.8: the likeliest statement is kept and flagged (the user is asked); other_object (an index, a
           view) is not supported yet: a warning, never a guessed AST
     code  step 1's "rows" input becomes request_result (the request it waits for is a select) or affected_rows (it
           inserts, updates or deletes: the executor keeps the ids SQLite returns)
@@ -16,7 +16,7 @@ from . import SURE
 from .asking import question
 from orbitrows.services.model.client import ask, choice, yes_no
 
-CONTEXT = ("A merchant wrote a prompt to edit or read their store database (its tables and columns are in `tables`). "
+CONTEXT = ("A user wrote a prompt to edit or read their store database (its tables and columns are in `tables`). "
            "The prompt was split into the requests in `requests`; `waits_for` names the request that must be done "
            "first. Each request now needs one kind of database statement.")
 STATEMENTS = {
@@ -94,7 +94,7 @@ def build(requests: list[dict], answers: dict) -> dict:
                              "probability": round(probs.get(st, 0), 2)} | question(answers, f"{rid}_statement"))
         several = answers.get(f"{rid}_several", 0.0)
         if several >= 0.5:                                    # step 1 cuts it again (request_graph.recut); if it
-            node["several_actions"] = round(several, 2)       # can't, the merchant is asked: never one action dropped
+            node["several_actions"] = round(several, 2)       # can't, the user is asked: never one action dropped
             warnings.append({"request": rid, "problem": "two actions in one request: only one is built",
                              "probability": round(several, 2)})
         if st == "other_object":

@@ -97,7 +97,7 @@ RULES = [
     "A cut may carry `notes` from the splitter: evidence to weigh, not a decision.",
     "Judge only this cut; the other cuts are marked so you can see the whole prompt.",
 ]
-CONTEXT = ("A merchant writes a prompt to edit their product catalog table. It may hold several requested changes, "
+CONTEXT = ("A user writes a prompt to edit their product catalog table. It may hold several requested changes, "
            "typos, and several languages. An automatic splitter proposed the cuts marked in `marked_prompt`; "
            "each cut must be confirmed or cancelled.")
 

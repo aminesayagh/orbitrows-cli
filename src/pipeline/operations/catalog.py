@@ -2,7 +2,7 @@
 format is kept or imported. Opened read-only by the CLI; written only by a developer (save()), each change in one
 transaction that raises the entry's version and the catalog's revision. Kept apart from every store's database.
 
-    entry      one operation: what it does (behavior), what it is for (outcomes), how merchants ask for it
+    entry      one operation: what it does (behavior), what it is for (outcomes), how users ask for it
                (examples), its parameters, where it applies, how it differs from close ones (distinctions), its role
                (it chooses rows: condition; it computes a new value: value; what a read shows of a column:
                output; SQLGlot's own expressions: technical), the

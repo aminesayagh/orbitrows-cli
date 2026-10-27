@@ -26,7 +26,7 @@ async def run(model, prompt: str, db) -> dict:
     warnings = []
     selected = []
     questions = {f"incoming_{t['id']}": yes_no(
-        "Choose the data sources needed to answer a merchant's request.",
+        "Choose the data sources needed to answer a user's request.",
         f"Does the request require incoming upload {t['sql_name']} from {Path(t['source_file']).name}?",
         ["Select an incoming upload only when its information is needed by this request.",
          "A request may need several incoming uploads and the store together.",
@@ -51,7 +51,7 @@ async def run(model, prompt: str, db) -> dict:
                                         + ", ".join(f"{t['sql_name']} (upload {t['id']})" for t in group)
                                         + ". All of them are kept; name one (e.g. its sql name) to use only it."})
     store_answer = await ask(model, state | {"selected_incoming": [t["sql_name"] for t in selected]},
-                             {"store": yes_no("Choose the data sources needed to answer a merchant's request.",
+                             {"store": yes_no("Choose the data sources needed to answer a user's request.",
                                                "Does this request need any data from the store tables?",
                                                ["A comparison or store update needs the store.",
                                                 "A request only listing an incoming upload may not need the store."])})

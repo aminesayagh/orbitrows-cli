@@ -36,7 +36,7 @@ from . import SURE
 from .asking import question
 from orbitrows.services.model.client import ask, choice, yes_no
 
-CONTEXT = ("A merchant wrote a prompt to edit or read their store database (tables and columns in `tables`). It was "
+CONTEXT = ("A user wrote a prompt to edit or read their store database (tables and columns in `tables`). It was "
            "split into the requests in `requests`, each with its kind of statement and the table it works on. Each "
            "request now needs what it changes, shows or adds. Its conditions (which records) are handled later.")
 CHANGE_RULES = [
@@ -210,7 +210,7 @@ def read_tables(schema, sources, rid, main) -> list[str]:
 def shown_columns(schema, tables, main) -> dict:
     """The columns a read may show: its tables' columns but the keys that only link tables (foreign keys, the other
     tables' own ids); the main table's own id stays ("show the variant ids"). Linking keys are how assembly reaches a
-    parent's value, not values the merchant asked for ("the names of those": not product_id)."""
+    parent's value, not values the user asked for ("the names of those": not product_id)."""
     d = {t["definition"]["table_id"]: t["definition"] for t in schema}
     links = {f"{t}.{c}" for t, x in d.items() for fk in x.get("foreign_keys", []) for c in fk["columns"]}
     links |= {f"{t}.{c}" for t, x in d.items() if t != main for c in x.get("primary_key", [])}

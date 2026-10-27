@@ -2,7 +2,7 @@
 operand points to another record's result or to the column's current value; a branch gets its then / else; the
 assignment gets its final value. Code lists the unknowns and their options, Jev chooses (one call), code checks the
 map (no cycle, each result used once, bounds feed limits, one final value) and builds the formula. A weak answer or a
-broken map becomes a question for the merchant, never a guess.
+broken map becomes a question for the user, never a guess.
 
 Input: the request text, step 0's annotations (target, predicates with SQL) and pass 1's records.
 Output: {"status": "ok" | "ask", "map": {record: {slot: source}}, "set": tree, "where": [conditions], "sql": {...},
@@ -17,10 +17,10 @@ from orbitrows.pipeline.prompt.asking import question
 
 MIN = 0.5
 VALUE = ("calculation", "rounding", "bound", "guard", "branch")
-CONTEXT = ("A merchant's request changes a number column. It was split into steps (r1, r2, …): each step's own words "
+CONTEXT = ("A user's request changes a number column. It was split into steps (r1, r2, …): each step's own words "
            "are shown. Some steps do not say which value they apply to: link each one to the value it uses.")
 RULES = [
-    "Follow the order the merchant MEANS, not the order of the words: in 'apply the 15% only after removing the 5' the "
+    "Follow the order the user MEANS, not the order of the words: in 'apply the 15% only after removing the 5' the "
     "15% uses the result of 'removing the 5'; in 'add 10 to the price after a 20% discount' the +10 uses the discount's "
     "result and the discount uses the current price.",
     "The first step of a formula uses the column's current value. A different formula for some records (a branch) "
@@ -35,7 +35,7 @@ RULES = [
     "steps compute, never to the current value. With two limits, the second one uses the first one's result.",
     "With two branch steps, the first one's 'other records' formula is the second branch step; the last branch's "
     "other records keep the current value unless the sentence gives a formula for everything.",
-    "Answer that the merchant must say only when the sentence allows two different readings.",
+    "Answer that the user must say only when the sentence allows two different readings.",
 ]
 
 
@@ -81,7 +81,7 @@ def questions(recs, todo) -> dict:
         if slot == "else" or (slot == "left" and not (r["role"] == "guard" and computed)):
             # a limit applies to the NEW value: never offered the current one when a new one is computed
             opts["current"] = "The column's current value, before any change."
-        opts["merchant"] = "The sentence allows two readings: the merchant must say."
+        opts["user"] = "The sentence allows two readings: the user must say."
         task = {"left": f"Which value does step {r['id']} ('{r['text']}') apply to?",
                 "right": f"Which step gives the value step {r['id']} ('{r['text']}') uses as its "
                          f"{'limit' if r['role'] == 'guard' else 'amount'}?",
@@ -143,7 +143,7 @@ def reached(recs, links) -> set:
 
 def unused_numbers(text, upstream, recs, links) -> list[str]:
     """Each number of the request must belong to a step the formula uses, or to a condition: a number left out is a
-    step lost on the way (pass 1 dropped it, or the map does not use it), so the merchant is asked."""
+    step lost on the way (pass 1 dropped it, or the map does not use it), so the user is asked."""
     from .words import occurrences
     spans = [(text.find(p["text"]), text.find(p["text"]) + len(p["text"])) for p in upstream.get("predicates", [])]
     used = reached(recs, links)
@@ -181,7 +181,7 @@ def possible(recs, links, rid, slot, src) -> bool:
 
 
 def final(recs, links):
-    """The final value: the one value no other step uses (several or none: the merchant is asked)."""
+    """The final value: the one value no other step uses (several or none: the user is asked)."""
     used = {s for s in links.values()}
     sinks = [r["id"] for r in recs if r["role"] in VALUE and r["id"] not in used]
     return sinks[0] if len(sinks) == 1 else None
@@ -300,7 +300,7 @@ async def resolve(jev, text: str, upstream: dict, records: list[dict]) -> dict:
     for key, r, slot in todo:
         pick, probs = ans.get(key, (None, {}))
         p = probs.get(pick, 0)
-        if pick is None or p < MIN or pick == "merchant":
+        if pick is None or p < MIN or pick == "user":
             weak.append((key, r, slot))
             continue
         if p < SURE:
@@ -308,7 +308,7 @@ async def resolve(jev, text: str, upstream: dict, records: list[dict]) -> dict:
         links[(r["id"], slot)] = pick
     for key, r, slot in weak:                               # a weak answer, judged again among the POSSIBLE sources:
         probs = ans.get(key, (None, {}))[1]                 # part of the vote may sit on sources the map cannot take
-        ok = {k: v for k, v in probs.items() if k != "merchant" and possible(recs, links, r["id"], slot, k)}
+        ok = {k: v for k, v in probs.items() if k != "user" and possible(recs, links, r["id"], slot, k)}
         best = max(ok, key=ok.get) if ok else None
         if best and probs.get(best, 0) >= 0.3 and ok[best] / sum(ok.values()) >= SURE:
             links[(r["id"], slot)] = best                  # e.g. A41: "current" 0.46, the rest on a cycle / the
@@ -318,7 +318,7 @@ async def resolve(jev, text: str, upstream: dict, records: list[dict]) -> dict:
         pick = ans.get(key, (None, {}))[0]
         out_q.append({"problem": f"which value {r['id']} ('{r['text']}') uses ({slot})", "answer": pick,
                       "probability": round(probs.get(pick, 0), 2)}     # the user's answer, settled, is taken above
-                     | question(ans, key, {x["id"]: label(x) for x in recs}, skip=["merchant"]))
+                     | question(ans, key, {x["id"]: label(x) for x in recs}, skip=["user"]))
     guards = [r for r in recs if r["role"] == "guard"]
     for a, b in zip(guards, guards[1:]):                    # two limits on the same value: chain them (clamps commute
         if links.get((a["id"], "left")) and links.get((a["id"], "left")) == links.get((b["id"], "left")):   # unless

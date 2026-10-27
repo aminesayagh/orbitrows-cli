@@ -12,7 +12,7 @@ next steps keep both the reference words and their target.
        their cost"), every subject or object whose head is a word but no noun
        ("that one", "the cheapest one", "the former"), every pronoun or possessive but the relative ones.
     2. Jev, one call per prompt, one question per mention: what does it point to? (another mention, nothing,
-       new rows that an action creates, or ask the merchant).
+       new rows that an action creates, or ask the user).
     3. The uncertainty check comes first: a weak answer, whatever it is, leaves the mention unresolved (a warning).
 Replaced CorPipe 26 large on 2026-10-27 (its license, CC BY-NC-SA, is non-commercial; 8.6 GB with its environment).
 Benchmark, the PoC's 70 English prompts (62 references), Jev deciding each source's mentions (.bench/coref_compare.py):
@@ -34,20 +34,20 @@ STORE = "their product catalog table (columns: sku, name, brand, price, stock, e
 
 
 def context(store: str = STORE) -> str:
-    return f"A merchant wrote a prompt to edit or read {store}. Some words of the prompt only point to other words of the prompt."
+    return f"A user wrote a prompt to edit or read {store}. Some words of the prompt only point to other words of the prompt."
 
 
 CONTEXT = context()
 RULES = ["A name repeated in full is not a reference to the earlier name: it names the products itself.",
          "'it' that points to nothing ('it is important') names nothing: it is not a reference.",
-         "Words for the merchant or the assistant ('me', 'you', 'we', 'us'), values ('12', '20%'), column names and "
+         "Words for the user or the assistant ('me', 'you', 'we', 'us'), values ('12', '20%'), column names and "
          "verbs are not references to other words of the prompt.",
          "'it' or 'them' after an action that creates something points to what that action creates; when the new "
          "thing is named, point to those words: in 'create a size column, then fill it with M', 'it' points to 'a "
          "size column'.",
          "A reference doesn't point to words of its own phrase that already play another part: in 'fill it with M "
          "for the Nike shoes', the Nike shoes are where the value goes, so 'it' is something else (here, a column).",
-         "When the words could point to several of the listed words, choose that the merchant must be asked."]
+         "When the words could point to several of the listed words, choose that the user must be asked."]
 
 
 def mentions(prompts: list[str]) -> list[list[dict]]:
@@ -83,12 +83,12 @@ def jev_request(prompt: str, ms: list[dict], ctx: str = CONTEXT):
                          "(like 'them', 'their', 'the ones with no stock', 'the copies', 'the latter').",
             "not_reference": f"`{m['text']}` names products, a column, a value, a person or an action itself: it is not "
                              "a reference.",
-            "unsure": f"It is not clear whether `{m['text']}` points to other words: the merchant must be asked."}}
+            "unsure": f"It is not clear whether `{m['text']}` points to other words: the user must be asked."}}
         criteria = {f"m{j}": f"`{m['text']}` points to `{o['text']}`." for j, o in enumerate(ms)
                     if j != i and not (o["start"] <= m["start"] and m["end"] <= o["end"])}
         criteria["created"] = (f"`{m['text']}` points to new rows or columns that an action of the prompt creates, "
                                "and that are not named in the prompt (copies, duplicates).")
-        criteria["ambiguous"] = f"`{m['text']}` could point to several words: the merchant must be asked."
+        criteria["ambiguous"] = f"`{m['text']}` could point to several words: the user must be asked."
         questions[f"m{i}_target"] = {"type": "choice", "criteria": criteria, "instructions": {
             "context": ctx, "task": f"If `{m['text']}` is a reference, what does it point to?", "rules": RULES}}
     return {"prompt": prompt}, questions

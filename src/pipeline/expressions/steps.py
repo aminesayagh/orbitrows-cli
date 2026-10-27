@@ -11,7 +11,7 @@ from orbitrows.pipeline.prompt import SURE
 from .words import Record, column_mentions, nlp, occurrences, segment_of, segments
 
 MIN = 0.5
-CONTEXT = ("A merchant wrote one request that changes a number column of their shop database. Each number of the "
+CONTEXT = ("A user wrote one request that changes a number column of their shop database. Each number of the "
            "request is marked [n1: …]. The request may contain spelling mistakes: read it for its meaning.")
 KIND = {   # what a number does that is not one operation of the catalog: a part of a limit, or nothing
     "upper_limit_computed": "This number computes a maximum from a column ('twice' in 'never above twice the cost').",
@@ -298,7 +298,7 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
             tok = tok.head
         a = tok.idx if tok is not None and tok.idx < t["start"] else t["start"]
         add("assignment", "assign", {"column": upstream["target"]}, {"unresolved": True}, a, t["end"], "parse.target")
-    for k, v in ans.items():                                # kept but shown to the merchant, as in the pipeline
+    for k, v in ans.items():                                # kept but shown to the user, as in the pipeline
         if isinstance(v, (list, tuple)) and MIN <= v[1].get(v[0], 0) < SURE and v[0] not in ("none", "no", "other"):
             ambiguities.append({"problem": "answer kept but uncertain", "question": k, "answer": v[0],
                                 "probability": round(v[1].get(v[0], 0), 2), "status": "flagged"})
@@ -309,7 +309,7 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
 
 # --- text and date changes (basic version, 2026-10-16; relative dates, joins, case changes: notice.md #17–#19) -------
 
-TEXT_CONTEXT = ("A merchant wrote one request that changes a text or date column of their shop database. The texts, "
+TEXT_CONTEXT = ("A user wrote one request that changes a text or date column of their shop database. The texts, "
                 "numbers and dates of the request that may be part of the change are marked [x1: …].")
 TEXT_KIND = {   # what a text or a date does that is not one operation of the catalog
     "replaced": "This text, inside the column's text, is replaced by another one ('replace cotton with …': cotton).",
@@ -398,7 +398,7 @@ def text_candidates(text, upstream, preds, dated):
         for o in occurrences(text, "en", skip):
             if not o["percent"]:
                 out.append({"text": o["text"], "start": o["start"], "end": o["end"], "kind": "number", "value": o["value"]})
-    # a quoted text is the merchant's own text, even where step 6 also made a condition of it ("replace 'cotton'")
+    # a quoted text is the user's own text, even where step 6 also made a condition of it ("replace 'cotton'")
     out = [c for c in out if c.get("quoted") or not inside(c["start"])]
     if dated:                                               # a date column: a written value that is a date is a date
         for c in out:

@@ -64,7 +64,7 @@ from .relations import chained, linked, paths, relationships
 from orbitrows.units import dates
 from orbitrows.units.quantity import find, plain
 
-CONTEXT = ("A merchant wrote a prompt to edit or read their store database (tables and columns in `tables`). It was "
+CONTEXT = ("A user wrote a prompt to edit or read their store database (tables and columns in `tables`). It was "
            "split into the requests in `requests`, each with its statement, its table, the values it names and where "
            "the store holds them, and the columns it changes. Each request now needs which records it acts on.")
 ALL_RULES = [
@@ -415,14 +415,14 @@ def operands(db, schema, r, key, values, params, parts_req) -> dict:
     info, out = column_info(schema, key), {}
     table = key.split(".")[0]
     for i, v in enumerate(v for v in values if v["request"] == r["id"] and v.get("column") == key):
-        if v.get("match") == "given":                         # the merchant's column: its stored spelling there only
+        if v.get("match") == "given":                         # the user's column: its stored spelling there only
             found = [f for f in search(db, schema, v["text"], table) + within(db, schema, v["text"]) if f["column"] == key]
             by_meaning = False
             if not found:                                     # in another language ("variantes noires" → black):
                 found = [f for f in meant(db, schema, v["text"]) if f["column"] == key][:1]   # the meaning, in that column
                 by_meaning = bool(found)
             stored = found[0]["stored"] if found else [v["text"]]
-            if by_meaning:                                    # a meaning is not SQL's proof: the merchant confirms
+            if by_meaning:                                    # a meaning is not SQL's proof: the user confirms
                 out[f"s{i}"] = (f"'{v['text']}' (meaning {', '.join(stored)})", stored, v["text"], "meaning")
                 continue
         else:
@@ -591,7 +591,7 @@ def mentioned(rid, key, m, cand, info, answers, out, warnings, db, schema, cands
     if op in (None, "none"):
         return None
     operand = cand[2] if op in TEXT_ONLY and len(cand) > 2 else cand[1]   # a pattern: the text as written
-    if len(cand) > 3:                                         # a value read by its meaning: the merchant confirms
+    if len(cand) > 3:                                         # a value read by its meaning: the user confirms
         flag(f"value read by its meaning: {cand[0]}, to confirm")
     cond = predicate(op, _col(key), operand, None, cand[1] if isinstance(cand[1], list) else [cand[1]],
                      info["sql_type"] == "TEXT")
@@ -662,7 +662,7 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                 return c
             op = pick("op")
             for c in proved:
-                if len(c) > 3:                                # a value read by its meaning in the merchant's column
+                if len(c) > 3:                                # a value read by its meaning in the user's column
                     out[rid]["flagged"] = True
                     warnings.append({"request": rid, "problem": f"value read by its meaning: {c[0]}, to confirm"})
             all_values = [x for c in proved for x in c[1]]

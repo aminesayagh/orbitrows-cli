@@ -150,7 +150,7 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
             for x, calls in doubts:                         # one warning per weak answer: its own question
                 mine.append({"request": rid, "problem": f"formula of {target}: uncertain answers ("
                              f"{x.get('question') or x.get('occurrence')}={x.get('answer')} {x.get('probability')})"}
-                            | (question(calls, x.get("question") or f"{x.get('occurrence')}_kind", skip=["merchant"])
+                            | (question(calls, x.get("question") or f"{x.get('occurrence')}_kind", skip=["user"])
                                if asked(x) else {}))
             for x in p1["records"]:
                 if x["role"] == "unresolved_condition":

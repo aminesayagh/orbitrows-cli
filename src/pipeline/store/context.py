@@ -12,7 +12,7 @@
     code   header_context, both → the unit declared in the header (dictionary); none readable → no source, warned
     code   source_context of every value column: the row's context column, else the header
 
-    Columns only: no cell is parsed or changed at import (the merchant's table stays as uploaded). Units written in
+    Columns only: no cell is parsed or changed at import (the user's table stays as uploaded). Units written in
     cells are read at request time, on the rows the request selects.
 """
 import re
@@ -37,7 +37,7 @@ def _one_letter(header, u):
 
 SAMPLE = 5
 CONTEXT_ONLY = ("dedicated_context", "both")
-ACTIVITY = "A merchant uploads a table (a store catalog or a related file) to build its database schema; every column is classified before the schema is built."
+ACTIVITY = "A user uploads a table (a store catalog or a related file) to build its database schema; every column is classified before the schema is built."
 CONTEXT_OPTIONS = {
     "dedicated_context": "Its cells name a currency, unit, packaging or language (never a number) that applies to another column of the same row; "
                          "its header names the kind of context, not one particular unit. Examples: price_currency (EUR, USD), "
@@ -188,7 +188,7 @@ async def classify(jev, table: dict, schema: dict, profile: dict) -> dict:
                                                                             "key": f"{k}_describes_{t}"}})
         if not describes:
             warnings.append({"column": h, "position": i,
-                             "problem": "context column describes no column: the merchant decides"})
+                             "problem": "context column describes no column: the user decides"})
         entry = {"context": roles[i] if roles[i] != "uncertain" else a1[k][0], "kind": kind, "describes": describes}
         if roles[i] == "uncertain":
             entry["flagged"] = True

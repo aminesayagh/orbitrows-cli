@@ -3,7 +3,7 @@ No SQL is produced: the node is the output. SQLite itself checks it, by creating
 
     sql_type   one of SQLite's STRICT types; a type follows the cells' original format, not their meaning
                ("21,90 €" is TEXT)
-    header     the merchant's original column name, kept for the export (not in the guide's contract); None for a
+    header     the user's original column name, kept for the export (not in the guide's contract); None for a
                column the import adds (the `id` key of a table without one)
 """
 import re

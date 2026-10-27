@@ -12,11 +12,11 @@
              value written whole inside the phrase (within: "Stationery products"), the longest one. A phrase found nothing: its
              shorter parts are searched; when only a part matched, the words around it are searched too (exact or
              typo only) and become a second value ("PaperHub stationery": PaperHub, Stationery). Nothing in the
-             named table: every table is searched and the answer flagged (the merchant confirms; never a silent
+             named table: every table is searched and the answer flagged (the user confirms; never a silent
              override of what they wrote)
     Jev      call 2, only when several columns match: which one, or none (a new or unknown value)
 
-The merchant's column always wins: "whose brand is Casa Living" is brand = 'Casa Living' even if Casa Living is a
+The user's column always wins: "whose brand is Casa Living" is brand = 'Casa Living' even if Casa Living is a
 supplier, and is not searched (0 rows is SQL's honest answer). A written value is never searched ("add the supplier
 Nordic Paper" must not become PaperHub), and existence conditions ("if it does not exist") are SQL's, later.
 
@@ -51,7 +51,7 @@ SEMANTIC_TOP = 3                                              # the right value 
 SCOPE_MIN = 0.8                                               # limits SQLite's search to one table: kept at 0.8, the
                                                               # 0.7 measurement (prompt_ast/__init__.py) did not cover it
 
-CONTEXT = ("A merchant wrote a prompt to edit or read their store database (tables and columns in `tables`). The "
+CONTEXT = ("A user wrote a prompt to edit or read their store database (tables and columns in `tables`). The "
            "prompt was split into the requests in `requests`. The phrases in `phrases` were found in it as possible "
            "values.")
 ROLES = {
@@ -82,7 +82,7 @@ OWN_RULES = [
 ]
 NAMED_RULES = [
     "`stored_in` says where the store holds the value; when a word of the prompt names another column ('whose brand "
-    "is Kora' while Kora is stored as a supplier), the merchant's column wins.",
+    "is Kora' while Kora is stored as a supplier), the user's column wins.",
     "Choose a column only when the prompt names it for this value ('whose brand is Kora': the brand column), even "
     "if the value looks like it belongs elsewhere.",
     "Choose a kind of record when the value is that record's own name ('the supplier Kora': a suppliers record). A "
@@ -266,7 +266,7 @@ def build(ps: list[dict], a1: dict, candidates: dict, a2: dict) -> dict:
                              "probability": round(rp.get(role, 0), 2)} | question(a1, f"{key}_role"))
         if role == "lookup":
             named, np_ = a1.get(f"{p['id']}_named", ("not_said", {}))
-            if "from_phrase" not in p and given(a1, p["id"]):   # the merchant's column: not searched
+            if "from_phrase" not in p and given(a1, p["id"]):   # the user's column: not searched
                 v |= {"column": named, "match": "given"}
                 if np_.get(named, 0) < SURE:
                     v["flagged"] = True
@@ -313,7 +313,7 @@ PICK_LABELS = {"none": "none of these", "text": "the words as written"}   # call
 
 
 def keepable(found: list[dict]) -> bool:
-    """"Keep the words as written" is offered when the merchant's words appear inside stored text (a partial match:
+    """"Keep the words as written" is offered when the user's words appear inside stored text (a partial match:
     "wire" to search) or match nothing exactly; never for a meaning-only match, where it would invent a text search
     from an ordinary word ("cables")."""
     return not all(f["match"] == "meaning" for f in found)
@@ -326,7 +326,7 @@ def asked(found: list[dict]) -> bool:
 
 
 def given(a1: dict, pid: str) -> bool:
-    """The merchant wrote the column: Jev chose a column, and says a word of the prompt names it (a column guessed
+    """The user wrote the column: Jev chose a column, and says a word of the prompt names it (a column guessed
     from the value is searched instead: "the Orbit Hoodie" is not name = 'Orbit Hoodie' until the store says so)."""
     return "." in a1.get(f"{pid}_named", ("not_said",))[0] and a1.get(f"{pid}_written", 0.0) >= 0.5
 

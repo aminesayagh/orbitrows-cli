@@ -12,7 +12,7 @@ from orbitrows.services.csv.reader import first_rows
 
 ROWS = 5
 NO = round(1 - SURE, 6)                                     # 1 - 0.8 is 0.19999… in floats
-ACTIVITY = "A merchant uploads a CSV table (a store catalog or a related file) to build its database schema; the file " \
+ACTIVITY = "A user uploads a CSV table (a store catalog or a related file) to build its database schema; the file " \
            "is read before any column is classified."
 RULES = [
     "Answer yes when the cells of the first row name what each column holds (field names, labels, titles), even when the "

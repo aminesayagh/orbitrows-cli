@@ -23,9 +23,9 @@ mice"), so the answers give both the execution order and the tree. The examples 
 be test prompts (prompt_edit/test_requests.py LINK_CASES, cases/), or the tests would grade Jev on what it was shown. The words ("then", "and", "first") are
 evidence for Jev, not rules: "then" sometimes means AND.
 
-Step 2 translates the order the merchant meant (decided 2026-10-01/02). THEN: the request that runs first changes the
-state the other one uses; or the merchant sets an order ("first", "before", ordinal markers), followed in that
-direction; or the merchant writes an order ("then") between requests on the same products ("lower the Bose prices,
+Step 2 translates the order the user meant (decided 2026-10-01/02). THEN: the request that runs first changes the
+state the other one uses; or the user sets an order ("first", "before", ordinal markers), followed in that
+direction; or the user writes an order ("then") between requests on the same products ("lower the Bose prices,
 then delete them"). AND: requests on different products, even with "then", or a plain "and". The one exception: a
 swap or rotation is AND, even with "then". Which products "them" means is resolved by a later scope step.
 
@@ -56,7 +56,7 @@ INPUT_RULES = [
     "then set it to yes for the Lego sets', the second request uses the new column.",
 ]
 
-CONTEXT = ("A merchant wrote a prompt to edit their product catalog table. It was split into the separate requests "
+CONTEXT = ("A user wrote a prompt to edit their product catalog table. It was split into the separate requests "
            "in `requests`, in the order they are written. They must now be ordered and linked: a request either "
            "waits for another one to be done first, or runs independently.")
 RULES = [
@@ -64,13 +64,13 @@ RULES = [
     "rows or columns the first one creates ('duplicate the Lenovo tablets, then rename the duplicates'), or reads "
     "values or rows after the first one changed them ('raise the cost by 3%, then compute the margin from the new "
     "cost', 'set the Asus stock to 0, then list the products without stock').",
-    "When the merchant explicitly sets an order ('first', 'before', 'after that', 'once that is done', or a sequence "
+    "When the user explicitly sets an order ('first', 'before', 'after that', 'once that is done', or a sequence "
     "of ordinal markers like 'First … Then …', 'Firstly … Secondly …'), follow it, in that direction, even when the "
-    "requests are on different products: the merchant asked for that order. In 'archive the old Nokia phones, but "
+    "requests are on different products: the user asked for that order. In 'archive the old Nokia phones, but "
     "before that print their list', the archiving waits for the printing; in 'Firstly, hide the Acer tablets. "
     "Secondly, list the HP printers.', the listing waits for the hiding. The request it waits for can be written after it.",
-    "When the merchant writes an order ('then', 'after that', 'puis', 'luego') between requests on the same "
-    "products, follow it: the order is what the merchant asked for. Requests are on the same products when the later "
+    "When the user writes an order ('then', 'after that', 'puis', 'luego') between requests on the same "
+    "products, follow it: the order is what the user asked for. Requests are on the same products when the later "
     "one refers back ('them', 'their', 'for those same items') or names the same products again: in 'tag the Asus "
     "laptops as clearance, then archive them', the archiving waits for the tagging.",
     "'them' or 'their' after a request that creates products (copies, duplicates) means the new products: that "
@@ -80,7 +80,7 @@ RULES = [
     "change the other one uses.",
     "The one exception to a written order is a swap or a rotation: request A copies column X into column Y, and "
     "request B copies column Y back into column X ('put the width into the height, then the height into the "
-    "width'). The merchant wants the two values exchanged, so each request reads the values from before and neither "
+    "width'). The user wants the two values exchanged, so each request reads the values from before and neither "
     "waits, even when written with 'then': if B waited, it would copy back the value A just wrote and both columns "
     "would end up equal.",
     "'then' and 'and' (in `joined_by`) are evidence, not decisions; ordinal markers (`marker`: 'First', 'Next', "
