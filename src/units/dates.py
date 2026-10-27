@@ -1,6 +1,6 @@
-"""Dates in a request: where they are, what they are, read by datephrase (../date_to_number, written by the
-user's date2num session, adopted 2026-10-27; dateparser underneath). One reader for every step, as units/quantity is
-for numbers. The reader reads a phrase with its classification and never guesses it, so:
+"""Dates in a request: where they are, what they are, read by datephrase (units/datephrase, over Duckling; written by
+the user's date2num session, adopted 2026-10-27, moved into the CLI the same day). One reader for every step, as
+units/quantity is for numbers. The reader reads a phrase with its classification and never guesses it, so:
 
     spans(text, gliner)   GLiNER2 cuts the phrases, without the words that compare with them ("the last 30 days" →
                           "30 days", "before October 5, 2026" → "October 5, 2026"): the caller's condition applies those
@@ -22,7 +22,7 @@ import re
 from datetime import date
 
 from dateutil.relativedelta import relativedelta
-from datephrase import EngineUnavailable, TemporalContext, answer, read_temporal
+from .datephrase import EngineUnavailable, TemporalContext, answer, read_temporal
 
 from orbitrows.services.model.client import SURE, choice
 from .quantity import find, plain

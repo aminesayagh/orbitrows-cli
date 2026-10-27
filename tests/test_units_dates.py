@@ -3,7 +3,7 @@ answer asked, the day/month order always the user's; and a period as a condition
 from datetime import date
 
 import pytest
-from datephrase import EngineUnavailable, read_temporal
+from orbitrows.units.datephrase import EngineUnavailable, read_temporal
 
 from orbitrows.pipeline.prompt.conditions import predicate
 from orbitrows.units import dates
