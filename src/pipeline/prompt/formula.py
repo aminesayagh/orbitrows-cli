@@ -128,6 +128,7 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
                      for x in params if (x.get("unit") or {}).get("kind") == "physical_unit"]
             kind = column_kind(schema, db, target) if db is not None else "number"
             up = {"target": target, "target_kind": kind, "words": words, "predicates": preds, "units": units,
+                  "dates": cond6.get("dates", []),
                   "table_columns": table_columns(schema, main, kind == "number"),
                   "stored_values": stored_values(schema, db, target) if kind == "text" else [],
                   "texts": [{"text": v["text"], "start": v["start"] - off} for v in values

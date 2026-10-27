@@ -42,6 +42,7 @@ import re
 
 from orbitrows.sql.sql import check, program
 from orbitrows.pipeline.store.context import declaration
+from orbitrows.pipeline.store.profile import facts
 from orbitrows.units.header import _tables
 from orbitrows.units.parameters import parameters
 from .values import search, within
@@ -60,6 +61,7 @@ from .asking import question
 from orbitrows.services.model.client import ask, choice, yes_no
 from .parts import columns_of, main_table
 from .relations import chained, linked, paths, relationships
+from orbitrows.units import dates
 from orbitrows.units.quantity import find, plain
 
 CONTEXT = ("A merchant wrote a prompt to edit or read their store database (tables and columns in `tables`). It was "
@@ -95,7 +97,7 @@ MODIFIERS = {
 ROWS = ("select", "update", "delete")
 OPERATORS = {
     "=": "Equal to a value ('the black ones', 'in Rabat', 'priced at 250', also 'not black': the negation is asked "
-         "apart).",
+         "apart), or inside a period ('in August', 'last month').",
     "<": "Lower than ('under 300', 'cheaper than', 'before').", "<=": "At most ('300 or less', 'up to').",
     ">": "Greater than ('over 300', 'heavier than', 'after').", ">=": "At least ('300 or more', 'from').",
     "between": "Between two bounds, both included ('between 200 and 500').",
@@ -125,13 +127,13 @@ def around(r, key, values, params, m) -> str:
     elif kind == "n":
         a, b = params[i]["start"], params[i]["end"]
     else:
-        a, b = list(DATE.finditer(t))[i].span()
+        a, b = r["dates"][i]["start"], r["dates"][i]["end"]
     return f"'…{t[max(0, a - 30):b].strip()}'"                # its words come before it ('over 100', 'heavier than 1 kg')
 
 
 COMPUTED = ("A value computed from the table, not written in the request: a share or a multiple of another column "
             "('under 30% of the price', 'twice the cost'), a difference between columns, the column's average, lowest "
-            "or highest value, a number of days before today ('in the last 30 days').")
+            "or highest value.")
 COMPUTED_RULES = [
     "The operation is the computation the condition compares with; which records, and showing, deleting or "
     "updating them, are not part of it.",
@@ -151,7 +153,6 @@ NEGATE_RULES = [
     "sales' (refunded, not negated).",
     "Answer no for 'without a description' or 'no barcode': that is the condition 'is empty', not a negation.",
 ]
-DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 
 
 COMPARES = ("Only those whose records of {0} compare with a number: how many there are, or a total, an average, "
@@ -369,6 +370,14 @@ def column_info(schema, key) -> dict:
     return col | {"unit": header_unit(col["header"] or col["sql_name"])}
 
 
+def holds_dates(db, schema, key) -> bool:
+    """The import's profile says the column holds dates (YYYY-MM-DD); a store never profiled: a text column may."""
+    t, c = key.split(".")
+    name = next(d["definition"]["sql_name"] for d in schema if d["definition"]["table_id"] == t)
+    f = facts(db, name, column_info(schema, key)["sql_name"]) if db is not None else {}
+    return f.get("dates", not f and column_info(schema, key)["sql_type"] == "TEXT")
+
+
 def fits(param: dict, info: dict):
     """The number's value in the column's unit, or None when its unit is of another kind (a unit is converted only
     when both are known; a column unit unknown takes any number, unconverted: Jev chooses)."""
@@ -426,16 +435,24 @@ def operands(db, schema, r, key, values, params, parts_req) -> dict:
         if x is not None and float(p["value"]) not in used:
             unit = (info["unit"] or {}).get("unit")
             out[f"n{i}"] = (f"{p['text']}" + (f" = {x} {unit}" if unit and x != p["value"] else ""), x)
-    if info["sql_type"] == "TEXT":
-        for i, d in enumerate(DATE.findall(r["text"])):
-            out[f"d{i}"] = (f"the date {d}", d)
+    if holds_dates(db, schema, key):
+        out["today"] = (f"today, the session's date ({dates.today().isoformat()})", dates.today().isoformat())
+        for i, d in enumerate(r.get("dates", [])):            # units/dates: a day, a whole period, a length
+            v = d["value"]                                    # of time from today (as a day)
+            if v["kind"] == "period":
+                out[f"d{i}"] = (f"the period '{d['text']}' ({v['start']} to {v['end']}, the end excluded)",
+                                {"type": "period", "start": v["start"], "end": v["end"]})
+            elif v.get("date"):
+                out[f"d{i}"] = (f"the date {v['date']} ('{d['text']}')", v["date"])
+    elif info["sql_type"] == "TEXT":
         # texts for a pattern ("contains 100%"): step 3's phrases and the parameters as written, quoted text; never a
         # text already offered as a stored value (Jev would split its answer between the two)
         given = {x.casefold() for c in out.values() if isinstance(c[1], list) for x in c[1]}
         given |= {v["text"].casefold() for v in values if v["request"] == r["id"] and v.get("column") == key}
         pool = [v["text"] for v in values if v["request"] == r["id"] and v.get("role") in ("lookup", "written")]
         pool += [p["text"] for p in params] + [a or b for a, b in re.findall(r"'([^']+)'|\"([^\"]+)\"", r["text"])]
-        for i, t in enumerate(dict.fromkeys(t for t in pool if t.casefold() not in given and not DATE.fullmatch(t))):
+        phrases = {d["text"] for d in r.get("dates", [])}
+        for i, t in enumerate(dict.fromkeys(t for t in pool if t.casefold() not in given and t not in phrases)):
             out[f"x{i}"] = (f"the text '{t}'", t)
     for other in columns_of(schema, [table]):
         if other != key and comparable(column_info(schema, other)["sql_type"], info["sql_type"]):
@@ -454,7 +471,8 @@ def questions_2(db, requests, schema, stage1, values, params, parts) -> dict:
         for key in stage1.get(rid, {}).get("columns", []):
             info = column_info(schema, key)
             name = f"the {info['sql_name']} column of {key.split('.')[0][2:]} ({info['sql_type']})"
-            ops = {k: v for k, v in OPERATORS.items() if info["sql_type"] == "TEXT" or k not in TEXT_ONLY}
+            ops = {k: v for k, v in OPERATORS.items() if k not in TEXT_ONLY or info["sql_type"] == "TEXT" and not
+                   holds_dates(db, schema, key)}             # a date column: no "contains"
             cands = operands(db, schema, r, key, values, params[rid], parts.get(rid, {}))
             opts = {k: c[0] for k, c in cands.items()}
             if len(several := mentions(cands)) > 1:           # one condition per value written
@@ -488,6 +506,8 @@ def predicate(op, col, operand, upper, all_values, text_type):
     def esc(t):
         return str(t).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     one = operand[0] if isinstance(operand, list) and len(operand) == 1 else operand
+    if any(isinstance(x, dict) and x.get("type") == "period" for x in (one, upper)):
+        return period(op, col, one, upper)
     if op == "=" and isinstance(operand, list) and len(operand) > 1:   # one value, several spellings
         return {"type": "membership", "expression": col, "operator": "in", "values": [_lit(v) for v in operand]}
     if op in ("=", "<", "<=", ">", ">=") and one is not None:
@@ -506,6 +526,26 @@ def predicate(op, col, operand, upper, all_values, text_type):
             return {"type": "empty_check", "expression": col, "operator": op, "policy": "null_or_space_only"}
         return {"type": "null_check", "expression": col, "operator": "is_null" if op == "is_empty" else "is_not_null"}
     return None
+
+
+def period(op, col, one, upper):
+    """A whole period (units/dates: its start, its end excluded) as the bounds it means: in it (=) from its start to
+    its end; before it (<) before its start; after it (>) from its end; between two (a period or a day each) from the
+    first's start to the second's end."""
+    def cmp(o, v):
+        return {"type": "comparison", "operator": o, "left": col, "right": _lit(v)}
+
+    def low(x):
+        return cmp(">=", x["start"] if isinstance(x, dict) else x)
+
+    def high(x):
+        return cmp("<", x["end"]) if isinstance(x, dict) else cmp("<=", x)
+    if op == "between" and one is not None and upper is not None:
+        return {"type": "all", "children": [low(one), high(upper)]}
+    if not isinstance(one, dict):
+        return None
+    return {"=": {"type": "all", "children": [low(one), high(one)]}, "<": cmp("<", one["start"]),
+            "<=": high(one), ">": cmp(">=", one["end"]), ">=": low(one)}.get(op)
 
 
 def refused(db, schema, table, cond) -> str | None:
@@ -1027,16 +1067,40 @@ def build_2b(db, requests, schema, section, params, answers) -> None:
                                                           "operation": entry["id"]})
 
 
+def dated(r, found, answers, section) -> list[dict]:
+    """The request's dates read (units/dates), each {"text", "start", "end", "value"}; an unsure classification is a
+    question, and that date is not offered."""
+    out = []
+    for i, d in enumerate(found):
+        v = dates.read(d["text"], answers, f"{r['id']}|t{i}")
+        if v and "ask" in v:
+            a = v["ask"]
+            section["requests"].setdefault(r["id"], {})["flagged"] = True
+            section["warnings"].append({"request": r["id"], "problem": a["problem"], "answer": a["answer"],
+                                        "probability": a["probability"]} | question(answers, a["key"]))
+        elif v:
+            out.append(d | {"value": v} | ({"text": d["text"][:v["length"]], "end": d["start"] + v["length"]}
+                                           if "length" in v else {}))
+    return out
+
+
 async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], parts: dict, db=None, model=None) -> dict:
     """sources: step 4's section["requests"]; values: step 3's section["values"]; parts: step 5's
     section["requests"]."""
     """db, model: the store and GLiNER2, for stage 2 (without them, stage 1 only)."""
     st, a2 = state(prompt, requests, schema, sources, values, parts), {}
+    found = {r["id"]: dates.spans(r["text"], model) for r in requests if r["statement"] in ROWS} if model else {}
+    timed = {k: q for r in requests for i, d in enumerate(found.get(r["id"], []))   # their classification: in this
+             for k, q in dates.questions(f"{r['id']}|t{i}", f"request {r['id']} ('{r['text']}')", d["text"]).items()}
     try:
-        answers = await ask(jev, st, questions(requests, schema, sources))
+        answers = await ask(jev, st, questions(requests, schema, sources) | timed)
     except Exception as e:                                    # API error: nothing is guessed
         answers = {"error": repr(e)}
     section = build(requests, schema, sources, values, answers)
+    requests = [r | {"dates": dated(r, found.get(r["id"], []), answers, section)} for r in requests]
+    for r in requests:                                        # kept for the formula ("set the date to …", "2 weeks
+        if r["dates"] and r["id"] in section["requests"]:    # later"): read once
+            section["requests"][r["id"]]["dates"] = r["dates"]
     if db is not None and model is not None:
         params = {r["id"]: parameters(r["text"], model) for r in requests}
         try:

@@ -356,25 +356,21 @@ UNIT = {"days": "days", "weeks": "weeks", "months": "months", "years": "years", 
 TEXT_USE = {"target": "It is the column the request changes.",
             "set_to": "The changed column becomes this column's value ('set the barcode to the SKU').",
             "other": "None of these."}
-DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2} (?:January|February|March|April|May|June|July|August|"
-                  r"September|October|November|December) \d{4}\b|\b(?:January|February|March|April|May|June|July|"
-                  r"August|September|October|November|December) \d{1,2}, \d{4}\b")
 
 
 def iso(date_text: str) -> str | None:
-    """A written date as YYYY-MM-DD (fixed formats only: relative dates are later, notice.md #17)."""
-    from datetime import datetime
-    for f in ("%Y-%m-%d", "%d %B %Y", "%B %d, %Y"):
-        try:
-            return datetime.strptime(date_text, f).strftime("%Y-%m-%d")
-        except ValueError:
-            pass
-    return None
+    """A written date as YYYY-MM-DD, or None: dateparser through ../date_to_number. None also when the reader would
+    ask the user (01/02/2026: January 2 or February 1?): its questions are not forwarded yet. Missing parts and
+    relative dates are filled from the current date (no session date yet, notice.md #17); a time of day is dropped."""
+    from temporal_reader import read_temporal
+    r = read_temporal(date_text)
+    return r.date.isoformat() if r.date else None
 
 
 def text_candidates(text, upstream, preds, dated):
-    """The texts the request may write (step 3's written values / the benchmark's texts, and quoted texts), the dates
-    written in full, and — for a date column — the numbers of a duration. Positions in the text."""
+    """The texts the request may write (step 3's written values / the benchmark's texts, and quoted texts), its dates
+    (upstream "dates": units/dates, read by step 6) and, for a date column, its lengths of time (their unit read) and
+    other numbers. Positions in the text."""
     inside = lambda a: any(p["start"] <= a < p["end"] for p in preds if p["start"] >= 0)
     out = []
     for m in re.finditer(r"'([^']*)'|\"([^\"]*)\"", text):                 # quoted: the text between the quotes
@@ -384,13 +380,15 @@ def text_candidates(text, upstream, preds, dated):
         a = t.get("start", text.find(t["text"]))
         if a >= 0 and not any(c["start"] <= a < c["end"] for c in out):
             out.append({"text": t["text"], "start": a, "end": a + len(t["text"]), "kind": "text"})
-    for m in DATE.finditer(text):
-        if not inside(m.start()) and not any(c["start"] <= m.start() < c["end"] for c in out):
-            out.append({"text": m.group(0), "start": m.start(), "end": m.end(), "kind": "date", "iso": iso(m.group(0))})
-    if dated:                                               # "one month later", "a week earlier": 1 of a time unit
-        for m in re.finditer(r"\b(?:one|an?)(?=\s+(?:day|week|month|year)s?\b)", text, re.I):
-            if not inside(m.start()):
-                out.append({"text": m.group(0), "start": m.start(), "end": m.end(), "kind": "number", "value": 1})
+    for d in upstream.get("dates", []):
+        v, a = d["value"], d["start"]
+        if inside(a) or any(c["start"] <= a < c["end"] for c in out):
+            continue
+        if v["kind"] == "date":
+            out.append({"text": d["text"], "start": a, "end": d["end"], "kind": "date", "iso": v["date"]})
+        elif v["kind"] == "duration" and dated:             # "2 weeks later": its quantity, its unit known
+            out.append({"text": d["text"], "start": a, "end": d["end"], "kind": "number", "value": v["quantity"],
+                        "unit": v["unit"]})
         skip = [(c["start"], c["end"]) for c in out] + [(p["start"], p["end"]) for p in preds if p["start"] >= 0]
         for o in occurrences(text, "en", skip):
             if not o["percent"]:
@@ -441,7 +439,7 @@ async def extract_textdate(jev, text: str, upstream: dict, lang: str = "en") -> 
                                               "a new value."])
         q[f"{c['occ']}_column"] = choice(TEXT_CONTEXT, f"The step with {c['occ']} ('{c['text']}'): do its own words "
                                                        f"name the column it changes? Which one?", col_opts, COLUMN_RULES)
-        if c["kind"] == "number":
+        if c["kind"] == "number" and not c.get("unit"):
             q[f"{c['occ']}_unit"] = choice(TEXT_CONTEXT, f"{c['occ']} ('{c['text']}') counts what?", UNIT)
     for k, c in names.items():
         if piped:
@@ -545,7 +543,7 @@ async def extract_textdate(jev, text: str, upstream: dict, lang: str = "en") -> 
         elif kind == "replacement":
             replacement.append((c, a, b))
         elif kind in ("later", "earlier") and c["kind"] == "number":
-            unit, up = ans.get(f"{c['occ']}_unit", ("none", {}))
+            unit, up = (c["unit"], {c["unit"]: 1}) if c.get("unit") else ans.get(f"{c['occ']}_unit", ("none", {}))
             if unit == "none" or up.get(unit, 0) < MIN:
                 ambiguities.append({"problem": f"duration unit of '{c['text']}' unclear", "start": c["start"],
                                     "end": c["end"]})
