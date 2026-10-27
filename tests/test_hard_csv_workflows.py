@@ -222,7 +222,6 @@ def test_import_message_undo_commit_and_export_are_one_workflow(monkeypatch, cap
     monkeypatch.setenv("ORBITROWS_HANDLER", "session_stub:handle")
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join(filter(None, [str(Path(__file__).parent),
                                                                os.environ.get("PYTHONPATH")])))
-    monkeypatch.setattr(cli.coref, "missing", lambda: None)
     monkeypatch.setattr(cli, "connect", lambda: CertainModel(CASES[0]))
     source = home / "catalog.csv"
     source.write_text("sku,name\nA-1,Café\nA-2,Tea\n")

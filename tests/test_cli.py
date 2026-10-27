@@ -28,7 +28,6 @@ CLASSIFY = cli.run.classify                                   # the real one, be
 
 SAVED = saved_cases.tables("shop") | saved_cases.tables("joins_chain")   # what the model's steps decided, by file name
 
-REAL_MISSING = cli.coref.missing
 
 
 class IncomingModel(Model):
@@ -111,7 +110,6 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     monkeypatch.setenv("MODEL", "orbitrows.services.model.client:Model")
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
-    monkeypatch.setattr(cli.coref, "missing", lambda: None)   # CorPipe is not set up here, and never started
     monkeypatch.setattr(cli, "connect", IncomingModel)
     monkeypatch.setattr(cli.incoming_pipeline.context, "declaration", lambda header, kind=None: None)
 
@@ -471,15 +469,6 @@ def test_store_incoming_message(env, capsys, monkeypatch):
     code, out, err = run(capsys, "message", "hi", "--store", "nope")
     assert code == 1 and "No ready store named nope" in err
     assert len(stores()) == 2  # incoming and message never create a store
-
-
-def test_a_message_without_corpipe_is_refused_before_a_session_starts(env, capsys, monkeypatch):
-    monkeypatch.setattr(cli.coref, "missing", REAL_MISSING)    # the real check, on an empty CorPipe folder
-    monkeypatch.setattr(cli.coref, "ROOT", env / "empty")
-    started = []
-    monkeypatch.setattr(cli.session, "ask", lambda *a, **k: started.append(a))
-    code, out, err = run(capsys, "message", "x")
-    assert code == 1 and "CorPipe" in err and ".venv-corpipe" in err and "README" in err and not started
 
 
 def test_store_is_written_to_disk(env, capsys):

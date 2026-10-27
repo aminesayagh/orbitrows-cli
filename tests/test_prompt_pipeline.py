@@ -19,7 +19,7 @@ async def test_run_returns_every_step_and_the_program(monkeypatch):
     saved = json.loads(CASE.read_text())["result"]["pipeline"]
     seen = []
     monkeypatch.setattr(pipeline.extractor, "connect", lambda: "gliner2")
-    monkeypatch.setattr(coref, "mentions", lambda prompts, name: [[]])
+    monkeypatch.setattr(coref, "mentions", lambda prompts: [[]])
 
     def stub(module, section):
         async def run(*args, **kwargs):
@@ -58,7 +58,7 @@ class Unsure(Model):
 async def test_a_question_pauses_the_run_and_the_answer_lets_it_go_on(monkeypatch):
     saved = json.loads(CASE.read_text())["result"]["pipeline"]
     monkeypatch.setattr(pipeline.extractor, "connect", lambda: "gliner2")
-    monkeypatch.setattr(coref, "mentions", lambda prompts, name: [[]])
+    monkeypatch.setattr(coref, "mentions", lambda prompts: [[]])
     seen = []
 
     def stub(module, section, asks=False):
@@ -198,7 +198,7 @@ def offered(monkeypatch, statement, parts_, grouping_=None):
         return {"store": True, "incoming": source_route.available(db), "warnings": []}
     monkeypatch.setattr(source_route, "run", selected)
     monkeypatch.setattr(pipeline.extractor, "connect", lambda: "gliner2")
-    monkeypatch.setattr(coref, "mentions", lambda prompts, name: [[]])
+    monkeypatch.setattr(coref, "mentions", lambda prompts: [[]])
     refresh(db)                                               # the profile the upload counts
     return db
 
@@ -285,7 +285,7 @@ async def test_a_repeating_upload_key_is_linked_and_totalled_per_store_record(mo
         return {"store": True, "incoming": source_route.available(db), "warnings": []}
     monkeypatch.setattr(source_route, "run", selected)
     monkeypatch.setattr(pipeline.extractor, "connect", lambda: "gliner2")
-    monkeypatch.setattr(coref, "mentions", lambda prompts, name: [[]])
+    monkeypatch.setattr(coref, "mentions", lambda prompts: [[]])
     result = await pipeline.run("total warehouse quantity per variant", Model(), db)
     assert result["assembly"]["errors"] == [], result["assembly"]
     [ran] = result["assembly"]["program"]
@@ -313,7 +313,7 @@ async def test_a_branch_of_the_formula_is_left_out_of_the_where_s_tree(monkeypat
     """"…but for the black ones…": color = 'black' is the CASE's branch, so grouping only joins the other conditions."""
     saved = json.loads(CASE.read_text())["result"]["pipeline"]
     monkeypatch.setattr(pipeline.extractor, "connect", lambda: "gliner2")
-    monkeypatch.setattr(coref, "mentions", lambda prompts, name: [[]])
+    monkeypatch.setattr(coref, "mentions", lambda prompts: [[]])
     black = {"type": "comparison", "operator": "=", "left": {"type": "column", "source": "t_variants",
                                                             "reference": "c_color"}, "right": {"type": "literal",
                                                                                                "value": "black"}}

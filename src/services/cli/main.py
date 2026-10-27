@@ -16,7 +16,6 @@ from pathlib import Path
 
 from typesafe_sdk import TypeSafeError
 
-from orbitrows.pipeline.prompt import coref
 from orbitrows.pipeline.store import run
 from orbitrows.pipeline import incoming as incoming_pipeline
 from orbitrows.services.cli.crash import report
@@ -415,8 +414,6 @@ def ask(target: tuple[str, str | None], request: dict, launch: bool = True) -> d
 def message(text: str, ref: str | None) -> int:
     """Run by the prompt pipeline in the store's session (started if needed, after the key is checked): applied, not
     saved until exit, undo reverts it; or paused on questions for the user."""
-    if not os.environ.get("ORBITROWS_HANDLER") and (why := coref.missing()):   # a test's handler needs no CorPipe
-        raise Refusal(why)
     target, request = resolve(ref), {"op": "message", "text": text}
     if (reply := ask(target, request, launch=False)) is None:
         need_key()                                            # the server runs the model with this process's env
@@ -504,8 +501,8 @@ def parser() -> argparse.ArgumentParser:
     m.add_argument("text", nargs="+")
     u = commands.add_parser("undo", help="revert the session's last change")
     e = commands.add_parser("exit", help="save the session's changes and end it")
-    commands.add_parser("setup", help="prepare everything a message needs, once: Duckling (dates, in Docker), "
-                                      "CorPipe's environment and the models (a few GB the first time)")
+    commands.add_parser("setup", help="prepare everything a message needs, once: Duckling (dates, in Docker) and "
+                                      "the models (about 2 GB the first time)")
     x = commands.add_parser("export", help="write the store's files, rebuilt from its tables, into a folder")
     x.add_argument("-o", "--output", type=Path, required=True, metavar="folder")
     x.add_argument("--force", action="store_true", help="replace files already in the folder")

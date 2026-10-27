@@ -7,88 +7,27 @@ the store described in the context is a parameter (the default is the old one-ta
 The goal is the links between requests (for the link step: order and THEN / AND), never rewriting the prompt: the
 next steps keep both the reference words and their target.
 
-Option D of the benchmark (coref_bench.py, coref_cases.json):
-    1. CorPipe 26 large (local GPU, .venv-corpipe) proposes the mentions: phrases, pronouns, clitics.
+    1. spaCy (the CLI's English model) proposes the mentions, by grammar only: every noun phrase at its whole extent
+       from its own first word ("the price of the Bose speakers", never its bare "the price", never "more than twice
+       their cost"), every subject or object whose head is a word but no noun
+       ("that one", "the cheapest one", "the former"), every pronoun or possessive but the relative ones.
     2. Jev, one call per prompt, one question per mention: what does it point to? (another mention, nothing,
        new rows that an action creates, or ask the merchant).
     3. The uncertainty check comes first: a weak answer, whatever it is, leaves the mention unresolved (a warning).
-CorPipe 26 is CC BY-NC-SA 4.0 (non-commercial): kept for the PoC, not for the product (notice.md #10).
+Replaced CorPipe 26 large on 2026-10-27 (its license, CC BY-NC-SA, is non-commercial; 8.6 GB with its environment).
+Benchmark, the PoC's 70 English prompts (62 references), Jev deciding each source's mentions (.bench/coref_compare.py):
+spaCy 50 right, 1 wrong, 1 silent, 1 false link; CorPipe large 51 / 1 / 3 / 0; f-coref 22 / 1 / 33 / 0 (it only
+proposes mentions it has linked). Adding GLiNER2's candidates offers no more of the references (61/62 either way).
 """
 
-import atexit
-import os
-import re
-import select
-import shutil
-import subprocess
-import tempfile
-from pathlib import Path
-
+from orbitrows.pipeline.expressions.words import nlp
 from orbitrows.services.model.client import ask
 from .asking import question
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[2]                                       # the CLI folder: .venv-corpipe lives there
-PYTHON = Path(".venv-corpipe") / "bin" / "python"             # both under ROOT, read when used
-CORPIPE = Path(".venv-corpipe") / "src" / "crac2026-corpipe" / "corpipe26_onestage.py"
-CORPIPE_MODEL = "ufal/corpipe26-onestage-corefud1.4-large-260702"
 JEV_MIN = 0.8
 TARGET_SURE = 0.9          # a weak "not a reference" is overruled by a target this sure (benchmark: +1 right, no new error)
-TOKEN = re.compile(r"[^\W_]+(?:['’][^\W_]+)?|-[^\W_]+|\S")
-
-SERVER = HERE / "corpipe_server.py"
-SERVER_WAIT = 300                                            # seconds: the first file also waits for the model load
-_server = {}                                                 # model → the running server (one per process)
-_work = []                                                   # the process's private work folder, once made
-
-
-def missing() -> str | None:
-    """What CorPipe needs and isn't there (file existence only), with how to set it up; None when it is all there."""
-    absent = [f"{what} ({ROOT / path})" for what, path in (("its Python", PYTHON), ("its script", CORPIPE))
-              if not (ROOT / path).is_file()]
-    if not absent:
-        return None
-    return ("CorPipe, the reference finder, isn't set up: missing " + " and ".join(absent) + ". Run `orbitrows "
-            f"setup`, or set it up by hand (README, \"CorPipe setup\"): create {ROOT / PYTHON.parents[1]} (python -m venv), clone "
-            f"https://github.com/ufal/crac2026-corpipe into {(ROOT / CORPIPE).parent}, and install its requirements.txt there.")
-
-
-def work_folder() -> Path:
-    """One private temporary folder per process, made on first use and removed when the process ends."""
-    if not _work:
-        _work.append(Path(tempfile.mkdtemp(prefix="orbitrows-corpipe-")))
-        atexit.register(shutil.rmtree, _work[0], ignore_errors=True)
-    return _work[0]
-
-
-def run_corpipe(work: Path, name: str, model: str):
-    """CorPipe on work/NAME.conllu → work/NAME.00.conllu. Through the kept-loaded server (corpipe_server.py); if it
-    fails or hangs, the server is stopped and CorPipe runs once as before (loads the model: ~15 s more)."""
-    python = str(ROOT / PYTHON)
-    p = _server.get(model)
-    try:
-        if p is None or p.poll() is not None:
-            log = open(work / "corpipe_server.log", "a")
-            p = _server[model] = subprocess.Popen([python, str(SERVER), model], cwd=work, text=True, stdin=subprocess.PIPE,
-                                                  stdout=subprocess.PIPE, stderr=log)
-        p.stdin.write(f"{name}.conllu\n")
-        p.stdin.flush()
-        while True:
-            if not select.select([p.stdout], [], [], SERVER_WAIT)[0]:
-                raise TimeoutError("CorPipe server: no answer")
-            line = p.stdout.readline()
-            if not line:
-                raise RuntimeError("CorPipe server stopped")
-            if line.startswith("@@corpipe ok"):
-                return
-            if line.startswith("@@corpipe error"):
-                raise RuntimeError(line.strip())
-    except (OSError, TimeoutError, RuntimeError):
-        if p is not None:
-            p.kill()
-        _server.pop(model, None)
-    subprocess.run([python, str(ROOT / CORPIPE), "--load", model, "--exp", ".", "--epoch", "0", "--test", f"{name}.conllu"],
-                   cwd=work, check=True, capture_output=True)
+ARGUMENTS = ("dobj", "nsubj", "nsubjpass", "pobj", "attr")    # spaCy's dependency labels of a subject or an object
+RELATIVE = ("WDT", "WP")                                      # spaCy's tags of a relative pronoun ("that", "which")
 
 
 STORE = "their product catalog table (columns: sku, name, brand, price, stock, ean)"
@@ -111,47 +50,25 @@ RULES = ["A name repeated in full is not a reference to the earlier name: it nam
          "When the words could point to several of the listed words, choose that the merchant must be asked."]
 
 
-def mentions(prompts: list[str], name: str = "corpipe", model: str = CORPIPE_MODEL) -> list[list[dict]]:
-    """CorPipe's mentions for each prompt, in one run: [{start, end, text, cluster}], offsets in the prompt."""
-    work = work_folder()
-    tokens, lines = [], []
-    for i, p in enumerate(prompts):
-        toks = list(TOKEN.finditer(p))
-        tokens.append([m.span() for m in toks])
-        lines += [f"# newdoc id = d{i}", f"# sent_id = d{i}-1", "# text = " + " ".join(p.split())]   # one line
-        for j, m in enumerate(toks, 1):
-            misc = "SpaceAfter=No" if m.end() < len(p) and not p[m.end()].isspace() else "_"
-            lines.append("\t".join([str(j), m.group(), "_", "_", "_", "_", "_", "_", "_", misc]))
-        lines.append("")
-    name = f"{name}_{os.getpid()}"                           # two processes at once never share a file
-    (work / f"{name}.conllu").write_text("\n".join(lines) + "\n")
-    try:
-        run_corpipe(work, name, model)
-        output = (work / f"{name}.00.conllu").read_text()
-    finally:
-        for f in (f"{name}.conllu", f"{name}.00.conllu"):
-            (work / f).unlink(missing_ok=True)
-    found, doc, k, stacks = [[] for _ in prompts], 0, 0, {}
-    for line in output.splitlines():
-        if line.startswith("# newdoc id = d"):
-            doc, k, stacks = int(line.split(" = d", 1)[1]), 0, {}
-        if not line or line.startswith("#"):
-            continue
-        cols = line.split("\t")
-        if not cols[0].isdigit():                            # an empty node (an implied subject): no words
-            continue
-        span = tokens[doc][k]
-        k += 1
-        entity = next((x[len("Entity="):] for x in cols[9].split("|") if x.startswith("Entity=")), "")
-        for m in re.finditer(r"\((\w+)[^()]*?\)|\((\w+)[^()]*|(\w+)\)", entity):
-            if m.group(1):
-                found[doc].append((span[0], span[1], m.group(1)))
-            elif m.group(2):
-                stacks.setdefault(m.group(2), []).append(span[0])
-            else:
-                found[doc].append((stacks[m.group(3)].pop(), span[1], m.group(3)))
-    return [[{"start": s, "end": e, "text": p[s:e], "cluster": eid} for s, e, eid in sorted(f)]
-            for p, f in zip(prompts, found)]
+def mentions(prompts: list[str]) -> list[list[dict]]:
+    """The mentions of each prompt, by spaCy's grammar: [{start, end, text}], offsets in the prompt, in text order."""
+    out = []
+    for p in prompts:
+        doc, spans = nlp("en")(p), set()
+        for chunk in doc.noun_chunks:                         # its whole extent only; a relative pronoun is
+            if chunk.root.tag_ in RELATIVE:                   # no mention ("every product that has": no "that")
+                continue
+            whole = doc[chunk.start:chunk.root.right_edge.i + 1]   # from its own first word: never "more than
+                                                              # twice their cost", "under 40% of their price"
+            spans.add((whole.start_char, whole.end_char))
+        for t in doc:
+            if t.dep_ in ARGUMENTS and t.is_alpha and t.pos_ not in ("NOUN", "PROPN", "PRON", "VERB", "AUX"):
+                whole = doc[t.left_edge.i:t.right_edge.i + 1]   # a word heading no noun phrase ("one", "former")
+                spans.add((whole.start_char, whole.end_char))
+            if (t.pos_ == "PRON" or t.tag_ == "PRP$") and t.tag_ not in RELATIVE:   # not "the one that has"
+                spans.add((t.idx, t.idx + len(t)))
+        out.append([{"start": a, "end": b, "text": p[a:b]} for a, b in sorted(spans)])
+    return out
 
 
 def jev_request(prompt: str, ms: list[dict], ctx: str = CONTEXT):
@@ -225,7 +142,7 @@ def decide(ms: list[dict], answers: dict) -> list[dict]:
 
 
 async def resolve(jev, prompt: str, ms: list[dict], store: str = STORE) -> dict:
-    """The references of one prompt from its CorPipe mentions: {"references", "mentions", "answers"}. If Jev fails,
+    """The references of one prompt from its mentions: {"references", "mentions", "answers"}. If Jev fails,
     every mention is unresolved."""
     error = None
     try:

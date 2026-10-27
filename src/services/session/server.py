@@ -58,12 +58,10 @@ def prompt(db, text: str, calls: dict) -> dict:
     """The prompt pipeline on the session's connection (so on its uncommitted changes), each model answer kept in
     `calls` and replayed from there when the message runs again after its questions are answered. → {"program",
     "errors", "notices"}, or {"paused": {"step", "questions", "notices"}}. Its progress goes to the log."""
-    from orbitrows.pipeline.prompt import coref, pipeline     # here: ~0.6 s of imports a stub handler doesn't need
+    from orbitrows.pipeline.prompt import pipeline            # here: ~0.6 s of imports a stub handler doesn't need
     from orbitrows.pipeline.store.run import Paused
     from orbitrows.services.model.client import Recorded, connect
 
-    if why := coref.missing():                                # the environment may have changed since the CLI checked
-        return {"errors": [{"request": "message", "stage": "setup", "error": why}]}
     ready.wait()                                              # the session's preload: never a model loaded twice
 
     async def run():

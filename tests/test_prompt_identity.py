@@ -92,7 +92,16 @@ PARTS_TEMPLATES = [   # and its outputs' fixed list (the catalog's outputs since
     ", which column is the limit on the new value of ", " based on ('never below the cost': cost)?", "limit of ",
     "how", ": a part is missing", "limit column of ", "change of ", "limit number of ",
 ]
-REPLACED = {"pipeline/prompt/grouping.py": {   # the one tree question over every candidate tree (mixed ones for three
+# 2026-10-27: CorPipe replaced by spaCy's mentions (coref.py): its paths, its CoNLL-U files and its server's
+# protocol are gone; the Jev step's texts and rules are unchanged
+CORPIPE = {' = d', '# newdoc id = d', '# sent_id = d', '# text = ', '--epoch', '--exp', '--load', '--test',
+           '.00.conllu', '.conllu', '.conllu\n', '.venv-corpipe', '@@corpipe error', '@@corpipe ok',
+           'CorPipe server stopped', 'CorPipe server: no answer', 'Entity=', 'SpaceAfter=No',
+           "[^\\W_]+(?:['’][^\\W_]+)?|-[^\\W_]+|\\S", '\\((\\w+)[^()]*?\\)|\\((\\w+)[^()]*|(\\w+)\\)', 'a', 'bin',
+           'cluster', 'corpipe', 'corpipe26_onestage.py', 'corpipe_server.log', 'corpipe_server.py',
+           'crac2026-corpipe', 'python', 'src', 'ufal/corpipe26-onestage-corefud1.4-large-260702'}
+REPLACED = {"pipeline/prompt/coref.py": CORPIPE,
+            "pipeline/prompt/grouping.py": {   # the one tree question over every candidate tree (mixed ones for three
     "all", "any", "_all", "_any", "|tree", "How do the conditions of ", " combine?", "tree", "AND", "OR",  # conditions
     "how the conditions combine: no answer, AND kept"},  # only): one AND / OR question per pair now, any size
     "pipeline/prompt/operation.py": {   # "asks for information back?": never read; a change reports what SQLite's

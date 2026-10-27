@@ -1,5 +1,5 @@
 """One prompt → a checked SQL program on the store's tables: steps 1 to 7 of the PoC (v2/prompt_ast/pipeline.py), in
-its order, each step fed the previous steps' outputs. Paid: the model; local: CorPipe and GLiNER2.
+its order, each step fed the previous steps' outputs. Paid: the model; local: spaCy and GLiNER2.
 
     store   the store's tables read back from SQLite (ddl.schema_from_sqlite), without the CLI's own tables (`_…`);
             with the selected uploads' tables, keyed and linked in that view only (with_incoming): an update takes,
@@ -452,8 +452,8 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
 
     spans = extractor.connect()                                # GLiNER2 is needed only for the store compiler
 
-    step("references (CorPipe)")
-    mentions = coref.mentions([prompt], name="pipeline")[0]
+    step("references")
+    mentions = coref.mentions([prompt])[0]
     step("step 1 · requests, links, references")
     s1 = await request_graph.run(model, prompt, mentions, spans, request_graph.store_text(store))
     pause("requests", requests=s1)

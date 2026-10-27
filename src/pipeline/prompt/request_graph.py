@@ -1,7 +1,7 @@
 """Step 1 of prompt → AST: the prompt's requests, ordered and linked. The output is the request dependency graph (guide
 §1: the third structure, beside the schema and the query AST); the AST statements of later steps carry its ids.
 
-    coref   CorPipe mentions + Jev: the words that point to other words ("them", "it", "the copies") (coref.py)
+    coref   spaCy mentions + Jev: the words that point to other words ("them", "it", "the copies") (coref.py)
     split   GLiNER2 proposes the cuts, Jev confirms each one; a cut below CUT_MIN keeps the text together (check_cuts.py)
     link    Jev: which request each one waits for, and what it takes from it (link.py)
     code    ids r1…, the execution order, the dependency kinds below
@@ -75,7 +75,7 @@ def build_graph(requests: list[dict], linked: dict, references: list[dict]) -> d
 
 
 async def run(jev, prompt: str, mentions: list[dict], model, store: str = coref.STORE) -> dict:
-    """The section for one prompt. mentions: CorPipe's for this prompt (coref.mentions runs all prompts at once)."""
+    """The section for one prompt. mentions: coref's for this prompt (coref.mentions runs all prompts at once)."""
     found = await coref.resolve(jev, prompt, mentions, store)
     _, split = await check_cuts.split_checked(jev, prompt, model, found["references"])
     requests = split["requests"]

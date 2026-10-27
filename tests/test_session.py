@@ -279,7 +279,6 @@ def piped(served, monkeypatch):
 
     monkeypatch.delenv("ORBITROWS_HANDLER")
     monkeypatch.setattr(pipeline, "run", doubling)
-    monkeypatch.setattr(coref, "missing", lambda: None)       # CorPipe is not set up here, and never started
     monkeypatch.setattr(model, "connect", Unsure)
     s = sessions.Session(served.id, sessions.handler())
 
@@ -397,8 +396,7 @@ def supplied(served, monkeypatch):
     monkeypatch.setattr(source_route, "run", lambda model, prompt, db: _now(
         {"store": True, "incoming": source_route.available(db), "warnings": []}))
     monkeypatch.setattr(pipeline.extractor, "connect", lambda: "gliner2")
-    monkeypatch.setattr(coref, "mentions", lambda prompts, name: [[]])
-    monkeypatch.setattr(coref, "missing", lambda: None)
+    monkeypatch.setattr(coref, "mentions", lambda prompts: [[]])
     monkeypatch.delenv("ORBITROWS_HANDLER")
     s = sessions.Session(served.id, sessions.handler())
     yield s
@@ -490,8 +488,7 @@ def adding(served, monkeypatch):
         monkeypatch.setattr(source_route, "run", lambda model, prompt, db: _now(
             {"store": True, "incoming": source_route.available(db), "warnings": []}))
         monkeypatch.setattr(pipeline.extractor, "connect", lambda: "gliner2")
-        monkeypatch.setattr(coref, "mentions", lambda prompts, name: [[]])
-        monkeypatch.setattr(coref, "missing", lambda: None)
+        monkeypatch.setattr(coref, "mentions", lambda prompts: [[]])
         monkeypatch.delenv("ORBITROWS_HANDLER")
         made.append(sessions.Session(served.id, sessions.handler()))
         return made[-1]

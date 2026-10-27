@@ -23,25 +23,12 @@ uv run --env-file .env orbitrows --help
   `rasa/duckling`), unless one already answers at `DATEPHRASE_DUCKLING_URL` (default `127.0.0.1:8000`). Docker must be
   installed. Each session starts it again when it isn't running. Without it, requests that mention a date are refused;
   the others run.
-- **CorPipe's environment** (below).
 - **The models**: GLiNER2, the meaning model (paraphrase-multilingual-MiniLM), the operations search model
-  (bge-small-en), spaCy's English model, and CorPipe's. Each session then loads them in the background as soon as it
-  starts, so its first message doesn't wait on them.
+  (bge-small-en) and spaCy's English model. Each session then loads them in the background as soon as it starts, so
+  its first message doesn't wait on them.
 
-## CorPipe setup
-
-Messages find the words that point to other words ("them", "the copies") with CorPipe, a local model that runs in its
-own Python environment, because its `transformers` version clashes with the CLI's. `orbitrows message` refuses, and
-says what is missing, until it is set up. `orbitrows setup` runs these steps; by hand they are:
-
-```bash
-python -m venv .venv-corpipe                                   # next to pyproject.toml
-git clone https://github.com/ufal/crac2026-corpipe .venv-corpipe/src/crac2026-corpipe
-.venv-corpipe/bin/pip install -r .venv-corpipe/src/crac2026-corpipe/requirements.txt
-```
-
-The model (`ufal/corpipe26-onestage-corefud1.4-large-260702`) downloads on first use. Its license is CC BY-NC-SA 4.0
-(non-commercial).
+The words that point to other words ("them", "the copies") are found with spaCy's grammar, and Jev decides what each
+one points to. (CorPipe did this until 2026-10-27; it was replaced for its non-commercial license and its 8.6 GB.)
 
 ## Using it
 
@@ -104,7 +91,7 @@ Each store is a row in the registry, `~/.local/share/pilotstore/stores.db` (`$XD
 A store's messages run in a **session**: a background process per store (`python -m orbitrows.services.session`, started by the first `message`) that keeps one SQLite transaction open on `session.db`. The CLI talks to it over `stores/<id>/session.sock`; its output goes to `session.log`.
 
 - **When it's saved.** Each change (a message that changes rows or the schema, with its `_history` row) stays uncommitted: other connections don't see it. The session commits everything when it ends: `orbitrows exit` (prints `Saved.` once committed), the terminal that started it closing (only a real terminal: commands run without one, like an LLM's shell, never end it this way), `ORBITROWS_IDLE` seconds without a request (default 1800), or SIGTERM/SIGHUP.
-- **Messages and their questions.** The session runs the prompt pipeline on its own connection, so it sees the session's unsaved changes; GLiNER2 and CorPipe stay loaded between messages, and progress goes to `session.log`. A message ends in one of three ways:
+- **Messages and their questions.** The session runs the prompt pipeline on its own connection, so it sees the session's unsaved changes; the models stay loaded between messages, and progress goes to `session.log`. A message ends in one of three ways:
   - **Questions** (exit 3): the same JSON as the import's, with ids `m_…` (`{"store", "name", "step", "questions": [{"id", "request", "step", "problem", "type", "options"?}], "notices"}`). Answer them with `orbitrows answer m_… <answer>` (by default, the latest ready store with an open session). When the last one is answered, the message runs again, replaying Jev's recorded answers. One message waits at a time: a new message replaces it, and says so in a notice.
   - **Applied** (exit 0): `{"store", "name", "applied": [{"request", "sql", "columns", "rows"} | {"request", "sql", "changed"}], "notices"}`.
   - **Refused** (exit 1): the pipeline found errors. Nothing is applied, and the errors are printed on stderr. A request that would change the table structure (add, drop or rename a column or a table: a `CREATE`, `ALTER` or `DROP` statement) is refused too, with "Changing the table structure isn't supported yet: nothing was changed.", so the export map and the classification stay true.
