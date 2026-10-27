@@ -87,7 +87,7 @@ async def test_a_question_pauses_the_run_and_the_answer_lets_it_go_on(monkeypatc
     settle(calls, p.questions[0]["question"]["call"], "rows", "yes")
     seen.clear()
     out = await pipeline.run(saved["prompt"], Recorded(inner, calls), baseline())   # replayed: no new call
-    assert len(inner.asked) == 1 and seen[-1] == "grouping" and "assembly" in out
+    assert len(inner.asked) == 2 and seen[-1] == "grouping" and "assembly" in out   # the guard's and step 3's
     assert [w["problem"] for w in out["values"]["warnings"]] == ["a code rule"]   # the answer is certain: no question
 
 
@@ -341,3 +341,17 @@ async def test_a_branch_of_the_formula_is_left_out_of_the_where_s_tree(monkeypat
 
 async def _section(section):
     return json.loads(json.dumps(section))
+
+
+async def test_the_guard_routes_a_sure_non_data_message_and_lets_a_doubt_run():
+    from orbitrows.pipeline.prompt import guard
+
+    class Says(Model):
+        def __init__(self, kind, p):
+            self.kind, self.p = kind, p
+
+        async def answer(self, state, questions):
+            return {k: (self.kind, {self.kind: self.p}) for k in questions}, (None, None)
+    assert "`orbitrows undo`" in await guard.run(Says("undo", 0.95), "undo the last change")
+    assert await guard.run(Says("undo", 0.6), "set the price back to 250") is None      # a doubt: the steps decide
+    assert await guard.run(Says("data", 0.95), "show the variants") is None

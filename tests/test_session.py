@@ -357,7 +357,7 @@ async def _now(value):
 def supplied(served, monkeypatch):
     """products(sku, price in MAD) and an upload supplier.csv(ref, prix in EUR) linked ref → sku (the key) and
     prix → price; the prompt pipeline in an in-process Session, every step stubbed: r1 changes products.price."""
-    from orbitrows.pipeline.prompt import (conditions, formula, grouping, operation, parts, request_graph,
+    from orbitrows.pipeline.prompt import (conditions, formula, grouping, guard, operation, parts, request_graph,
                                            source_route, sources, values)
     from orbitrows.services.storage import incoming
     with closing(sqlite3.connect(served.folder / "session.db")) as db:
@@ -393,6 +393,7 @@ def supplied(served, monkeypatch):
                 grouping: {"requests": {}, "warnings": []}, formula: {"requests": {}, "warnings": []}}
     for module, section in sections.items():
         monkeypatch.setattr(module, "run", lambda *a, section=section, **k: _now(json.loads(json.dumps(section))))
+    monkeypatch.setattr(guard, "run", lambda model, prompt: _now(None))
     monkeypatch.setattr(source_route, "run", lambda model, prompt, db: _now(
         {"store": True, "incoming": source_route.available(db), "warnings": []}))
     monkeypatch.setattr(pipeline.extractor, "connect", lambda: "gliner2")

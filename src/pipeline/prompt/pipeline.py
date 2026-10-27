@@ -25,7 +25,7 @@ from orbitrows.services.extractor import client as extractor
 from orbitrows.services.storage.store import KINDS, ROLES
 from orbitrows.sql.ddl import schema_from_sqlite
 
-from . import assemble, conditions, coref, formula, grouping, operation, parts, request_graph, source_route, sources, values
+from . import assemble, conditions, coref, formula, grouping, guard, operation, parts, request_graph, source_route, sources, values
 
 
 
@@ -432,6 +432,10 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
                 raise Paused(name, questions, [{"step": k} | w for k, ws in warned.items() for w in ws
                                                if "question" not in w])
 
+    step("guardrail")
+    if routed := await guard.run(model, prompt):              # not a database request: nothing runs
+        return {"prompt": prompt, "assembly": {"program": [], "questions": [], "errors": [
+            {"request": "message", "stage": "guardrail", "error": routed}]}}
     step("source selection")
     selected = await source_route.run(model, prompt, db)
     pause("source_selection", source_selection=selected)
@@ -463,6 +467,10 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
             step("step 2 · operation, after cutting a request with two actions")
             s2 = await operation.run(model, prompt, s1["requests"], store)
     pause("requests", "operation", requests=s1, operation=s2)  # after the recut: its cut and links are step 1's
+    if apps := [r["text"] for r in s1["requests"] if s2["requests"][r["id"]].get("statement") == "application"]:
+        return stop(f"Not a database request: '{apps[0]}' is an application action (a backup, an undo, a question "
+                    f"about the tool), so nothing of the message was run; run its command (`orbitrows --help`), then "
+                    f"send the data part as its own message", "operation", requests=s1, operation=s2)
     reqs = [r | {k: v for k, v in s2["requests"][r["id"]].items() if k in ("statement", "input")}
             for r in s1["requests"]]
     step("step 3 · values")
