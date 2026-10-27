@@ -367,6 +367,8 @@ def statement(r, st, main, schema, src, part, cond6, group6, built, warnings, nu
             warnings.append({"request": rid, "problem": "the order by a computed value: not built"})
         if order:
             sel["order_by"] = order
+        if group6.get("having") and sel.get("group_by"):   # a condition on the groups: on the main table's columns
+            sel["having"] = rewrite(group6["having"], {main: a})
         if group6.get("limit") is not None:
             sel["limit"] = group6["limit"]
     return typed(sel, numbers, {})
@@ -475,6 +477,9 @@ def assemble(db, schema, requests, operation, sources, parts, conditions, groupi
         g6, c6 = grouping.get(rid, {}), conditions.get(rid, {})
         if c6.get("refused"):                                 # a condition it cannot build: never run without it
             warnings.append({"request": rid, "problem": f"not built: {c6['refused']}"})
+            continue
+        if g6.get("having") and not g6.get("group_by"):       # a condition on groups, and no group column
+            warnings.append({"request": rid, "problem": "not built: the condition on groups has no group column"})
             continue
         ast = statement(r, st, main, schema, sources.get(rid, {}), parts.get(rid, {}), c6, g6, items, warnings,
                         typed_columns)

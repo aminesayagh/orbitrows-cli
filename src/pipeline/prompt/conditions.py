@@ -830,6 +830,83 @@ def build_2c(db, requests, schema, section, params, answers) -> None:
                                                           "operation": "COMPARE_LINKED_AGGREGATE"})
 
 
+GROUP_AGGREGATE = {"count": "How many records a group has ('the brands with more than 5 products').",
+                   "count_distinct": "How many different values of a column a group has ('the warehouses holding "
+                                     "fewer than 10 different variants').",
+                   "sum": "The total of a column over a group ('the warehouses whose total stock is over 60').",
+                   "avg": "The average of a column over a group ('the colors averaging over 150 in price').",
+                   "min": "The lowest value of a column in a group.",
+                   "max": "The highest value of a column in a group.",
+                   "none": "None: every group is kept, or the request's conditions choose records, not groups."}
+
+
+def questions_2d(requests, schema, section, params) -> dict:
+    """Stage 2d, per grouped read (stage 1): does it keep only the groups whose records, together, compare with a
+    number (HAVING), and if so the aggregate, the column of the main table it reads, the operator, the number; asked
+    in stage 2b's call."""
+    q = {}
+    for r in requests:
+        rid, said = r["id"], f"request {r['id']} ('{r['text']}')"
+        if not (main := section.get(rid, {}).get("group_of")):
+            continue
+        k = f"{rid}|having"
+        q[f"{k}|aggregate"] = choice(CONTEXT, f"{said} gives one answer per group. Does it keep only the groups whose "
+                                              f"records, taken together, compare with a number? If so, what of them?",
+                                     GROUP_AGGREGATE)
+        q[f"{k}|column"] = choice(CONTEXT, f"In {said}, when a group's total, average, lowest, highest or number of "
+                                           f"different values is compared, which column does it read?",
+                                  columns_of(schema, [main]) | {"none": "None: it only counts the records."})
+        q[f"{k}|op"] = choice(CONTEXT, f"In {said}, how is the group's figure compared with the number?", OPS)
+        nums = {f"n{i}": p["text"] for i, p in enumerate(params.get(rid, [])) if p["value"] is not None}
+        q[f"{k}|number"] = choice(CONTEXT, f"In {said}, which number is the group's figure compared with?",
+                                  nums | {"none": "None."})
+    return q
+
+
+def build_2d(requests, schema, section, params, answers) -> None:
+    """Each group condition: AGG(column) OP number, kept as the read's `having` (stage 4 passes it on); below SURE a
+    question; a part missing or unfit: the request is refused, never run on every group. A condition stage 2 read
+    from the same comparison on each record ("total stock over 60": quantity > 60) is that one: removed."""
+    out, warnings = section["requests"], section["warnings"]
+    for r in requests:
+        rid = r["id"]
+        if not (main := out.get(rid, {}).pop("group_of", None)):
+            continue
+        k = f"{rid}|having"
+
+        def pick(name):
+            v, probs = answers.get(f"{k}|{name}", (None, {}))
+            if v is not None and probs.get(v, 1) < SURE:
+                out[rid]["flagged"] = True
+                warnings.append({"request": rid, "problem": f"{name} of the condition on groups uncertain",
+                                 "answer": v, "probability": round(probs.get(v, 0), 2)} | question(answers, f"{k}|{name}"))
+            return None if v == "none" else v
+        if "error" in answers:
+            out[rid]["refused"] = "the condition on groups could not be read (model error), nothing is guessed"
+            warnings.append({"request": rid, "problem": out[rid]["refused"], "error": answers["error"]})
+            continue
+        if (f := pick("aggregate")) is None:
+            continue
+        column, op, n = pick("column"), pick("op"), pick("number")
+        number = params[rid][int(n[1:])]["value"] if n and n[1:].isdigit() and int(n[1:]) < len(params.get(rid, [])) \
+            else None
+        typ = column and column_info(schema, column)["sql_type"]
+        why = (f"its {f} needs a column of the grouped table" if f != "count" and not column else
+               f"a {f} of the text column {column}" if f in ("sum", "avg") and typ not in ("INTEGER", "REAL") else
+               "no number to compare with" if number is None else "no comparison" if op is None else None)
+        if why:
+            out[rid]["refused"] = f"the condition on groups: {why}"
+            warnings.append({"request": rid, "problem": f"not supported: {out[rid]['refused']}"})
+            continue
+        for c in [c for c in out[rid].get("predicates", []) if not c.get("linked") and c["operator"] == op
+                  and (c["condition"].get("right") or {}).get("value") == number]:
+            out[rid]["predicates"].remove(c)
+        agg = {"type": "aggregate", "function": "count" if f == "count_distinct" else f,
+               "distinct": f == "count_distinct", **({"argument": _col(column)} if column and f != "count" else {})}
+        out[rid]["having"] = {"type": "comparison", "operator": op, "left": agg,
+                              "right": {"type": "literal", "value": number}}
+
+
 def questions_2b(requests, schema, section, params) -> dict:
     """Per computed condition (build_2: Jev's value "computed"): which catalog operation (or none), which other
     column of its table it is computed from, which of the request's numbers it uses; one call."""
@@ -974,14 +1051,18 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
                 g["comparisons"] = found
                 routed = {h["column"] for h in found if h.get("from_computed")}
                 g["computed"] = [c for c in g.get("computed", []) if c["column"] not in routed]
+            if g.get("grouped"):                              # stage 2d: a condition on its groups (HAVING)
+                g["group_of"] = main_table(requests, sources, r["id"])
         if q := questions_2b(requests, schema, section["requests"], params) | \
-                questions_2c(requests, schema, section["requests"], params):   # stages 2b, 2c: one call
+                questions_2c(requests, schema, section["requests"], params) | \
+                questions_2d(requests, schema, section["requests"], params):   # stages 2b, 2c, 2d: one call
             try:
                 a2b = await ask(jev, st, q)
             except Exception as e:
                 a2b = {"error": repr(e)}
         build_2b(db, requests, schema, section, params, a2b)
         build_2c(db, requests, schema, section, params, a2b)
+        build_2d(requests, schema, section, params, a2b)
         section["parameters"] = params
         section["jev"] = {"stage_1": answers, "stage_2": a2, "stage_2b": a2b}
         return section

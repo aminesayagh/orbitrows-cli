@@ -198,3 +198,41 @@ def test_a_table_two_links_away_is_reached_through_its_middle_table_only_when_re
                   "columns": [{"expression": {"type": "column", "source": "t_products", "reference": "c_product_id"},
                                "alias": "id"}], "scope": {"type": "filtered", "where": cond}}], schema)[0]
     assert sorted(r[0] for r in db.execute(q)) == [6, 7, 12]
+
+
+def per_group(aggregate, column, number):
+    """"the colors with more than N variants": a grouped read (stage 1) and stage 2d's answers given → assembly's
+    output."""
+    db = sqlite3.connect(":memory:")
+    db.execute("CREATE TABLE variants (sku TEXT PRIMARY KEY, color TEXT, price REAL)")
+    db.executemany("INSERT INTO variants VALUES (?, ?, ?)",
+                   [("A", "black", 10), ("B", "black", 20), ("C", "black", 30), ("D", "navy", 40), ("E", "red", 50)])
+    schema = [n.model_dump() for n in schema_from_sqlite(db)]
+    requests = [{"id": "r1", "text": "the colors with more than N variants", "statement": "select"}]
+    sources = {"r1": {"from": {"type": "database_table", "reference": "t_variants"}, "reads": []}}
+    section = conditions.build(requests, schema, sources, [], {"r1_all": 0.02, "r1_grouped": 0.95})
+    params = {"r1": [{"text": str(number), "value": number, "unit": None}]}
+    section["requests"]["r1"]["group_of"] = "t_variants"
+    k = "r1|having"
+    assert {f"{k}|aggregate", f"{k}|column", f"{k}|op", f"{k}|number"} <= set(
+        conditions.questions_2d(requests, schema, section["requests"], params))
+    conditions.build_2d(requests, schema, section, params,
+                        {f"{k}|aggregate": (aggregate, {aggregate: 0.95}), f"{k}|column": (column, {column: 0.9}),
+                         f"{k}|op": (">", {">": 0.95}), f"{k}|number": ("n0", {"n0": 0.95})})
+    tree = grouping.build(requests, section, {}, {"r1|group": ("t_variants.c_color", {"t_variants.c_color": 0.95})})
+    out = assemble.assemble(db, schema, requests, {"r1": {"statement": "select"}}, sources,
+                            {"r1": {"outputs": [{"column": None, "aggregate": "count"}]}}, section["requests"],
+                            tree["requests"])
+    return db, out
+
+
+def test_a_condition_on_groups_keeps_only_the_groups_meeting_it():
+    db, out = per_group("count", "none", 1)
+    assert not out["errors"], out
+    assert sorted(db.execute(out["program"][0]["sql"][0])) == [("black", 3)]
+
+
+def test_a_condition_on_groups_that_cannot_be_built_leaves_the_request_unbuilt():
+    """A total of a text column: refused, never every group."""
+    db, out = per_group("sum", "t_variants.c_color", 1)
+    assert out["program"] == [] and any("not built" in q["problem"] for q in out["questions"]), out

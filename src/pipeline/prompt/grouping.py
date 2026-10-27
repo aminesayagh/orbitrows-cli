@@ -13,7 +13,7 @@ read's sort, limit and group columns (plan S5, S7). Stages 1–2 are conditions.
     (15 for six conditions, in the one call)
 
 Section "grouping" of cases/<id>.json: {"requests": {"r1": {"where": AST | None, "rows_from"?, "order_by"?,
-"limit"?, "group_by"?, "flagged"?}}, "warnings", "jev"}.
+"limit"?, "group_by"?, "having"?, "flagged"?}}, "warnings", "jev"}.
 """
 import json
 import re
@@ -206,6 +206,8 @@ def build(requests, section, params, answers) -> dict:
             col = pick(rid, "group")
             if col:
                 out[rid]["group_by"] = [_col(col)]
+        if g.get("having"):                                   # stage 2d's condition on the groups
+            out[rid]["having"] = g["having"]
     return {"requests": out, "warnings": warnings}
 
 
