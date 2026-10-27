@@ -39,8 +39,6 @@ CHECKS = {
                                 "SELECT variant_id FROM variants WHERE (price_mad - cost_mad) * 100.0 / cost_mad > 110"),
     "COMPARE_TABLE_AVERAGE": ("variants", {"column": PRICE, "operator": ">"},
                               "SELECT variant_id FROM variants WHERE price_mad > (SELECT AVG(price_mad) FROM variants)"),
-    "WITHIN_LAST_DAYS": ("sales", {"column": col("sales", "sold_on"), "days": 30},
-                         "SELECT sale_id FROM sales WHERE sold_on >= date('now', '-30 days')"),
     "INCREASE_PERCENT": ("variants", {"column": PRICE, "percent": 10},
                          "SELECT variant_id, price_mad * 1.1 FROM variants"),
     "CLAMP_MAX": ("variants", {"column": PRICE, "limit": 150}, "SELECT variant_id, MIN(price_mad, 150) FROM variants"),
@@ -51,8 +49,6 @@ CHECKS = {
                               "SELECT variant_id FROM variants WHERE price_mad = (SELECT MIN(price_mad) FROM variants)"),
     "COMPARE_TABLE_MAXIMUM": ("variants", {"column": PRICE, "operator": "="},
                               "SELECT variant_id FROM variants WHERE price_mad = (SELECT MAX(price_mad) FROM variants)"),
-    "OLDER_THAN_DAYS": ("sales", {"column": col("sales", "sold_on"), "days": 40},
-                        "SELECT sale_id FROM sales WHERE sold_on < date('now', '-40 days')"),
     "DECREASE_PERCENT": ("variants", {"column": PRICE, "percent": 15}, "SELECT variant_id, price_mad * 0.85 FROM variants"),
     "ADD_AMOUNT": ("variants", {"column": PRICE, "amount": 5}, "SELECT variant_id, price_mad + 5 FROM variants"),
     "SUBTRACT_AMOUNT": ("variants", {"column": PRICE, "amount": 5}, "SELECT variant_id, price_mad - 5 FROM variants"),
@@ -143,8 +139,7 @@ def test_an_entry_builds_the_sql_it_describes(shipped, entry_id):
                   store_of(db))[0]
     rounded = lambda rows: sorted(tuple(round(x, 6) if isinstance(x, float) else x for x in r) for r in rows)
     got, expected = rounded(db.execute(sql)), rounded(db.execute(want))
-    assert got == expected and (got or entry_id in ("WITHIN_LAST_DAYS", "OLDER_THAN_DAYS")), (sql, got, expected)
-    # a bound from today: empty, or every row, as the demo's dates age (both sides compute the same date)
+    assert got == expected and got, (sql, got, expected)
 
 
 def test_the_shipped_vectors_are_those_of_the_entries_as_they_are(shipped):

@@ -128,7 +128,7 @@ class Compiler:
 
     def cond(self, n) -> exp.Expression:
         if isinstance(n, dml.Comparison):
-            return COMPARE[n.operator](this=self.value(n.left), expression=self.value(n.right))
+            return COMPARE[n.operator](this=nocase(self.value(n.left), n.case), expression=self.value(n.right))
         if isinstance(n, (dml.All, dml.Any)):
             parts = [exp.Paren(this=self.cond(c)) for c in n.children]
             return exp.and_(*parts) if isinstance(n, dml.All) else exp.or_(*parts)
@@ -138,9 +138,9 @@ class Compiler:
             out = exp.Is(this=self.value(n.expression), expression=exp.Null())
             return out if n.operator == "is_null" else exp.Not(this=out)
         if isinstance(n, dml.Membership):
-            out = (exp.In(this=self.value(n.expression), query=exp.Subquery(this=self.subquery(n.query)))
-                   if n.query is not None else
-                   exp.In(this=self.value(n.expression), expressions=[self.value(v) for v in n.values]))
+            x = nocase(self.value(n.expression), n.case)
+            out = (exp.In(this=x, query=exp.Subquery(this=self.subquery(n.query))) if n.query is not None else
+                   exp.In(this=x, expressions=[self.value(v) for v in n.values]))
             return out if n.operator == "in" else exp.Not(this=out)
         if isinstance(n, dml.Between):
             out = exp.Between(this=self.value(n.expression), low=self.value(n.lower), high=self.value(n.upper))
@@ -163,6 +163,11 @@ class Compiler:
 
     def where(self, scope):
         return exp.Where(this=self.cond(scope.where)) if isinstance(scope, dml.Filtered) else None
+
+
+def nocase(x: exp.Expression, case: str) -> exp.Expression:
+    """A text compared ignoring letter case: x COLLATE NOCASE (SQLite folds ASCII letters only)."""
+    return exp.Collate(this=x, expression=exp.Var(this="NOCASE")) if case == "ignore" else x
 
 
 def _table(reg: Registry, src: dml.DatabaseTable) -> exp.Table:

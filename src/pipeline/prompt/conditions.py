@@ -42,7 +42,7 @@ import re
 
 from orbitrows.sql.sql import check, program
 from orbitrows.pipeline.store.context import declaration
-from orbitrows.pipeline.store.profile import facts
+from orbitrows.pipeline.store.profile import facts, listed
 from orbitrows.units.header import _tables
 from orbitrows.units.parameters import parameters
 from .values import search, within
@@ -548,6 +548,26 @@ def period(op, col, one, upper):
             "<=": high(one), ">": cmp(">=", one["end"]), ">=": low(one)}.get(op)
 
 
+def cased(cond, db, schema, key):
+    """A text compared for equality with a value the column isn't known to hold (the profile lists none of its values,
+    or not this one: a name, a SKU, "orbit hoodie" for Orbit Hoodie) is compared ignoring letter case; a stored
+    spelling the profile knows stays exact (the user's decision, 2026-10-27, notice #12)."""
+    t, c = key.split(".")
+    name = next(d["definition"]["sql_name"] for d in schema if d["definition"]["table_id"] == t)
+    known = {str(v) for v in listed(db, name, column_info(schema, key)["sql_name"])} if db is not None else set()
+
+    def unknown(*nodes):
+        return any(n.get("type") == "literal" and isinstance(n.get("value"), str) and n["value"] not in known
+                   for n in nodes)
+    if cond.get("type") == "comparison" and cond["operator"] in ("=", "!=") and unknown(cond["right"]):
+        return cond | {"case": "ignore"}
+    if cond.get("type") == "membership" and cond.get("values") and unknown(*cond["values"]):
+        return cond | {"case": "ignore"}
+    if cond.get("type") == "not":
+        return cond | {"operand": cased(cond["operand"], db, schema, key)}
+    return cond
+
+
 def refused(db, schema, table, cond) -> str | None:
     """SQLite's error on a condition, prepared on its table (sql.check: no row read), or None."""
     stmt = {"id": "q", "type": "select", "from": {"type": "database_table", "reference": table, "alias": table},
@@ -575,6 +595,8 @@ def mentioned(rid, key, m, cand, info, answers, out, warnings, db, schema, cands
         flag(f"value read by its meaning: {cand[0]}, to confirm")
     cond = predicate(op, _col(key), operand, None, cand[1] if isinstance(cand[1], list) else [cand[1]],
                      info["sql_type"] == "TEXT")
+    if cond and info["sql_type"] == "TEXT":
+        cond = cased(cond, db, schema, key)
     cond = cond and through(schema, cond, key.split(".")[0])
     if cond is None:
         flag(f"condition on {key} with {cand[0]}: a part is missing")
@@ -668,6 +690,8 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                 drop(rid, key, f"the comparison with {other}, built from that column")
                 continue
             cond = predicate(op, _col(key), operand, upper, all_values, info["sql_type"] == "TEXT")
+            if cond and info["sql_type"] == "TEXT":
+                cond = cased(cond, db, schema, key)
             cond = cond and through(schema, cond, key.split(".")[0])   # a linked table's column: through the keys
             if cond is None and rows_from(r):                    # the other request's condition
                 drop(rid, key, f"the condition of request {rows_from(r)}, whose records this one starts from")
@@ -728,7 +752,7 @@ def catalog_candidates(text: str) -> list[str]:
 
 
 _CATALOG = {}
-NUMBERS = ("percentage", "number", "duration_days")            # an entry's parameters a request's number fills
+NUMBERS = ("percentage", "number")            # an entry's parameters a request's number fills
 def factors(text: str) -> dict:
     """The multipliers and fractions a request writes ("twice", "two and a half times", "a third", "2.5x"), read by the
     shared reader (units/quantity), offered next to its numbers: {"w0": (value, "'twice' (2)")}; Jev chooses."""

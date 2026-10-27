@@ -29,7 +29,7 @@ from .quantity import find, plain
 
 DOWN = ("the date reader's service (Duckling) is not reachable: start it (docker run -d -p 127.0.0.1:8000:8000 "
         "rasa/duckling) or set DATEPHRASE_DUCKLING_URL")       # datephrase 0.3.0 reads every date with Duckling
-TODAY: date | None = None                                    # pinned by a caller (a benchmark, a test); else the clock
+TODAY: date | None = None              # the session's date (set as it starts), or a benchmark's; else the clock
 LABEL = {"time": {"description": "a date, a calendar period or a length of time, without the words comparing with it "
                                  "or moving by it ('before', 'after', 'since', 'in the last', 'older than', 'within', "
                                  "'later', 'earlier'): 'October 5, 2026', 'yesterday', 'last month', 'September 2026', "

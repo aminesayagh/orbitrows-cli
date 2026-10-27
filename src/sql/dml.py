@@ -126,6 +126,7 @@ class Comparison(Node):
     operator: L["=", "!=", "<", "<=", ">", ">="]
     left: Expression
     right: Expression
+    case: L["exact", "ignore"] = "exact"                      # ignore: the left side COLLATE NOCASE (ASCII letters)
 
 
 class All(Node):
@@ -156,6 +157,7 @@ class Membership(Node):
     values: list[Lit] | None = Field(None, min_length=1)
     query: "Select | None" = None
     operator: L["in", "not_in"]
+    case: L["exact", "ignore"] = "exact"                      # ignore: the expression COLLATE NOCASE (ASCII letters)
 
     @model_validator(mode="after")
     def one_source(self):

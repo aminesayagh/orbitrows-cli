@@ -127,13 +127,6 @@ def linked_aggregate(p, config):
     return compare(p["operator"], total, given(p["number"]))
 
 
-def within_days(p, config):
-    """sold in the last 30 days (config {"direction": "within"}): column >= date('now', '-30 days'); older than 30
-    days ("older"): column < that date."""
-    since = func("date", lit("now"), lit(f"-{int(p['days'])} days"))
-    return compare(">=" if config["direction"] == "within" else "<", p["column"], since)
-
-
 # ---- values: they compute a new value ------------------------------------------------------------------------------
 
 def percent_change(p, config):
@@ -252,5 +245,5 @@ def aggregate(p, config):
 
 BUILDERS = {f.__name__: f for f in (
     percent_of_column, multiple_of_column, relative_difference, difference, table_aggregate, linked_aggregate,
-    within_days, percent_change, add_amount, multiply, divide, share_of_column, from_column, round_digits, round_to_step, clamp,
+    percent_change, add_amount, multiply, divide, share_of_column, from_column, round_digits, round_to_step, clamp,
     set_value, fill_empty, capitalize, affix, replace_text, text_function, shift_date, clear, aggregate)}

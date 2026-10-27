@@ -27,8 +27,8 @@ CASES = [   # (whole request, extracted phrase, entry or None)
     ("Which suppliers provide more than five products?", "provide more than five products", "COUNT_LINKED_RECORDS"),
     ("Show the variants with fewer than 20 units in stock overall", "fewer than 20 units in stock overall",
      "SUM_LINKED_RECORDS"),
-    ("Show the sales made this past month", "made this past month", "WITHIN_LAST_DAYS"),
-    ("Delete the logs older than 180 days", "older than 180 days", "OLDER_THAN_DAYS"),
+    ("Show the sales made this past month", "made this past month", None),   # a date or a length of time: units/dates, an operand, not a catalog entry
+    ("Delete the logs older than 180 days", "older than 180 days", None),   # a date or a length of time: units/dates, an operand, not a catalog entry
     ("Bump the prices up by 6 percent", "up by 6 percent", "INCREASE_PERCENT"),
     ("Give a 20% discount on the winter items", "a 20% discount", "DECREASE_PERCENT"),
     ("Add 15 to every order quantity", "add 15", "ADD_AMOUNT"),
@@ -82,7 +82,7 @@ CASES = [   # (whole request, extracted phrase, entry or None)
     ("Normalize the contact_email column to lower case", "normalize to lower case", "LOWER_CASE"),
     ("Scale the weight_g column by a factor of 1000", "scale by a factor of 1000", "MULTIPLY_BY"),
     ("Return the sales with sold_on earlier than 60 days before today", "earlier than 60 days before today",
-     "OLDER_THAN_DAYS"),
+     None),   # a date or a length of time: units/dates, an operand, not a catalog entry
     ("Substitute 'Volt Inc' with 'Volt' in the brand column", "substitute 'Volt Inc' with 'Volt'", "REPLACE_TEXT"),
     ("Round cost_mad to 1 decimal place", "round to 1 decimal place", "ROUND_DECIMALS"),
     ("Round price_mad to a multiple of 25", "round to a multiple of 25", "ROUND_TO_NEAREST"),
@@ -98,7 +98,7 @@ CASES = [   # (whole request, extracted phrase, entry or None)
      "TRIM_SPACES"),
     ("Convert the warehouse column to upper case", "convert to upper case", "UPPER_CASE"),
     ("Return the products whose created_at falls within the last 45 days", "within the last 45 days",
-     "WITHIN_LAST_DAYS"),
+     None),   # a date or a length of time: units/dates, an operand, not a catalog entry
     # no entry supports these: they must be refused, never matched to a close one
     ("Show the variants priced above the median", "above the median", None),
     ("Find the 10% most expensive products", "the 10% most expensive", None),

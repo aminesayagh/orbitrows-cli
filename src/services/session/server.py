@@ -28,11 +28,12 @@ import socket
 import sqlite3
 import time
 import traceback
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from orbitrows.pipeline.store.profile import refresh
 from orbitrows.services import duckling, questions, ready
+from orbitrows.units import dates
 from orbitrows.services.storage import registry
 
 IDLE = 1800                                                   # seconds without a request before it saves and ends
@@ -427,6 +428,7 @@ def main(argv: list[str] | None = None) -> int:
     for s in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(s, lambda number, frame: stop.append(signal.Signals(number).name))
     session = Session(args.store_id, handler())               # a bad ORBITROWS_HANDLER fails before the journal moves
+    dates.TODAY = date.today()                                # the session's date: every message counts from it
     if session.handle is prompt:                              # the real pipeline (a test's handler loads nothing)
         if why := duckling.start():                           # the date reader's service
             log(f"dates can't be read this session: {why}")

@@ -236,3 +236,46 @@ def test_a_condition_on_groups_that_cannot_be_built_leaves_the_request_unbuilt()
     """A total of a text column: refused, never every group."""
     db, out = per_group("sum", "t_variants.c_color", 1)
     assert out["program"] == [] and any("not built" in q["problem"] for q in out["questions"]), out
+
+
+def test_a_written_text_the_column_is_not_known_to_hold_is_compared_ignoring_case():
+    """Notice #12 (the user's decision): "orbit hoodie" finds Orbit Hoodie in a column of many names; a stored
+    spelling the profile knows (a status's) stays exact."""
+    from orbitrows.pipeline.store.profile import LISTED, refresh
+    from orbitrows.sql.sql import program
+    db = sqlite3.connect(":memory:")
+    db.execute("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT, status TEXT)")
+    db.executemany("INSERT INTO items VALUES (?, ?, ?)", [(i, f"Item {i}", "active") for i in range(LISTED + 1)] +
+                   [(99, "Orbit Hoodie", "Archived")])
+    refresh(db)
+    schema = [n.model_dump() for n in schema_from_sqlite(db)]
+
+    def rows(column, value):
+        cond = conditions.cased({"type": "comparison", "operator": "=", "left": conditions._col(f"t_items.c_{column}"),
+                                 "right": {"type": "literal", "value": value}}, db, schema, f"t_items.c_{column}")
+        q = {"id": "q", "type": "select", "from": {"type": "database_table", "reference": "t_items", "alias": "t_items"},
+             "columns": [{"expression": conditions._col("t_items.c_id"), "alias": "id"}],
+             "scope": {"type": "filtered", "where": cond}}
+        return [r[0] for r in db.execute(program([q], schema)[0])]
+    assert rows("name", "orbit hoodie") == [99]                       # many names, none listed: case ignored
+    assert rows("status", "Archived") == [99] and rows("status", "archived") == [99]   # not a stored spelling: ignored
+    known = conditions.cased({"type": "comparison", "operator": "=", "left": conditions._col("t_items.c_status"),
+                              "right": {"type": "literal", "value": "active"}}, db, schema, "t_items.c_status")
+    assert "case" not in known                                        # a stored spelling the profile knows: exact
+
+
+def test_the_value_search_follows_a_change_after_its_refresh():
+    """Notice #14: a renamed value is found by its new name and no longer by its old one, in the same process (the
+    profile is refreshed after each change; nothing of the store's values is kept between messages)."""
+    from fixtures.orbitrow.load import baseline
+    from orbitrows.pipeline.prompt.pipeline import store_of
+    from orbitrows.pipeline.prompt.values import search
+    from orbitrows.pipeline.store.profile import refresh
+    db = baseline()
+    refresh(db)
+    schema = store_of(db)
+    brand = lambda t: [f["stored"] for f in search(db, schema, t) if f["column"].endswith("c_brand")]
+    assert brand("Orbit") == [["Orbit"]]
+    db.execute("UPDATE products SET brand = 'Orbix' WHERE brand = 'Orbit'")
+    refresh(db, ["products"])
+    assert brand("Orbix") == [["Orbix"]] and brand("Orbit") == []
