@@ -1,7 +1,8 @@
-"""Numbers in a request: where they are, and what they are, read by quantity_parser (../text_to_number, adopted
-2026-10-26: 44/52 development and 19/21 held-out cases against 35/52 and 15/21 for Recognizers-Text, every fraction
-exact; vault 02_projects/pilotstore/quantity-normalizer-delivery-plan). One reader for every step: the formula's
-numbers, step 5's operands, a read's limit, the parameters' values. The parser reads a phrase strictly; this module
+"""Numbers in a request: where they are, and what they are, read by quantity_parser (units/quantity_parser, written
+by the text2num session in ../text_to_number, moved into this repository 2026-10-27; adopted 2026-10-26: 44/52
+development and 19/21 held-out cases against 35/52 and 15/21 for Recognizers-Text, every fraction exact; vault
+02_projects/pilotstore/quantity-normalizer-delivery-plan). One reader for every step: the formula's numbers, step 5's
+operands, a read's limit, the parameters' values. The parser reads a phrase strictly; this module
 finds the phrases: from each digit or number word (the parser's own lexicon), the longest window the parser reads
 whole. Whether a number found here belongs to the request (the "one" of "one of the products") stays the caller's,
 or Jev's, to decide: the reader only reads.
@@ -15,8 +16,8 @@ import functools
 import re
 from fractions import Fraction
 
-from quantity_parser import parse_quantity
-from quantity_parser.en import CARDINALS, DENOMINATORS, MULTIPLIERS, ORDINAL_TO_CARDINAL
+from .quantity_parser import parse_quantity
+from .quantity_parser.en import CARDINALS, DENOMINATORS, MULTIPLIERS, ORDINAL_TO_CARDINAL
 
 TOKEN = re.compile(r"(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[xX](?![^\W\d_]))?%?|[^\W\d_]+(?:-[^\W\d_]+)*|%|/")
 # a digit token takes a comma only inside an en-US thousands group ("1,500", never the "5," of "nearest 5, never")
