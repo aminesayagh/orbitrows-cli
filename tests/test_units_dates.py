@@ -80,3 +80,12 @@ def test_a_date_the_reader_refuses_refuses_the_request(monkeypatch):
     section = {"requests": {"r1": {}}, "warnings": []}                   # Jev: not a date ("May" a name): nothing
     dated({"id": "r1"}, found, {"r1|t0|kind": ("none", {"none": 0.95})}, section)
     assert "refused" not in section["requests"]["r1"]
+
+
+def test_without_docker_duckling_is_not_started_and_says_why(monkeypatch):
+    from orbitrows.services import duckling
+    monkeypatch.setattr(duckling, "up", lambda: False)
+    monkeypatch.setattr(duckling.shutil, "which", lambda name: None)
+    assert "Docker is not installed" in duckling.start()
+    monkeypatch.setattr(duckling, "up", lambda: True)                  # one answering already: used as it is
+    assert duckling.start() is None
