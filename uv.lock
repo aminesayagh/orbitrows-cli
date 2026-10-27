@@ -324,6 +324,26 @@ wheels = [
 ]
 
 [[package]]
+name = "datephrase"
+version = "0.2.0"
+source = { editable = "../date_to_number" }
+dependencies = [
+    { name = "dateparser" },
+    { name = "python-dateutil" },
+    { name = "text2num" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "dateparser", specifier = "==1.4.3" },
+    { name = "python-dateutil", specifier = "==3.0.0" },
+    { name = "text2num", specifier = "==3.1.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.1.1" }]
+
+[[package]]
 name = "en-core-web-sm"
 version = "3.8.0"
 source = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
@@ -784,6 +804,7 @@ source = { editable = "." }
 dependencies = [
     { name = "babel" },
     { name = "charset-normalizer" },
+    { name = "datephrase" },
     { name = "en-core-web-sm" },
     { name = "fr-core-news-sm" },
     { name = "gliner2", extra = ["local"] },
@@ -795,7 +816,6 @@ dependencies = [
     { name = "sentence-transformers" },
     { name = "spacy" },
     { name = "sqlglot" },
-    { name = "temporal-reader" },
     { name = "text2num" },
     { name = "torch", version = "2.14.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
     { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
@@ -812,6 +832,7 @@ dev = [
 requires-dist = [
     { name = "babel", specifier = ">=2.18.0" },
     { name = "charset-normalizer", specifier = ">=3.5.1" },
+    { name = "datephrase", editable = "../date_to_number" },
     { name = "en-core-web-sm", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" },
     { name = "fr-core-news-sm", url = "https://github.com/explosion/spacy-models/releases/download/fr_core_news_sm-3.8.0/fr_core_news_sm-3.8.0-py3-none-any.whl" },
     { name = "gliner2", extras = ["local"], specifier = ">=2.0.0" },
@@ -823,7 +844,6 @@ requires-dist = [
     { name = "sentence-transformers", specifier = ">=5.7.0" },
     { name = "spacy", specifier = "==3.8.16" },
     { name = "sqlglot", specifier = "==30.21.0" },
-    { name = "temporal-reader", editable = "../date_to_number" },
     { name = "text2num", specifier = "==3.1.0" },
     { name = "torch", specifier = ">=2.14.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "typesafe-sdk", specifier = ">=0.7.1" },
@@ -1650,24 +1670,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/83/d3/803453b36afefb7c2
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl", hash = "sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5", size = 6299353, upload-time = "2025-04-27T18:04:59.103Z" },
 ]
-
-[[package]]
-name = "temporal-reader"
-version = "0.1.0"
-source = { editable = "../date_to_number" }
-dependencies = [
-    { name = "dateparser" },
-    { name = "python-dateutil" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "dateparser", specifier = "==1.4.3" },
-    { name = "python-dateutil", specifier = "==3.0.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=9.1.1" }]
 
 [[package]]
 name = "tenacity"

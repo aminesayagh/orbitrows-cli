@@ -1,4 +1,4 @@
-"""Dates in a request: where they are, what they are, read by temporal_reader (../date_to_number, written by the
+"""Dates in a request: where they are, what they are, read by datephrase (../date_to_number, written by the
 user's date2num session, adopted 2026-10-27; dateparser underneath). One reader for every step, as units/quantity is
 for numbers. The reader reads a phrase with its classification and never guesses it, so:
 
@@ -22,7 +22,7 @@ import re
 from datetime import date
 
 from dateutil.relativedelta import relativedelta
-from temporal_reader import TemporalContext, answer, read_temporal
+from datephrase import TemporalContext, answer, read_temporal
 
 from orbitrows.services.model.client import SURE, choice
 from .quantity import find, plain

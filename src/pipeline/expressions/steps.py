@@ -362,7 +362,7 @@ def iso(date_text: str) -> str | None:
     """A written date as YYYY-MM-DD, or None: dateparser through ../date_to_number. None also when the reader would
     ask the user (01/02/2026: January 2 or February 1?): its questions are not forwarded yet. Missing parts and
     relative dates are filled from the current date (no session date yet, notice.md #17); a time of day is dropped."""
-    from temporal_reader import read_temporal
+    from datephrase import read_temporal
     r = read_temporal(date_text)
     return r.date.isoformat() if r.date else None
 

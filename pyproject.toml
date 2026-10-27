@@ -21,7 +21,7 @@ dependencies = [
     "sentence-transformers>=5.7.0",
     "spacy==3.8.16",
     "sqlglot==30.21.0",
-    "temporal-reader",
+    "datephrase",
     "text2num==3.1.0",
     "torch>=2.14.0",
     "typesafe-sdk>=0.7.1",
@@ -62,4 +62,4 @@ torch = [{ index = "pytorch-cpu" }]
 en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
 fr-core-news-sm = { url = "https://github.com/explosion/spacy-models/releases/download/fr_core_news_sm-3.8.0/fr_core_news_sm-3.8.0-py3-none-any.whl" }
 quantity-parser = { path = "../text_to_number", editable = true }
-temporal-reader = { path = "../date_to_number", editable = true }
+datephrase = { path = "../date_to_number", editable = true }

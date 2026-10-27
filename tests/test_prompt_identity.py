@@ -107,7 +107,7 @@ REPLACED = {"pipeline/prompt/grouping.py": {   # the one tree question over ever
                                     "RELEASE assemble", "request", "ast", "rows", "predicates", "changes no record",
                                     "returns", ": each condition matches records, but not together"},
     "pipeline/prompt/conditions.py": {"rows", "no record matches the condition on ",
-                                      # 2026-10-27: dates are read by units/dates (temporal_reader): no ISO regex;
+                                      # 2026-10-27: dates are read by units/dates (datephrase): no ISO regex;
                                       # "=" also says a period ("in August")
                                       "\\b\\d{4}-\\d{2}-\\d{2}\\b",
                                       "Equal to a value ('the black ones', 'in Rabat', 'priced at 250', also 'not "
@@ -117,7 +117,7 @@ REPLACED = {"pipeline/prompt/grouping.py": {   # the one tree question over ever
     "pipeline/prompt/parts.py": {"SQLite, on all rows", *PARTS_TEMPLATES},
     "sql/sql.py": {"SAVEPOINT ast_check", "ROLLBACK TO ast_check", "RELEASE ast_check"},
     # 2026-10-25: each formula step's SQL is written by the operations catalog's builder (one SQL per operation)
-    # 2026-10-27: iso() reads dates with temporal_reader (../date_to_number); the strptime formats are gone
+    # 2026-10-27: iso() reads dates with datephrase (../date_to_number); the strptime formats are gone
     # 2026-10-27: its dates and lengths of time come from units/dates (step 6 reads them): the DATE regex and the
     # "one / a / an + time unit" word rule are gone
     "pipeline/expressions/steps.py": set(FORMULA_KINDS) | {"%Y-%m-%d", "%d %B %Y", "%B %d, %Y",
