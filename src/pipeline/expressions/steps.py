@@ -63,6 +63,21 @@ def number_options(words: str) -> dict:
     return {i: f"{c[i]['name']}: {c[i]['behavior']} (e.g. '{c[i]['examples'][0]}')" for i in ids} | KIND
 
 
+def plain_options(text: str) -> dict:
+    """The catalog's changes of a number column with nothing to fill ("round them up", "make them positive"), closest to
+    the request; then none."""
+    from orbitrows.pipeline.operations import use
+    c = use.catalog()["entries"]
+    ids = [i for i in use.search(text, "value", "number", len(c)) if not use.slots(c[i])][:use.K]
+    return {i: f"{c[i]['name']}: {c[i]['behavior']} (e.g. '{c[i]['examples'][0]}')" for i in ids} | {
+        "no": "None of these."}
+
+
+def plain_entry(answer: str):
+    from orbitrows.pipeline.operations import use
+    return use.catalog()["entries"].get(answer) if answer not in (None, "no") else None
+
+
 def entry_role(entry: dict) -> str:
     """Pass 2's role of a catalog change, from its builder: a cap guards, a rounding rounds, any other calculates."""
     if entry["builder_key"] == "clamp":
@@ -185,7 +200,8 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
             q[f"{p['id']}_role"] = choice(CONTEXT, f"What does the request do with the records '{p['text']}'?", ROLE,
                                          ROLE_RULES)
     q["plain_function"] = choice(CONTEXT, "Does the request change the value in one of these ways, without giving a "
-                                          "number?", described(PLAIN_OF, {"no": "None of these."}))
+                                          "number?", plain_options(text) if catalog_mode() else
+                                 described(PLAIN_OF, {"no": "None of these."}))
     q["round_plain"] = choice(CONTEXT, "Does the request round the value without giving a number of decimals or a "
                                        "multiple ('round the price', 'round everything')? If so, which named column?",
                               {**{k: f"Yes, it rounds {v}" for k, v in col_opts.items() if k != "none"},
@@ -331,7 +347,9 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
                 c["end"], f"jev.column_{use}")
     rp, rpp = ans.get("round_plain", ("no", {}))
     pf, pfp = ans.get("plain_function", ("no", {}))
-    rounds = pf in PLAIN_OF and pfp.get(pf, 0) >= MIN and PLAIN_OF[pf] in ("ceil", "floor", "trunc")
+    plain = plain_entry(pf) if catalog_mode() and pfp.get(pf, 0) >= MIN else None   # the catalog's, step 1.3
+    rounds = (plain is not None and entry_role(plain) == "rounding") or (
+        pf in PLAIN_OF and pfp.get(pf, 0) >= MIN and PLAIN_OF[pf] in ("ceil", "floor", "trunc"))
     if rp != "no" and rpp.get(rp, 0) >= MIN and not any(r.role == "rounding" for r in records) and not rounds:
         # "round them up": the plain function's rounding, never a second one
         m = re.search(r"\bround", text, re.I)
@@ -339,7 +357,11 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
         a = m.start() if m else (c["start"] if c else 0)
         add("rounding", "round", {"column": c["column"]} if c else {"unresolved": True}, None, a,
             c["end"] if c and c["end"] > a else a + 5, "jev.round_plain")
-    if pf in PLAIN_OF and pfp.get(pf, 0) >= MIN:              # round up, round down, drop the decimals, absolute value,
+    if plain is not None:                                     # a change with nothing to fill: on the value the other
+        t = next((c for c in cols if c["column"] == upstream["target"]), None)   # steps give (pass 2 links it)
+        a, b = (t["start"], t["end"]) if t else (0, len(text))
+        add(entry_role(plain), f"entry:{pf}", {"unresolved": True}, None, a, b, f"catalog.{pf}")
+    elif pf in PLAIN_OF and pfp.get(pf, 0) >= MIN:            # round up, round down, drop the decimals, absolute value,
         t = next((c for c in cols if c["column"] == upstream["target"]), None)   # square root: on the value the
         a, b = (t["start"], t["end"]) if t else (0, len(text))                  # other steps give (pass 2 links it)
         add("rounding" if PLAIN_OF[pf] in ("ceil", "floor", "trunc") else "calculation", PLAIN_OF[pf],
