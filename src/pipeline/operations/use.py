@@ -16,8 +16,9 @@ its own declaration; no step keeps its own list of operations or its own rules f
     build(entry, parameters)             the entry's own builder: our AST (sql/dml.py)
 
 Values: a number or a percentage as a number, or a node (another step's result: "never above twice the cost"); a
-text or a value as a text (it becomes a literal) or a node; a column as a column node; an operator, a unit or an
-aggregate as one of the declared choices.
+text or a value as a text (it becomes a literal) or a node; a column as a column node, but the value an entry applies
+to ("column") may be another step's result ("round the discounted price"); an operator, a unit or an aggregate as one
+of the declared choices.
 """
 from .builders import BUILDERS
 
@@ -74,7 +75,8 @@ def fill(entry: dict, given: dict) -> tuple[dict, list[str]]:
         if p["type"] in ("number", "percentage") and not isinstance(v, (int, float, dict)):
             problems.append(f"{entry['id']}: {name} is {v!r}, not a number")
             continue
-        if p["type"] == "column_reference" and not (isinstance(v, dict) and v.get("type") == "column"):
+        if p["type"] == "column_reference" and not (isinstance(v, dict) and (v.get("type") == "column" or (
+                p["name"] == "column" and "type" in v))):     # what an entry applies to: a column, or a step's result
             problems.append(f"{entry['id']}: {name} is {v!r}, not a column")
             continue
         params[name] = {"type": "literal", "value": v} if p["type"] in ("text", "value") and not isinstance(v, dict) \

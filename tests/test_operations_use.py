@@ -33,6 +33,9 @@ def test_an_entry_is_filled_from_its_declaration_and_built(entry):
     params, problems = use.fill(inc, {"column": PRICE, "percent": 10})
     assert problems == [] and shown(use.build(inc, params)) == sorted(
         r[0] for r in baseline().execute("SELECT price_mad * 1.1 FROM variants"))
+    discounted = {"type": "arithmetic", "operator": "*", "left": PRICE, "right": {"type": "literal", "value": 0.9}}
+    params, problems = use.fill(entry("ROUND_TO_NEAREST"), {"column": discounted, "step": 10})   # a step's result
+    assert problems == [] and params["column"] == discounted
     params, _ = use.fill(entry("ADD_PREFIX"), {"column": PRICE, "text": "NEW-"})
     assert params["text"] == {"type": "literal", "value": "NEW-"}                     # a text becomes a literal
 

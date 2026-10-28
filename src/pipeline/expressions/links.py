@@ -41,6 +41,17 @@ RULES = [
 
 def label(r: dict) -> str:
     f, right = r["function"], r["right"] or {}
+    if f and f.startswith("entry:"):                        # a catalog change: what its own builder writes, on
+        from orbitrows.pipeline.operations import use      # "value" (the value the step applies to)
+        e = catalog_entry(f[6:])
+        given = {"column": {"type": "column", "source": "t_", "reference": "c_value"}}
+        if right.get("slot"):
+            given[right["slot"]] = right.get("value")
+        if right.get("other"):
+            given["other"] = col(right["other"]["column"])
+        params, problems = use.fill(e, given)
+        written = e["name"].lower() if problems else sql(use.build(e, params)).replace("t_.c_value", "value")
+        return f"{r['id']}: '{r['text']}' ({written})"
     v = right.get("source") or right.get("value") or right.get("column", "").split(".c_")[-1] or "?"
     what = {"*": f"× {right.get('value', '?')}", "+": f"+ {v}", "-": f"− {v}", "/": f"÷ {v}", "set": f"set to {v}",
             "round": "round", "round_to": f"round to the nearest {v}", "clamp_max": "never above a limit",
@@ -241,6 +252,19 @@ def build(recs, links, target, preds) -> dict:
                     "else": operand(None, r, "else")}
         if f == "set":
             return operand(r["right"], r, "right")
+        if f.startswith("entry:"):                          # a catalog change (step 1.3): its own declaration
+            from orbitrows.pipeline.operations import use
+            e, right = catalog_entry(f[6:]), r["right"] or {}
+            given = {"column": operand(r["left"], r, "left")}
+            if right.get("slot"):                           # the number as written, or the step that computes it
+                given[right["slot"]] = node(ids[links[(r["id"], "right")]]) if (r["id"], "right") in links \
+                    else right["value"]
+            if right.get("other"):
+                given["other"] = col(right["other"]["column"])
+            params, problems = use.fill(e, given)
+            if problems:
+                raise ValueError("; ".join(problems))
+            return use.build(e, params)
         if f not in ENTRY:
             raise ValueError(f"unsupported function {f}")
         e, left, right = catalog_entry(ENTRY[f]), operand(r["left"], r, "left"), r["right"] or {}

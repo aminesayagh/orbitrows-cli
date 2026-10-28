@@ -43,6 +43,44 @@ def kinds() -> dict:
     return _KINDS
 
 
+FILLED_BY_NUMBER = ("number", "percentage", "value")         # the slot types a request's number fills
+
+
+def catalog_mode() -> bool:
+    """Step 1.3 (2026-10-28): the number pass searches the catalog (operations/use.py), measured as good as its old
+    lists or better on every set (composed 3/3, was 2/3); ORBITROWS_FORMULA=lists runs the old path until it goes."""
+    import os
+    return os.environ.get("ORBITROWS_FORMULA") != "lists"
+
+
+def number_options(words: str) -> dict:
+    """The catalog's changes closest to a number's own words (use.search: changes of a number column, those with a
+    slot a number fills), described as the old list was; then what a number does that is no operation (KIND)."""
+    from orbitrows.pipeline.operations import use
+    c = use.catalog()["entries"]
+    ids = [i for i in use.search(words, "value", "number", len(c))
+           if any(x["type"] in FILLED_BY_NUMBER for x in use.slots(c[i]))][:use.K]
+    return {i: f"{c[i]['name']}: {c[i]['behavior']} (e.g. '{c[i]['examples'][0]}')" for i in ids} | KIND
+
+
+def entry_role(entry: dict) -> str:
+    """Pass 2's role of a catalog change, from its builder: a cap guards, a rounding rounds, any other calculates."""
+    if entry["builder_key"] == "clamp":
+        return "guard"
+    rounds = entry["builder_key"] in ("round_digits", "round_to_step") or (
+        entry["builder_key"] == "function_of" and entry["config"].get("function") in ("ceil", "floor", "trunc"))
+    return "rounding" if rounds else "calculation"
+
+
+def slot_value(slot: dict, o: dict):
+    """A number in the unit of the slot it fills: a percentage slot takes '10%' as 10 and 'a third' as 33.3…; a number
+    slot takes '50%' as 0.5; any other number as written."""
+    v = o["value"]
+    if slot["type"] == "percentage":
+        return v if o["percent"] else v * 100 if o["kind"] == "factor" and v < 1 else v
+    return v / 100 if o["percent"] else v
+
+
 KIND_RULES = [
     "Judge the marked number by the words around it, not by its position in the sentence.",
     "'plus 10%' on a column ('the cost plus 10%') is an increase of that column by 10%, not a share.",
@@ -128,9 +166,10 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
     state = {"request": marked(text, occs), "columns named in the request": col_opts}
     q = {}
     for o in occs:
-        q[f"{o['occ']}_kind"] = choice(CONTEXT, f"What does the number {o['occ']} ('{o['text']}') do?", kinds(),
-                                       KIND_RULES + upstream.get("rules", []))
         clause = text[slice(*segment_of(segments(text), o["start"]))].strip()
+        q[f"{o['occ']}_kind"] = choice(CONTEXT, f"What does the number {o['occ']} ('{o['text']}') do?",
+                                       number_options(clause) if catalog_mode() else kinds(),
+                                       KIND_RULES + upstream.get("rules", []))
         q[f"{o['occ']}_column"] = choice(CONTEXT, f"The step with {o['occ']} ('{o['text']}', in '{clause}'): do its own "
                                                   f"words name the column it changes or starts from? Which one?",
                                          col_opts, COLUMN_RULES)
@@ -184,7 +223,7 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
         return tok.idx if tok is not None and seg[0] <= tok.idx < o["start"] else o["start"]
 
     for o in occs:
-        kind, kp = read_as(ans.get(f"{o['occ']}_kind"), KIND_OF)
+        kind, kp = read_as(ans.get(f"{o['occ']}_kind"), {} if catalog_mode() else KIND_OF)
         col, cp = ans.get(f"{o['occ']}_column", ("none", {}))
         if kind is None or kp.get(kind, 0) < MIN:
             ambiguities.append({"problem": "what this number does: uncertain", "occurrence": o["occ"], "text": o["text"],
@@ -217,6 +256,16 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
         a, b = phrase_start(o), o["end"]
         if c:
             a, b = min(a, c["start"]), max(b, c["end"])
+        if catalog_mode() and kind not in KIND:              # a catalog change: its own step, its slot filled
+            from orbitrows.pipeline.operations import use
+            e = use.catalog()["entries"][kind]
+            slot = next(x for x in use.slots(e) if x["type"] in FILLED_BY_NUMBER)
+            other = next((x for x in use.slots(e) if x["type"] == "column_reference"), None)
+            right = {"value": slot_value(slot, o), "source": o["text"], "slot": slot["name"]}
+            if other and c and c["column"] != upstream["target"]:   # "10% of the cost": the cost is its other column
+                right["other"], left = {"column": c["column"]}, {"unresolved": True}
+            add(entry_role(e), f"entry:{kind}", left, right, a, b, f"catalog.{kind}", [o["occ"]])
+            continue
         v, p, rule = o["value"], o["percent"], f"jev.{kind}"
         val = {"value": v, "source": o["text"]}
         pct = lambda f: {"value": round(f, 6), "source": o["text"]}
