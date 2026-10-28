@@ -104,11 +104,9 @@ def test_two_numbers_on_one_column_are_two_conditions(store):
 
 @pytest.fixture
 def catalogued(monkeypatch):
-    """The shipped catalog's entries, its search stubbed (no model): its candidates are given."""
-    from orbitrows.pipeline.operations import catalog
-    db = catalog.connect()
-    monkeypatch.setitem(conditions._CATALOG, "entries", {e["id"]: e for e in catalog.entries(db)})
-    monkeypatch.setattr(conditions, "catalog_candidates", lambda text: ["COMPARE_TABLE_AVERAGE", "CLAMP_MAX"])
+    """The shipped catalog's entries, its shared search stubbed (no model): its candidates are given."""
+    from orbitrows.pipeline.operations import use
+    monkeypatch.setattr(use, "search", lambda text, role, kind=None, k=use.K: ["COMPARE_TABLE_AVERAGE", "CLAMP_MAX"])
 
 
 def computed(db, schema, text, operation):

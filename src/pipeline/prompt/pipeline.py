@@ -506,7 +506,8 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
         if stopped := converted(asked, errors):
             return stopped
     step("step 6 · stages 1–2 · conditions")
-    s6 = await conditions.run(model, prompt, reqs, store, s4["requests"], s3["values"], s5["requests"], db, spans)
+    s6 = await conditions.run(model, prompt, reqs, store, s4["requests"], s3["values"], s5["requests"], db, spans,
+                              named)
     pause("conditions", conditions=s6)
     step("step 6 · stage 3 · numeric changes")               # before grouping (the PoC ran it after): its branches
     unlinked = []                                             # (request, a pending assignment of an update from an

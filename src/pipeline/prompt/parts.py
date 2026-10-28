@@ -90,6 +90,15 @@ def changes(typ: str) -> dict:
     return out
 
 
+def searched(text: str, role: str, typ: str, allowed: dict) -> dict:
+    """The catalog's entries of `role` the shared search finds closest to the request (operations/use.py), among those
+    this step can build for a column of `typ` (`allowed`), closest first (step 1.4, 2026-10-28)."""
+    from orbitrows.pipeline.operations import use
+    kind = "number" if typ in ("INTEGER", "REAL") else "text"
+    ids = [i for i in use.search(text, role, kind, len(use.catalog()["entries"])) if i in allowed][:use.K]
+    return {i: allowed[i] for i in ids}
+
+
 def entry(entry_id):
     return next((e for e in _CHANGES + _OUTPUTS if e["id"] == entry_id), None)
 
@@ -305,7 +314,8 @@ def questions_2(db, requests, schema, sources, values, a1) -> dict:
                 name = columns_of(schema, [main])[key]
                 others = {k: v for k, v in columns_of(schema, [main]).items() if k != key}
                 q[f"{rid}_{key}_how"] = choice(CONTEXT, f"How does {said(r)} change {name}",
-                                               changes(typ) | {"none": "None of these changes."})
+                                               searched(r["text"], "value", typ, changes(typ))
+                                               | {"none": "None of these changes."})
                 q[f"{rid}_{key}_number"] = choice(CONTEXT, f"Which number of {said(r)} is the amount, the percentage, "
                                                            f"the new value or the decimals of the change of {name} "
                                                            f"(not a number choosing the records, not a limit)?",
@@ -329,7 +339,8 @@ def questions_2(db, requests, schema, sources, values, a1) -> dict:
             for key in [k.split("_shows_")[1] for k, p in a1.items() if k.startswith(f"{rid}_shows_") and p >= 0.5]:
                 q[f"{rid}_{key}_aggregate"] = choice(CONTEXT, f"What does {said(r)} show of "
                                                               f"{columns_of(schema, tables)[key]}",
-                                                     outputs(coltype(schema, key)[0]))
+                                                     searched(r["text"], "output", coltype(schema, key)[0],
+                                                              outputs(coltype(schema, key)[0])))
         if st == "insert" and main:
             for key in [k.split("_gives_")[1] for k, p in a1.items() if k.startswith(f"{rid}_gives_") and p >= 0.5]:
                 typ, _ = coltype(schema, key)

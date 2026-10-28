@@ -7,7 +7,7 @@ from orbitrows.pipeline.operations.catalog import connect, entries
 from orbitrows.pipeline.operations.index import Index
 
 pytestmark = pytest.mark.catalog
-K = 10                                                        # what step 6 shows Jev (conditions.catalog_candidates)
+K = 10                                                        # what a step shows Jev (operations/use.py's search)
 HELD_OUT = {   # entry → requests never among its examples: other wording, other tables
     "COMPARE_TEXT_LENGTH": ["Show the customers whose email address has fewer than 12 characters",
                             "Which article headlines run past 80 characters?",

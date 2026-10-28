@@ -134,9 +134,9 @@ def around(r, key, values, params, m) -> str:
 def computed() -> str:
     """The "computed" option: a value computed rather than the column's own, described by the catalog's own conditions
     (a condition enabled there is offered here at once; 2026-10-28: a hand-written list hid the newer ones)."""
-    from orbitrows.pipeline.operations.catalog import connect, entries
+    from orbitrows.pipeline.operations import use
     if "computed" not in _CATALOG:
-        names = [e["name"].lower() for e in entries(connect()) if e["role"] == "condition"
+        names = [e["name"].lower() for e in use.catalog()["entries"].values() if e["role"] == "condition"
                  and e["builder_key"] != "linked_aggregate"]          # the linked records' comparison: stage 2c's
         _CATALOG["computed"] = ("A value computed from the column, or from it and another column of the record, rather "
                                 "than the column's own value: " + "; ".join(names) + ".")
@@ -267,7 +267,22 @@ def tables_of(requests, sources, rid) -> list[str]:
     return [main] + [t for t in sources.get(rid, {}).get("reads", []) if t != main] if main else []
 
 
-def questions(requests, schema, sources) -> dict:
+def asked_columns(schema, requests, sources, rid, named, dated, db) -> dict:
+    """The columns stage 1 asks about (step 1.4, 2026-10-28): the candidates the request names (step "columns":
+    words, meaning, kind), its main table's own id ("delete the variant 109"), and, when it writes a date, the
+    columns the profile says hold dates; a column step 3 tied to a value is kept without a question (build). Without
+    the step's answer (named None): every candidate, as before."""
+    every = candidates(schema, requests, sources, rid)
+    if named is None:
+        return every
+    main = main_table(requests, sources, rid)
+    own = {f"{main}.{c}" for t in schema if t["definition"]["table_id"] == main
+           for c in t["definition"].get("primary_key", [])}
+    return {k: v for k, v in every.items() if k in (named.get(rid) or {}) or k in own
+            or (dated.get(rid) and holds_dates(db, schema, k))}
+
+
+def questions(requests, schema, sources, named=None, dated=None, db=None) -> dict:
     q = {}
     for r in requests:
         rid, said = r["id"], f"request {r['id']} ('{r['text']}')"
@@ -275,7 +290,7 @@ def questions(requests, schema, sources) -> dict:
             continue
         q[f"{rid}_all"] = yes_no(CONTEXT, f"Does {said} act on every record of its table, with no condition?",
                                  ALL_RULES)
-        for key, text in candidates(schema, requests, sources, rid).items():
+        for key, text in asked_columns(schema, requests, sources, rid, named, dated or {}, db).items():
             q[f"{rid}_chooses_{key}"] = yes_no(CONTEXT, f"Does {said} keep or exclude records by what this column "
                                                         f"holds, or by its being empty: {text}", CHOOSE_RULES)
         names = {t["definition"]["table_id"]: t["definition"]["sql_name"] for t in schema}
@@ -747,16 +762,11 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                              "dropped": [d["column"] for d in g["dropped"]]})
 
 
-def catalog_candidates(text: str) -> list[str]:
-    """The catalog's conditions closest to a request (operations/index.py: the top 10, conditions only)."""
-    from orbitrows.pipeline.operations.catalog import connect, entries
-    from orbitrows.pipeline.operations.index import Index
-    if "index" not in _CATALOG:
-        db = connect()
-        _CATALOG.update(index=Index(db), entries={e["id"]: e for e in entries(db)})
-    found = [i for i, _ in _CATALOG["index"].retrieve(text, len(_CATALOG["entries"]))]
-    return [i for i in found if _CATALOG["entries"][i]["role"] == "condition"   # not the linked records' entry:
-            and _CATALOG["entries"][i]["builder_key"] != "linked_aggregate"][:10]   # stage 2c's, never built here
+def kind_of(db, schema, key) -> str:
+    """A column's kind for the catalog's search (operations/use.py): number, date (the profile's), text."""
+    if column_info(schema, key)["sql_type"] in ("INTEGER", "REAL"):
+        return "number"
+    return "date" if holds_dates(db, schema, key) else "text"
 
 
 _CATALOG = {}
@@ -981,20 +991,21 @@ def build_2d(requests, schema, section, params, answers) -> None:
                               "right": {"type": "literal", "value": number}}
 
 
-def questions_2b(requests, schema, section, params) -> dict:
+def questions_2b(requests, schema, section, params, db=None) -> dict:
     """Per computed condition (build_2: Jev's value "computed"): which catalog operation (or none), which other
     column of its table it is computed from, which of the request's numbers it uses; one call."""
+    from orbitrows.pipeline.operations import use
     from orbitrows.pipeline.operations.selector import described
-    q = {}
+    q, entries = {}, use.catalog()["entries"]
     for r in requests:
         rid, said = r["id"], f"request {r['id']} ('{r['text']}')"
         for c in section.get(rid, {}).get("computed", []):
             key = c["column"]
-            info, ids = column_info(schema, key), catalog_candidates(r["text"])
+            info, ids = column_info(schema, key), use.search(r["text"], "condition", kind_of(db, schema, key))
             name = f"the {info['sql_name']} column of {key.split('.')[0][2:]}"
             q[f"{rid}|{key}|operation"] = choice(
                 CONTEXT, f"In {said}, which operation computes the value {name} is compared with?",
-                {i: described(_CATALOG["entries"][i]) for i in ids} | {"none": "None of these."}, COMPUTED_RULES)
+                {i: described(entries[i]) for i in ids} | {"none": "None of these."}, COMPUTED_RULES)
             others = {o: f"the {o.split('.')[1][2:]} column" for o in columns_of(schema, [key.split(".")[0]])
                       if o != key and comparable(column_info(schema, o)["sql_type"], info["sql_type"])}
             q[f"{rid}|{key}|other"] = choice(CONTEXT, f"In {said}, which other column is that value computed from?",
@@ -1019,7 +1030,7 @@ def build_2b(db, requests, schema, section, params, answers) -> None:
     """Each computed condition built by its operation's builder, from the answers of questions_2b; below SURE a
     question; none, or an operation whose parameters are not all known: the request is refused (assembly does
     not build it: never run without one of its conditions)."""
-    from orbitrows.pipeline.operations.builders import BUILDERS
+    from orbitrows.pipeline.operations import use
     out, warnings = section["requests"], section["warnings"]
     for r in requests:
         rid, made = r["id"], []
@@ -1034,22 +1045,21 @@ def build_2b(db, requests, schema, section, params, answers) -> None:
                                   "probability": round(probs.get(v, 0), 2)}
                                  | question(answers, f"{rid}|{key}|{name}", labels))
                 return v, probs.get(v, 0)
-            (op_id, sure), (other, _), (n, _) = (pick("operation", {i: e["name"] for i, e in
-                                                                    _CATALOG.get("entries", {}).items()}),
+            entries = use.catalog()["entries"]
+            (op_id, sure), (other, _), (n, _) = (pick("operation", {i: e["name"] for i, e in entries.items()}),
                                                  pick("other"), pick("number"))
-            entry = _CATALOG.get("entries", {}).get(op_id)
-            p = {"column": _col(key), "operator": c["operator"], "column_type": column_info(schema, key)["sql_type"]}
+            entry = entries.get(op_id)
+            given = {"column": _col(key), "operator": c["operator"]}   # the entry filled from its declaration
             if other not in (None, "none"):
-                p["other"] = _col(other)
+                given["other"] = _col(other)
             words = factors(r["text"])
             if entry and n in words:
                 f = words[n][0]
-                p |= {x["name"]: f * 100 if x["type"] == "percentage" else f for x in entry["parameters"]
-                      if x["type"] in ("percentage", "number")}
+                given |= {x["name"]: f * 100 if x["type"] == "percentage" else f for x in use.slots(entry)
+                          if x["type"] in NUMBERS}
             elif entry and n not in (None, "none") and n[1:].isdigit() and int(n[1:]) < len(params.get(rid, [])):
-                p |= {x["name"]: params[rid][int(n[1:])]["value"] for x in entry["parameters"] if x["type"] in NUMBERS}
-            missing = [x["name"] for x in entry["parameters"] if x.get("required", True) and x["name"] not in p] \
-                if entry else []
+                given |= {x["name"]: params[rid][int(n[1:])]["value"] for x in use.slots(entry) if x["type"] in NUMBERS}
+            p, missing = use.fill(entry, given) if entry else ({}, [])
             made.append({"c": c, "entry": entry, "p": p, "missing": missing, "sure": sure, "heard": heard,
                          "other": other})
         # two columns computed from each other are one condition ("priced more than twice their cost" is read from
@@ -1089,10 +1099,10 @@ def build_2b(db, requests, schema, section, params, answers) -> None:
                 continue
             if m["missing"]:
                 out[rid]["refused_column"] = key
-                out[rid]["refused"] = f"{said} ({entry['name']}) lacks its {', '.join(m['missing'])}"
+                out[rid]["refused"] = f"{said} ({entry['name']}) lacks its parameters: {'; '.join(m['missing'])}"
                 warnings.append({"request": rid, "problem": f"invalid parameters: {out[rid]['refused']}"})
                 continue
-            cond = through(schema, BUILDERS[entry["builder_key"]](m["p"], entry["config"]), key.split(".")[0])
+            cond = through(schema, use.build(entry, m["p"]), key.split(".")[0])
             if c["negated"]:
                 cond = {"type": "not", "operand": cond}
             if err := refused(db, schema, key.split(".")[0], cond):
@@ -1136,7 +1146,8 @@ def read_dates(requests, found, answers, section) -> list[dict]:
         return [r | {"dates": []} for r in requests]
 
 
-async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], parts: dict, db=None, model=None) -> dict:
+async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], parts: dict, db=None, model=None,
+              named=None) -> dict:
     """sources: step 4's section["requests"]; values: step 3's section["values"]; parts: step 5's
     section["requests"]."""
     """db, model: the store and GLiNER2, for stage 2 (without them, stage 1 only)."""
@@ -1148,7 +1159,7 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
     except dates.EngineUnavailable:                           # read_dates refuses those requests
         timed = {}
     try:
-        answers = await ask(jev, st, questions(requests, schema, sources) | timed)
+        answers = await ask(jev, st, questions(requests, schema, sources, named, found, db) | timed)
     except Exception as e:                                    # API error: nothing is guessed
         answers = {"error": repr(e)}
     section = build(requests, schema, sources, values, answers)
@@ -1172,7 +1183,7 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
                 g["computed"] = [c for c in g.get("computed", []) if c["column"] not in routed]
             if g.get("grouped"):                              # stage 2d: a condition on its groups (HAVING)
                 g["group_of"] = main_table(requests, sources, r["id"])
-        if q := questions_2b(requests, schema, section["requests"], params) | \
+        if q := questions_2b(requests, schema, section["requests"], params, db) | \
                 questions_2c(requests, schema, section["requests"], params) | \
                 questions_2d(requests, schema, section["requests"], params):   # stages 2b, 2c, 2d: one call
             try:
