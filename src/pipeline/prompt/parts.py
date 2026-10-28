@@ -32,7 +32,7 @@ from orbitrows.pipeline.store.profile import listed
 from orbitrows.pipeline.operations.builders import BUILDERS
 from orbitrows.units.quantity import find, plain
 from orbitrows.sql.sql import check, program
-from . import SURE
+from . import SURE, columns
 from .asking import question
 from orbitrows.services.model.client import ask, choice, yes_no
 
@@ -61,8 +61,10 @@ SHOW_RULES = [
     "A value the request's records do not hold themselves may be stored in the record they belong to: 'the names of "
     "the order lines' are their products' names, 'the city of those orders' is their customer's city: answer yes "
     "for that column.",
-    "Answer yes for a column whose values the request shows, sums, averages or compares in its answer ('the names "
-    "and prices', 'the total quantity': quantity).",
+    "Answer yes for a column whose values the request shows, sums or averages in its answer ('the names and prices', "
+    "'the total quantity': quantity).",
+    "Answer no for a column whose values, total, average or count only choose the records ('the products whose total "
+    "stock is under 20': the quantity is not shown, the products are).",
     "Answer no for a column only used to choose the records ('the draft products': status is not shown) or to sort "
     "them.",
 ]
@@ -247,7 +249,8 @@ def said(r):
     return f"request {r['id']} ('{r['text']}')"
 
 
-def questions_1(requests, schema, sources) -> dict:
+def questions_1(requests, schema, sources, named=None) -> dict:
+    """named: the columns step "columns" found per request (prompt/columns.py); found here when not given."""
     q = {}
     for r in requests:
         rid, st, main = r["id"], r["statement"], main_table(requests, sources, r["id"])
@@ -261,8 +264,11 @@ def questions_1(requests, schema, sources) -> dict:
                                                 f"'how many': no)?")
             q[f"{rid}_counts"] = yes_no(CONTEXT, f"Does {said(r)} count the records themselves ('how many sales', "
                                                  f"'the number of products')?", COUNT_RULES)
-            for key, text in shown_columns(schema, tables, main).items():
-                q[f"{rid}_shows_{key}"] = yes_no(CONTEXT, f"Does {said(r)} show or compute from: {text}", SHOW_RULES)
+            found = (named.get(rid) or {}) if named is not None else columns.find(r["text"], schema, tables)
+            for key, text in shown_columns(schema, tables, main).items():   # only the columns it names: a column
+                if found.get(key, {}).get("how") in ("word", "meaning"):     # of a kind is shown without a question
+                    q[f"{rid}_shows_{key}"] = yes_no(CONTEXT, f"Does {said(r)} show or compute from: {text}",
+                                                     SHOW_RULES)
             q[f"{rid}_computes"] = yes_no(CONTEXT, f"Does {said(r)} show a value it computes from a column, rather than "
                                                    f"the column as it is ('the price minus the cost', 'the prices with "
                                                    f"20% tax', 'the price rounded to 10', 'the names in capitals')?",
@@ -349,7 +355,7 @@ def questions_2(db, requests, schema, sources, values, a1) -> dict:
     return q
 
 
-def build(db, requests, schema, sources, values, a1, a2) -> dict:
+def build(db, requests, schema, sources, values, a1, a2, named=None) -> dict:
     out, warnings = {}, []
 
     def pick(rid, key, problem, default=None, labels=None):
@@ -435,6 +441,10 @@ def build(db, requests, schema, sources, values, a1, a2) -> dict:
                 e = BUILDERS[shown["builder_key"]]({"column": _col(*key.split("."))}, shown["config"])
                 outs.append({"column": key, "aggregate": aggregate_of(shown), "expression": e,
                              "operation": shown["id"]})
+            for key in [k for k, x in ((named or {}).get(rid) or {}).items() if x["how"] == "kind"]:
+                if not any(o["column"] == key for o in outs):     # "all the number columns": columns.py's kind
+                    outs.append({"column": key, "aggregate": "value", "expression": _col(*key.split(".")),
+                                 "operation": "SHOW_VALUES"})
             shows_it = unsure_yes(rid, f"{rid}_computes", "shows a computed value", 0.5)
             sorts_it = unsure_yes(rid, f"{rid}_sorts_computed", "orders by a computed value", 0.5)
             if (shows_it or sorts_it) and \
@@ -443,7 +453,12 @@ def build(db, requests, schema, sources, values, a1, a2) -> dict:
                             | ({"sort": True} if sorts_it else {}))   # shown too: what the records are ordered by
             if not outs:
                 whole = unsure_yes(rid, f"{rid}_whole", "whole records", 0.5)
-            out[rid]["outputs"] = "all" if whole and not any(o["aggregate"] != "value" for o in outs) else outs
+            extras = [o for o in outs if o["column"] is None or o["aggregate"] != "value" or
+                      not o["column"].startswith(f"{main}.")]
+            if whole and extras:                                  # whole records and a figure: every column of
+                outs = [{"column": k, "aggregate": "value", "expression": _col(*k.split(".")),   # the main table, the
+                         "operation": "SHOW_VALUES"} for k in columns_of(schema, [main])] + extras   # figure beside
+            out[rid]["outputs"] = "all" if whole and not extras else outs
             if not out[rid]["outputs"]:
                 warnings.append({"request": rid, "problem": "nothing shown"})
         if st == "insert":
@@ -527,16 +542,16 @@ def statement(r, main, part) -> dict | None:
     return None
 
 
-async def run(jev, db, prompt, requests, schema, sources: dict, values: list[dict]) -> dict:
+async def run(jev, db, prompt, requests, schema, sources: dict, values: list[dict], named=None) -> dict:
     """sources: step 4's section["requests"]; values: step 3's section["values"]. A number column's change is left to
     the formula steps (2026-10-15); another column's is one of the catalog's changes (2026-10-25)."""
     a1, a2 = {}, {}
     try:
         st = state(prompt, requests, schema, sources, values)
-        a1 = await ask(jev, st, questions_1(requests, schema, sources))
+        a1 = await ask(jev, st, questions_1(requests, schema, sources, named))
         a2 = await ask(jev, st, questions_2(db, requests, schema, sources, values, a1))
     except Exception as e:                                    # API error: nothing is guessed
         a1 = a1 or {"error": repr(e)}
-    section = build(db, requests, schema, sources, values, a1, a2)
+    section = build(db, requests, schema, sources, values, a1, a2, named)
     section["jev"] = {"call_1": a1, "call_2": a2}
     return section

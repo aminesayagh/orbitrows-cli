@@ -25,7 +25,7 @@ from orbitrows.services.extractor import client as extractor
 from orbitrows.services.storage.store import KINDS, ROLES
 from orbitrows.sql.ddl import schema_from_sqlite
 
-from . import assemble, conditions, coref, formula, grouping, guard, operation, parts, request_graph, source_route, sources, values
+from . import assemble, columns, conditions, coref, formula, grouping, guard, operation, parts, request_graph, source_route, sources, values
 
 
 
@@ -484,8 +484,10 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
     pause("sources", sources=s4)
     if problem := read_only(incoming, reqs, s4["requests"]):  # the one rule for an upload: never written
         return stop(problem, "sources", requests=s1, operation=s2, sources=s4)
+    step("the columns named")                                 # by words, meaning or kind: steps 5 and 6 read them
+    named = columns.run(reqs, store, s4["requests"], db)["requests"]
     step("step 5 · parts")
-    s5 = await parts.run(model, db, prompt, reqs, store, s4["requests"], s3["values"])
+    s5 = await parts.run(model, db, prompt, reqs, store, s4["requests"], s3["values"], named)
     pause("parts", parts=s5)
     def converted(asked, errors, **sections):                # step 6b, and after the formula: a stop or a question
         if errors:

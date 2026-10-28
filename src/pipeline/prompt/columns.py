@@ -2,18 +2,28 @@
 those (step 5: which are shown; step 6: which choose the records) instead of every column of every table it reads.
 Code only, no Jev: the columns are named by their sql names (no description is stored), split into words.
 
-    find(text, schema, tables=None) → {"t_x.c_y": {"how": "word" | "meaning", "words": the request's words}}
+    find(text, schema, tables=None, db=None) → {"t_x.c_y": {"how": "word" | "meaning" | "kind", "words": …}}
         word     a word of the column's name, in its base form, written in the request ("the prices" → price_mad,
                  "heaviest"? no: "weight" must be written); a word naming a table is no column's ("variants" is not
                  variant_id), nor a word of two letters or less (a unit: the "g" of weight_g)
         meaning  a phrase of the request close in meaning to the column's name words (the meaning model the value
                  search loads, values.encoder): "how heavy" → weight_g, "stock" → quantity
+        kind     a phrase naming columns by their kind ("all the number columns", "the dates", "the ids"): close in
+                 meaning to a kind's name (KINDS) and said as a group, plural or with a word of totality (spaCy's
+                 Number=Plur, PronType=Tot: "the dates", never "the sale date"); the kind's columns of the first of
+                 `tables` (the request's main table) come from what is stored, no row read: numbers (INTEGER, REAL)
+                 and texts (TEXT, not dates) but keys, dates (the import's profile), ids (its primary key)
+    run(requests, schema, sources, db)   the step: each request's columns, for steps 5 and 6 (section "columns")
+Measured (.bench/columns_recall.py, groups_proto.py): every non-key column the expected SQL uses found or reached
+through a written value; group phrases 0.89–0.98 to their kind, other phrases at most 0.68.
 """
 import re
 
 from orbitrows.pipeline.expressions.words import nlp
 
 MEANING_MIN = 0.6                                             # cosine of a phrase and a column's name words
+KINDS = {"numbers": "number columns", "texts": "text columns", "dates": "dates", "ids": "ids"}
+KIND_MIN = 0.8                                                # cosine of a group phrase and a kind's name
 
 
 def name_words(sql_name: str, table_words: set) -> list[str]:
@@ -37,7 +47,32 @@ def phrases(doc) -> list[str]:
     return sorted(out)
 
 
-def find(text: str, schema, tables=None, meaning: bool = True) -> dict:
+def group_phrases(doc) -> list[str]:
+    """Noun phrases said as a group: a plural head, or a word of totality (all, every, each) in or just before it."""
+    out = []
+    for c in doc.noun_chunks:
+        whole = any("Tot" in t.morph.get("PronType") for t in doc[max(c.start - 2, 0):c.end])
+        if "Plur" in c.root.morph.get("Number") or whole:
+            out += [c.text.lower(), c.root.lemma_.lower()]
+    return out
+
+
+def kind_columns(db, schema, table, kind) -> list[str]:
+    """A kind's columns of `table`, from what is stored about them (types, keys, the import's profile)."""
+    from orbitrows.pipeline.store.profile import facts
+    d = next(t["definition"] for t in schema if t["definition"]["table_id"] == table)
+    keys = set(d.get("primary_key", [])) | {c for fk in d.get("foreign_keys", []) for c in fk["columns"]}
+    out = []
+    for c in d["columns"]:
+        date = bool(facts(db, d["sql_name"], c["sql_name"]).get("dates")) if db is not None else False
+        if {"numbers": c["sql_type"] in ("INTEGER", "REAL") and c["column_id"] not in keys,
+                "texts": c["sql_type"] == "TEXT" and not date and c["column_id"] not in keys,
+                "dates": date, "ids": c["column_id"] in d.get("primary_key", [])}[kind]:
+            out.append(f"{table}.{c['column_id']}")
+    return out
+
+
+def find(text: str, schema, tables=None, meaning: bool = True, db=None) -> dict:
     doc = nlp("en")(text)
     said = {t.lemma_.lower() for t in doc if t.is_alpha}
     defs = [t["definition"] for t in schema if tables is None or t["definition"]["table_id"] in tables]
@@ -59,4 +94,24 @@ def find(text: str, schema, tables=None, meaning: bool = True) -> dict:
                 i = int(sims[:, j].argmax())
                 if sims[i, j] >= MEANING_MIN:
                     out[k] = {"how": "meaning", "words": [ps[i]], "score": round(float(sims[i, j]), 2)}
+        if tables and (gs := group_phrases(doc)):             # a kind of columns, of the main table
+            enc = encoder()
+            sims = enc.encode(gs, normalize_embeddings=True) @ enc.encode(list(KINDS.values()),
+                                                                          normalize_embeddings=True).T
+            for j, kind in enumerate(KINDS):
+                i = int(sims[:, j].argmax())
+                if sims[i, j] >= KIND_MIN:
+                    for k in kind_columns(db, schema, tables[0], kind):
+                        out.setdefault(k, {"how": "kind", "words": [gs[i]], "kind": kind,
+                                           "score": round(float(sims[i, j]), 2)})
     return out
+
+
+def run(requests, schema, sources: dict, db) -> dict:
+    """The step: each request's columns, its main table's first (step 4's target or source, then what it reads)."""
+    from .parts import main_table, read_tables              # step 5's tables: the main one, what it reads, parents
+    out = {}
+    for r in requests:
+        main = main_table(requests, sources, r["id"])
+        out[r["id"]] = find(r["text"], schema, read_tables(schema, sources, r["id"], main) if main else None, db=db)
+    return {"requests": out}

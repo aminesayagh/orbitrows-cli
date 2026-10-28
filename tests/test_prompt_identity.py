@@ -124,7 +124,11 @@ REPLACED = {"pipeline/prompt/coref.py": CORPIPE,
                                       "black': the negation is asked apart)."},
     # 2026-10-25: step 5's templates and their limits are the operations catalog's changes now (a number's change
     # is the formula's)
-    "pipeline/prompt/parts.py": {"SQLite, on all rows", *PARTS_TEMPLATES},
+    "pipeline/prompt/parts.py": {"SQLite, on all rows", *PARTS_TEMPLATES,
+                                 # 2026-10-28: a column only choosing the records is not shown ("compares" made the
+                                 # total stock of "whose total stock is under 20" a shown column: L02, N01, N04)
+                                 "Answer yes for a column whose values the request shows, sums, averages or compares "
+                                 "in its answer ('the names and prices', 'the total quantity': quantity)."},
     "sql/sql.py": {"SAVEPOINT ast_check", "ROLLBACK TO ast_check", "RELEASE ast_check"},
     # 2026-10-25: each formula step's SQL is written by the operations catalog's builder (one SQL per operation)
     # 2026-10-27: iso() reads dates with datephrase (../date_to_number); the strptime formats are gone
