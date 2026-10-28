@@ -69,3 +69,11 @@ def test_an_operation_is_found_for_a_request_of_its_own(search, entry_id, asked)
     role = by_id[entry_id]["role"]
     ranked = [i for i, _ in index.retrieve(asked, len(by_id)) if by_id[i]["role"] == role]
     assert entry_id in ranked[:K], (asked, ranked[:5])
+
+
+def test_the_shared_search_keeps_the_role_and_the_column_s_kind():
+    from orbitrows.pipeline.operations import use
+    found = use.search("raise the prices by 10%", "value", "number")
+    assert "INCREASE_PERCENT" in found and len(found) == use.K           # among what Jev chooses from
+    assert all(use.applies(use.catalog()["entries"][i], "text") for i in use.search("write the names in capitals",
+                                                                                     "value", "text"))
