@@ -142,12 +142,12 @@ VALUE_CHANGES = [   # (request, the changed column's kind, the operations it nee
     ('Replace the prices of the black variants by their square root.', 'number', ['SQUARE_ROOT']),
     ('Raise the prices of the navy variants to the power of 2.', 'number', ['RAISE_TO_POWER']),
 ]
-FOUND_FLOOR = 73                                               # of 75, in the top 10 (measured 2026-10-28)
+FOUND_FLOOR = 74                                               # of 75, in the top 10 (measured 2026-10-28, better examples)
 
 
 def test_the_value_changes_operations_are_found_part_by_part():
     """A floor, not a goal: a change to the catalog or its examples that loses one of these fails. Below it today:
-    SET_VALUE for "set the price … to 170" (rank 20) and INCREASE_PERCENT for "with 20% tax added" (11)."""
+    INCREASE_PERCENT for "with 20% tax added" (rank 11: the table and column words outweigh "tax added")."""
     from orbitrows.pipeline.expressions.words import segments
     from orbitrows.pipeline.operations import use
     n, found, missed = len(use.catalog()["entries"]), 0, []
