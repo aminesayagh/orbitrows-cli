@@ -25,7 +25,7 @@ from .builders import BUILDERS
 
 K = 10                                                        # the candidates a step shows Jev
 KINDS = {"number": ("numeric",), "text": ("text",), "date": ("date",)}   # a column's kind → the entries' declared type
-SET_BY_CODE = {"sql_type"}                                    # parameter types a step sets itself, never the request
+SET_BY_CODE = {"sql_type", "row_key"}                                    # parameter types a step sets itself, never the request
 _CATALOG = {}
 
 

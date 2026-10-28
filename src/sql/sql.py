@@ -228,6 +228,10 @@ def _select(s: dml.Select, reg: Registry, derived: dict, produced: dict, outer: 
             raise ValueError(f"UNKNOWN_REQUEST {src.request_id} (a select reading an earlier select only)")
         sources = {src.alias: ("result", src.request_id)}
         frm = exp.Table(this=ident(src.request_id), alias=exp.TableAlias(this=ident(src.alias)))
+    elif isinstance(src, dml.QueryResult):                    # FROM (SELECT …) AS alias: its columns by alias
+        sources = {src.alias: ("result", src.alias)}
+        frm = exp.Subquery(this=_select(src.query, reg, derived, produced, outer),
+                           alias=exp.TableAlias(this=ident(src.alias)))
     else:
         sources, frm = {src.alias: ("table", src.reference)}, _table(reg, src)
     if outer and src.alias in outer:

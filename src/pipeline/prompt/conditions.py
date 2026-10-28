@@ -81,6 +81,11 @@ CHOOSE_RULES = [
     "June' (the date).",
     "Answer no for a column the request only changes ('set the price to 199': price is not a condition, unless "
     "another words choose by it), only shows, only sorts by ('the cheapest'), or only groups by ('per brand').",
+    # 2026-10-28 (step 2.2): the first records of EACH group are a condition (a window), never a sort and a limit
+    "Answer yes for a column whose order keeps the first records of EACH group: 'the cheapest variant of each "
+    "product', 'the 2 latest sales of every variant', 'the second dearest per brand' (the price, the date choose "
+    "them within each group). Answer no when every record is kept and a value of its group's first or last record "
+    "is only shown beside it ('for each sale, the status of its variant's latest sale').",
     "A column of another table counts when the condition is on it: 'the variants of the Kora products' (the brand "
     "or name holding Kora).",
     "Answer no when the request counts, totals or checks the existence of records in another table rather than "
@@ -1026,7 +1031,39 @@ def questions_2b(requests, schema, section, params, db=None) -> dict:
     return q
 
 
-def build_2b(db, requests, schema, section, params, answers) -> None:
+def questions_2w(requests, schema, section, answers) -> dict:
+    """A computed condition read from a window (the 3 cheapest of each product, above the previous sale; step 2.2):
+    its groups, its order and its direction, asked only for those (their own call, after stage 2b's)."""
+    from orbitrows.pipeline.operations import use
+    q, entries = {}, use.catalog()["entries"]
+    for r in requests:
+        rid, said = r["id"], f"request {r['id']} ('{r['text']}')"
+        for c in section.get(rid, {}).get("computed", []):
+            key = c["column"]
+            e = entries.get(answers.get(f"{rid}|{key}|operation", (None,))[0])
+            if not e or e["builder_key"] != "window_filter":
+                continue
+            declared = {x["name"] for x in e["parameters"]}
+            cols, what = columns_of(schema, [key.split(".")[0]]), f"{e['name'].lower()} by {key.split('.c_')[-1]}"
+            q[f"{rid}|{key}|within"] = choice(CONTEXT, f"In {said}, {what}: within which groups (the records sharing "
+                                                       f"this column's value)?", {k: f"the {k.split('.c_')[-1]} "
+                                                                                     f"column" for k in cols
+                                                                                  if k != key}
+                                              | {"none": "None: among all the records together."})
+            if "order" in declared:
+                q[f"{rid}|{key}|order"] = choice(CONTEXT, f"In {said}, {what}: which column puts the records in "
+                                                          f"order (what 'previous' follows)?",
+                                                 {k: f"the {k.split('.c_')[-1]} column" for k in cols}
+                                                 | {"none": "None is said."})
+            if "direction" in declared:
+                q[f"{rid}|{key}|direction"] = choice(CONTEXT, f"In {said}, {what}: which records come first?",
+                                                     {"asc": "The lowest or the earliest values ('the cheapest').",
+                                                      "desc": "The highest or the latest values ('the dearest', "
+                                                              "'the most recent')."})
+    return q
+
+
+def build_2b(db, requests, schema, section, params, answers, more=None) -> None:
     """Each computed condition built by its operation's builder, from the answers of questions_2b; below SURE a
     question; none, or an operation whose parameters are not all known: the request is refused (assembly does
     not build it: never run without one of its conditions)."""
@@ -1039,11 +1076,12 @@ def build_2b(db, requests, schema, section, params, answers) -> None:
             heard = []                                        # its uncertain answers: questions if it is kept
 
             def pick(name, labels=None):
-                v, probs = answers.get(f"{rid}|{key}|{name}", (None, {}))
+                src = more if more and f"{rid}|{key}|{name}" in more else answers   # more: the window's call
+                v, probs = src.get(f"{rid}|{key}|{name}", (None, {}))
                 if v is not None and probs.get(v, 1) < SURE:
                     heard.append({"request": rid, "problem": f"{name} of {said} uncertain", "answer": v,
                                   "probability": round(probs.get(v, 0), 2)}
-                                 | question(answers, f"{rid}|{key}|{name}", labels))
+                                 | question(src, f"{rid}|{key}|{name}", labels))
                 return v, probs.get(v, 0)
             entries = use.catalog()["entries"]
             (op_id, sure), (other, _), (n, _) = (pick("operation", {i: e["name"] for i, e in entries.items()}),
@@ -1052,6 +1090,17 @@ def build_2b(db, requests, schema, section, params, answers) -> None:
             given = {"column": _col(key), "operator": c["operator"]}   # the entry filled from its declaration
             if other not in (None, "none"):
                 given["other"] = _col(other)
+            if entry and entry["builder_key"] == "window_filter":   # each record found again by its own id
+                table = key.split(".")[0]
+                pk = next((f"{table}.{x}" for t in schema if t["definition"]["table_id"] == table
+                           for x in t["definition"].get("primary_key", [])), None)
+                (within, _), (order, _), (way, _) = pick("within"), pick("order"), pick("direction")
+                given |= {"key": pk and _col(pk), "direction": way} | {
+                    k: _col(v) for k, v in (("within", within), ("order", order)) if v not in (None, "none")}
+                if "order" not in given and any(x["name"] == "order" for x in entry["parameters"]) and pk:
+                    given["order"] = _col(pk)                 # "previous" with no order said: the records' own
+                if given.get("within") == given.get("order", given["column"]):
+                    given.pop("within")                       # groups of equal values have nothing left to order
             words = factors(r["text"])
             if entry and n in words:
                 f = words[n][0]
@@ -1190,11 +1239,17 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
                 a2b = await ask(jev, st, q)
             except Exception as e:
                 a2b = {"error": repr(e)}
-        build_2b(db, requests, schema, section, params, a2b)
+        a2w = {}
+        if q := questions_2w(requests, schema, section["requests"], a2b):
+            try:
+                a2w = await ask(jev, st, q)
+            except Exception as e:                            # API error: nothing is guessed
+                a2w = {"error": repr(e)}
+        build_2b(db, requests, schema, section, params, a2b, a2w)
         build_2c(db, requests, schema, section, params, a2b)
         build_2d(requests, schema, section, params, a2b)
         section["parameters"] = params
-        section["jev"] = {"stage_1": answers, "stage_2": a2, "stage_2b": a2b}
+        section["jev"] = {"stage_1": answers, "stage_2": a2, "stage_2b": a2b} | ({"stage_2w": a2w} if a2w else {})
         return section
     section["jev"] = {"stage_1": answers, "stage_2": a2}
     return section

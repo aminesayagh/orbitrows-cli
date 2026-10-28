@@ -6,6 +6,7 @@ subquery's own alias is not a table id (assembly rewrites only those), as condit
     p   {"column", "other"?: column nodes, "operator"?: "<" | "<=" | ">" | ">=" | "=" | "!=", numbers, "value"?: node,
          "linked"?: {"table", "key": its column id pointing to `column`'s row}, "column_type"?: "TEXT" | "INTEGER" | "REAL"}
 """
+import json
 
 
 def lit(v) -> dict:
@@ -291,8 +292,32 @@ def window(p, config):
     return arith("*", w, lit(100)) if f == "percent_rank" else w
 
 
+def window_filter(p, config):
+    """the 3 cheapest variants of each product (config {"function": "rank", "operator": "<="}: their rank within the
+    group, in the column's order, at most the number, 1 when none is said; equal values share a rank), the second
+    dearest ({"operator": "="}), the sales above the variant's previous sale ({"function": "lag"}: the column OP the
+    previous record's value): key IN (SELECT k FROM (SELECT key AS k, the window AS w, column AS v FROM table) WHERE
+    …). SQLite refuses a window in WHERE: it is computed inside. A record whose value is empty is never ranked in."""
+    table = p["column"]["source"]
+    a, o = f"{table}_w", f"{table}_wr"
+    mine = lambda n: n and json.loads(json.dumps(n).replace(f'"source": "{table}"', f'"source": "{a}"'))
+    win = window({"column": mine(p["column"]), "within": mine(p.get("within")), "order": mine(p.get("order")),
+                  "direction": p.get("direction")}, {"function": config["function"]})
+    out = lambda c: {"type": "column", "source": o, "reference": c}
+    inner = {"id": a, "type": "select", "from": {"type": "database_table", "reference": table, "alias": a},
+             "columns": [{"expression": mine(p["key"]), "alias": "k"}, {"expression": win, "alias": "w"},
+                         {"expression": mine(p["column"]), "alias": "v"}],
+             "scope": {"type": "filtered", "where": {"type": "null_check", "expression": mine(p["column"]),
+                                                     "operator": "is_not_null"}}}
+    test = compare(config["operator"], out("w"), given(p.get("number") or 1)) if config["function"] == "rank" \
+        else compare(p.get("operator"), out("v"), out("w"))     # its entry requires it (the ranks never read it)
+    return {"type": "membership", "operator": "in", "expression": p["key"], "query": {
+        "id": o, "type": "select", "from": {"type": "query", "query": inner, "alias": o},
+        "columns": [{"expression": out("k"), "alias": "k"}], "scope": {"type": "filtered", "where": test}}}
+
+
 BUILDERS = {f.__name__: f for f in (
     percent_of_column, multiple_of_column, relative_difference, difference, table_aggregate, linked_aggregate,
     percent_change, add_amount, multiply, divide, share_of_column, from_column, round_digits, round_to_step, clamp,
     set_value, fill_empty, capitalize, affix, replace_text, text_function, shift_date, clear, aggregate,
-    length_compare, absolute_difference, days_between, remainder, function_of, power, window)}
+    length_compare, absolute_difference, days_between, remainder, function_of, power, window, window_filter)}

@@ -61,7 +61,7 @@ def tables_in(node) -> set:
 
     def walk(n):
         if isinstance(n, dict):
-            if n.get("type") == "database_table" and "alias" in n:
+            if n.get("type") in ("database_table", "query") and "alias" in n:   # a subquery's own names
                 own.add(n["alias"])
             if n.get("type") == "column":
                 out.add(n["source"])
@@ -158,12 +158,12 @@ def lift(cond, main, main_alias, schema, names, warnings, rid):
         return rewrite(cond, {main: main_alias})
     if len(tables) > 1:
         warnings.append({"request": rid, "problem": "a condition comparing two tables: not supported yet",
-                         "tables": sorted(tables)})
+                         "tables": sorted(tables), "dropped": True})
         return None
     (other,) = tables
     chain = path(schema, main, other)
     if chain is None:
-        warnings.append({"request": rid, "problem": f"no foreign-key path from {main} to {other}"})
+        warnings.append({"request": rid, "problem": f"no foreign-key path from {main} to {other}", "dropped": True})
         return None
     return chained(chain, lambda a: rewrite(cond, {other: a}), main_alias, lambda i, t: names.alias(t),
                    lambda t, a, c, w: select(names, t, a, [col(a, c)], w))
@@ -387,7 +387,7 @@ def from_rows(ast, earlier, main, schema):
 
     def rename(n):                                       # its own aliases inside the later statement: v → v_r1
         if isinstance(n, dict):
-            if n.get("type") == "database_table" and "alias" in n:
+            if n.get("type") in ("database_table", "query") and "alias" in n:
                 renamed[n["alias"]] = n["alias"] = f"{n['alias']}_{earlier['id']}"
             for v in n.values():
                 rename(v)
@@ -485,8 +485,12 @@ def assemble(db, schema, requests, operation, sources, parts, conditions, groupi
         if g6.get("having") and not g6.get("group_by"):       # a condition on groups, and no group column
             warnings.append({"request": rid, "problem": "not built: the condition on groups has no group column"})
             continue
+        before = len(warnings)
         ast = statement(r, st, main, schema, sources.get(rid, {}), parts.get(rid, {}), c6, g6, items, warnings,
                         typed_columns)
+        if ast is not None and any(w.get("dropped") for w in warnings[before:]):
+            warnings.append({"request": rid, "problem": "not built: one of its conditions could not be placed"})
+            continue                                    # never run without one of its conditions (C06: every sale)
         if ast is None:
             warnings.append({"request": rid, "problem": "not built: a part is missing"})
             continue

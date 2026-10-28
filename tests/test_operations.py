@@ -102,6 +102,19 @@ CHECKS = {
     "LAST_IN_GROUP": ("variants", {"column": PRICE, "within": PRODUCT, "order": VARIANT, "direction": "asc"},
                       "SELECT LAST_VALUE(price_mad) OVER (PARTITION BY product_id ORDER BY variant_id ROWS BETWEEN "
                       "UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM variants"),
+    # the window conditions, against SQL written without windows: the cheapest of each product (its ties kept), the
+    # second dearest (exactly one dearer), the sales above the previous sale
+    "TOP_PER_GROUP": ("variants", {"column": PRICE, "key": VARIANT, "within": PRODUCT, "direction": "asc"},
+                      "SELECT variant_id FROM variants v WHERE price_mad = (SELECT MIN(price_mad) FROM variants w "
+                      "WHERE w.product_id = v.product_id)"),
+    "NTH_PER_GROUP": ("variants", {"column": PRICE, "key": VARIANT, "within": PRODUCT, "direction": "desc",
+                                   "number": 2},
+                      "SELECT variant_id FROM variants v WHERE (SELECT COUNT(*) FROM variants w WHERE w.product_id = "
+                      "v.product_id AND w.price_mad > v.price_mad) = 1"),
+    "COMPARE_PREVIOUS": ("sales", {"column": col("sales", "quantity"), "key": col("sales", "sale_id"),
+                                   "order": col("sales", "sale_id"), "operator": ">"},
+                         "SELECT sale_id FROM sales s WHERE quantity > (SELECT quantity FROM sales p WHERE p.sale_id "
+                         "< s.sale_id ORDER BY sale_id DESC LIMIT 1)"),
     "SUM_VALUES": ("variants", {"column": PRICE}, "SELECT SUM(price_mad) FROM variants"),
     "AVERAGE_VALUES": ("variants", {"column": PRICE}, "SELECT AVG(price_mad) FROM variants"),
     "MINIMUM_VALUE": ("variants", {"column": PRICE}, "SELECT MIN(price_mad) FROM variants"),

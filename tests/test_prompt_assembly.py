@@ -93,3 +93,36 @@ def test_a_read_ordered_by_a_value_it_computes_sorts_by_that_expression():
     sql = out["program"][0]["sql"][0]
     assert [r[0] for r in db.execute(sql)] == [r[0] for r in db.execute(
         "SELECT price_mad - cost_mad FROM variants ORDER BY price_mad - cost_mad DESC LIMIT 3")], sql
+
+
+def delete_sales(where):
+    db = baseline()
+    reqs = [{"id": "r1", "text": "delete those sales", "statement": "delete"}]
+    out = assemble.assemble(db, store_of(db), reqs, {"r1": {"statement": "delete"}},
+                            {"r1": {"from": {"type": "database_table", "reference": "t_sales"}}},
+                            {"r1": {}}, {"r1": {}}, {"r1": {"where": where}}, [])
+    return db, out
+
+
+def test_a_condition_that_cannot_be_placed_stops_its_request_never_widens_it():
+    """C06 (2026-10-28): a condition dropped as "comparing two tables" left a delete of every sale."""
+    two = {"type": "comparison", "operator": ">",
+           "left": {"type": "column", "source": "t_sales", "reference": "c_quantity"},
+           "right": {"type": "column", "source": "t_variants", "reference": "c_price_mad"}}
+    _, out = delete_sales(two)
+    assert out["program"] == [] and any("could not be placed" in q["problem"] for q in out["questions"]), out
+
+
+def test_a_window_condition_deletes_the_records_its_ranking_leaves_out():
+    """"Delete every sale but the most recent of each variant": the window, computed in a subquery, in the WHERE."""
+    from orbitrows.pipeline.operations import builders
+    sales = lambda c: {"type": "column", "source": "t_sales", "reference": c}
+    latest = builders.window_filter({"column": sales("c_sold_on"), "key": sales("c_sale_id"),
+                                     "within": sales("c_variant_id"), "direction": "desc"},
+                                    {"function": "rank", "operator": "<="})
+    db, out = delete_sales({"type": "not", "operand": latest})
+    assert not out["errors"], out
+    for q in out["program"][0]["sql"]:
+        db.execute(q)
+    assert [r[0] for r in db.execute("SELECT sale_id FROM sales ORDER BY sale_id")] == [2, 4, 5, 6, 7, 8, 9, 10, 11,
+                                                                                         12, 13, 14]

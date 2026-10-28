@@ -9,6 +9,13 @@ from orbitrows.pipeline.operations.index import Index
 pytestmark = pytest.mark.catalog
 K = 10                                                        # what a step shows Jev (operations/use.py's search)
 HELD_OUT = {   # entry → requests never among its examples: other wording, other tables
+    "TOP_PER_GROUP": ["Show the cheapest flight of every route", "Keep each author's three newest articles",
+                      "Which are the highest scoring players in each team?"],
+    "NTH_PER_GROUP": ["Find the second highest salary in every department",
+                      "Show each customer's second purchase", "The fourth fastest lap of each driver"],
+    "COMPARE_PREVIOUS": ["Show the days when the temperature rose compared with the day before",
+                         "Which invoices are larger than the customer's previous invoice?",
+                         "Find the weeks where sign-ups fell from the prior week"],
     "RANK_VALUES": ["Give every city a rank by population", "Show each athlete's standing by time within their event",
                     "Which position does each branch hold by total sales?"],
     "PERCENTILE_RANK": ["Show how each house price compares as a percentile of all prices",

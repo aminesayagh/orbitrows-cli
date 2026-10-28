@@ -237,6 +237,14 @@ class RequestResult(Node):
     alias: str
 
 
+class QueryResult(Node):
+    """FROM (SELECT …) AS alias: a select's rows read as a table, its columns by their aliases (a condition on a
+    window function: the window computed inside, compared outside; 2026-10-28, step 2.2)."""
+    type: L["query"]
+    query: "Select"
+    alias: str
+
+
 class Filtered(Node):
     type: L["filtered"]
     where: Condition
@@ -246,7 +254,7 @@ class AllRows(Node):
     type: L["all_rows"]
 
 
-Source = Annotated[Union[DatabaseTable, RequestResult], Field(discriminator="type")]
+Source = Annotated[Union[DatabaseTable, RequestResult, QueryResult], Field(discriminator="type")]
 Scope = Annotated[Union[Filtered, AllRows], Field(discriminator="type")]
 
 
@@ -316,5 +324,5 @@ class Insert(Node):
 
 Statement = Annotated[Union[Select, Update, Delete, Insert], Field(discriminator="type")]
 for m in (Arithmetic, Negate, Branch, Case, FunctionCall, Concat, Aggregate, Window, Subquery, All, Any, Not, Membership,
-          Select, Insert):
+          QueryResult, Select, Insert):
     m.model_rebuild()

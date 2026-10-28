@@ -96,6 +96,8 @@ def searched(text: str, role: str, typ: str, allowed: dict) -> dict:
     from orbitrows.pipeline.operations import use
     kind = "number" if typ in ("INTEGER", "REAL") else "text"
     ids = [i for i in use.search(text, role, kind, len(use.catalog()["entries"])) if i in allowed][:use.K]
+    if role == "output" and "SHOW_VALUES" not in ids:     # a shown column's own values: the default reading, never
+        ids[-1:] = ["SHOW_VALUES"]                         # searched out (C07: 15 displays put it 11th)
     return {i: allowed[i] for i in ids}
 
 
