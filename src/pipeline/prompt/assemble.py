@@ -479,8 +479,8 @@ def assemble(db, schema, requests, operation, sources, parts, conditions, groupi
             warnings.append({"request": rid, "problem": f"not built: statement {st}, table {main}"})
             continue
         g6, c6 = grouping.get(rid, {}), conditions.get(rid, {})
-        if c6.get("refused"):                                 # a condition it cannot build: never run without it
-            warnings.append({"request": rid, "problem": f"not built: {c6['refused']}"})
+        if c6.get("refused") or g6.get("refused"):          # a condition it cannot build: never run without it
+            warnings.append({"request": rid, "problem": f"not built: {c6.get('refused') or g6['refused']}"})
             continue
         if g6.get("having") and not g6.get("group_by"):       # a condition on groups, and no group column
             warnings.append({"request": rid, "problem": "not built: the condition on groups has no group column"})

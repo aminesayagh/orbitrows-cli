@@ -331,7 +331,7 @@ async def test_a_branch_of_the_formula_is_left_out_of_the_where_s_tree(monkeypat
     monkeypatch.setattr(formula, "run", lambda *a, **k: _section({"requests": {}, "warnings": [],
                                                                     "branches": {"r1": [black]}}))
 
-    async def tree(model, prompt, reqs, store, sources_, c, params):
+    async def tree(model, prompt, reqs, store, sources_, c, params, parts=None):
         joined.append([x["condition"] for x in c["requests"]["r1"]["predicates"]])
         return saved["grouping"]
     monkeypatch.setattr(grouping, "run", tree)

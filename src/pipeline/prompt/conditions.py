@@ -81,11 +81,6 @@ CHOOSE_RULES = [
     "June' (the date).",
     "Answer no for a column the request only changes ('set the price to 199': price is not a condition, unless "
     "another words choose by it), only shows, only sorts by ('the cheapest'), or only groups by ('per brand').",
-    # 2026-10-28 (step 2.2): the first records of EACH group are a condition (a window), never a sort and a limit
-    "Answer yes for a column whose order keeps the first records of EACH group: 'the cheapest variant of each "
-    "product', 'the 2 latest sales of every variant', 'the second dearest per brand' (the price, the date choose "
-    "them within each group). Answer no when every record is kept and a value of its group's first or last record "
-    "is only shown beside it ('for each sale, the status of its variant's latest sale').",
     "A column of another table counts when the condition is on it: 'the variants of the Kora products' (the brand "
     "or name holding Kora).",
     "Answer no when the request counts, totals or checks the existence of records in another table rather than "
@@ -1159,7 +1154,17 @@ def build_2b(db, requests, schema, section, params, answers, more=None) -> None:
                 warnings.append({"request": rid, "problem": f"condition on {key} refused", "error": err})
             out[rid].setdefault("predicates", []).append({"column": key, "operator": c["operator"],
                                                           "negated": c["negated"], "condition": cond,
-                                                          "operation": entry["id"]})
+                                                          "operation": entry["id"]} | windowed(entry, m["p"]))
+
+
+def windowed(entry, p) -> dict:
+    """A window condition's groups and ranking, for the grouping step: "of each product" and "the 2 dearest" are its
+    groups and its number, never a GROUP BY or a LIMIT again (step 2.2)."""
+    if entry["builder_key"] != "window_filter":
+        return {}
+    w = p.get("within")
+    return {"window": {"within": w and f"{w['source']}.{w['reference']}",
+                       "ranked": entry["config"]["function"] == "rank"}}
 
 
 def dated(r, found, answers, section) -> list[dict]:

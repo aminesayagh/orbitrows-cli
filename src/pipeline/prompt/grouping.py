@@ -106,7 +106,58 @@ def state(prompt, requests, schema, section) -> dict:
             "tables": {t["definition"]["sql_name"]: [c["sql_name"] for c in t["definition"]["columns"]] for t in schema}}
 
 
-def questions(requests, schema, sources, section, params) -> dict:
+def windows(g: dict, part: dict) -> tuple[set, bool]:
+    """What a window of the request already reads (step 2.2): the columns its groups are (a window condition's, or a
+    shown window's when nothing aggregated is shown: "each variant's rank within its product" is no GROUP BY), and
+    whether a window condition already keeps a number of records per group (no LIMIT again)."""
+    conds = [p["window"] for p in g.get("predicates", []) if p.get("window")]
+    groups = {w["within"] for w in conds if w["within"]}
+    outs = part.get("outputs") if isinstance(part.get("outputs"), list) else []
+    if not any(o["aggregate"] not in ("value", "window", "computed") for o in outs):
+        groups |= {f"{c['source']}.{c['reference']}" for o in outs if o["aggregate"] == "window"
+                   for c in partitions(o["expression"])}
+    return groups, any(w["ranked"] for w in conds)
+
+
+def partitions(node) -> list[dict]:
+    if isinstance(node, dict):
+        return (node.get("partition_by", []) if node.get("type") == "window" else []) + \
+            [c for v in node.values() for c in partitions(v)]
+    return [c for v in node for c in partitions(v)] if isinstance(node, list) else []
+
+
+PER_GROUP = {"all": "Over all the records: 'the 3 cheapest variants', 'the latest sale'.",
+             "each": "The first records of EACH group: 'the cheapest variant of each product', 'the 2 latest sales of "
+                     "every variant'.",
+             "place": "Only the record at that place in EACH group: 'the second dearest variant of each product'."}
+
+
+def per_group(g, rid, pick, schema, order, value) -> tuple[dict | None, str | None]:
+    """A limit in each group (step 2.2): "the cheapest variant of each product" keeps the first records of each
+    product, ordered as the request orders them: the catalog's window condition (TOP_PER_GROUP, NTH_PER_GROUP), never
+    a LIMIT over all. → (its condition, its group column); (None, None) when not in groups; ("refused", why) when in
+    groups but it cannot be built (no order said): never a LIMIT over all instead."""
+    from orbitrows.pipeline.operations import use
+    how = pick(rid, "per_group", what="whether the limit is in each group")
+    if how not in ("each", "place"):
+        return None, None
+    if not order or "expression" not in order[0]:
+        return "refused", "keeps records in each group, but no column orders them"
+    within = pick(rid, "per", what="the groups of the limit")
+    by = order[0]["expression"]
+    table = by["source"]
+    pk = next((x for t in schema if t["definition"]["table_id"] == table for x in t["definition"].get("primary_key",
+                                                                                                       [])), None)
+    e = use.catalog()["entries"]["TOP_PER_GROUP" if how == "each" else "NTH_PER_GROUP"]
+    given = {"column": by, "key": pk and _col(f"{table}.{pk}"), "direction": order[0]["direction"],
+             "number": value} | ({"within": _col(within)} if within not in (None, "none") else {})
+    params, problems = use.fill(e, {k: v for k, v in given.items() if v is not None})
+    if problems:
+        return "refused", "; ".join(problems)
+    return use.build(e, params), within if within != "none" else None
+
+
+def questions(requests, schema, sources, section, params, parts=None) -> dict:
     q = {}
     for r in requests:
         rid, said = r["id"], f"request {r['id']} ('{r['text']}')"
@@ -129,12 +180,20 @@ def questions(requests, schema, sources, section, params) -> dict:
                 {"computed": "By the value it computes from columns (step 5's: 'by price minus cost')"}
                 if g.get("computed_sort") else {}))
             q[f"{rid}|direction"] = choice(CONTEXT, f"In which direction does {said} order them?", DIRECTION)
-        if g.get("limited"):
+        groups, ranked = windows(g, (parts or {}).get(rid, {}))
+        if g.get("limited") and not ranked and r["statement"] == "select":   # a limit in each group (step 2.2)
+            q[f"{rid}|per_group"] = choice(CONTEXT, f"Does {said} keep that number of records over all of them, or "
+                                                    f"in EACH group of records?", PER_GROUP)
+            q[f"{rid}|per"] = choice(CONTEXT, f"If {said} keeps them in each group, which column's equal values form "
+                                              f"the groups ('of each product': the product)?",
+                                     cols | {"none": "None: not in groups."})
+        if g.get("limited") and not ranked:
             nums = {f"n{i}": f"'{t}' ({v})" for i, (t, v) in enumerate(limits(r["text"], params.get(rid, [])))}
             q[f"{rid}|limit"] = choice(CONTEXT, f"How many records does {said} keep?",
-                                       nums | {"one": "One record: a singular ('the cheapest variant').",
+                                       nums | {f"p{i}": f"'{t}': the record at place {v}" for i, (t, v)
+                                               in enumerate(places(r["text"]))} | {"one": "One record: a singular ('the cheapest variant').",
                                                "none": "None of these: the number is not written here."})
-        if g.get("grouped"):
+        if g.get("grouped") and not groups:
             q[f"{rid}|group"] = choice(CONTEXT, f"Which column does {said} group its records by ('per brand')?", cols)
     return q
 
@@ -150,12 +209,18 @@ def limits(text: str, params: list[dict]) -> list[tuple[str, int]]:
     return out
 
 
+def places(text: str) -> list[tuple[str, int]]:
+    """The places the request writes ("the second dearest": 2), read by the shared reader (an ordinal): a place in
+    each group, never a number of records (step 2.2)."""
+    return [(q["text"], int(q["value"])) for q in find(text) if q["kind"] == "ordinal" and q["value"].denominator == 1]
+
+
 def _col(key):
     t, c = key.split(".")
     return {"type": "column", "source": t, "reference": c}
 
 
-def build(requests, section, params, answers) -> dict:
+def build(requests, section, params, answers, parts=None, schema=None) -> dict:
     out, warnings = {}, []
 
     def pick(rid, name, labels=None, what=None):
@@ -193,31 +258,47 @@ def build(requests, section, params, answers) -> dict:
                 out[rid]["order_by"] = [{"computed": True, "direction": d or "asc"}]
             elif col:
                 out[rid]["order_by"] = [{"expression": _col(col), "direction": d or "asc"}]
-        if g.get("limited"):
+        groups, ranked = windows(g, (parts or {}).get(rid, {}))
+        if g.get("limited") and not ranked:
             nums = limits(r["text"], params.get(rid, []))
-            n = pick(rid, "limit", {f"n{i}": t for i, (t, _) in enumerate(nums)})
-            value = 1 if n == "one" else nums[int(n[1:])][1] if n and n[1:].isdigit() and int(n[1:]) < len(nums) else None
-            if value is None:
+            spots = places(r["text"])
+            n = pick(rid, "limit", {f"n{i}": t for i, (t, _) in enumerate(nums)} |
+                     {f"p{i}": t for i, (t, _) in enumerate(spots)})
+            listed = spots if n and n.startswith("p") else nums
+            value = 1 if n == "one" else listed[int(n[1:])][1] if n and n[1:].isdigit() and int(n[1:]) < len(listed) \
+                else None
+            cond, within = per_group(g, rid, pick, schema or [], out[rid].get("order_by"), value) \
+                if r["statement"] == "select" else (None, None)
+            if cond is None and n and n.startswith("p"):       # a place over all the records: not built yet, never
+                cond, within = "refused", "keeps the record at one place over all the records (not supported yet)"
+            if cond == "refused":                             # in groups, not buildable: refused, never widened
+                out[rid]["refused"] = within
+                warnings.append({"request": rid, "problem": f"not built: {within}"})
+            elif cond:                                        # in each group: a condition, no LIMIT over all
+                w = out[rid].get("where")
+                out[rid]["where"] = {"type": "all", "children": [w, cond]} if w else cond
+                groups |= {within} if within else set()
+            elif value is None:
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": "limit: no number found"})
             else:
                 out[rid]["limit"] = value
-        if g.get("grouped"):
+        if g.get("grouped") and not groups:
             col = pick(rid, "group")
             if col:
                 out[rid]["group_by"] = [_col(col)]
-        if g.get("having"):                                   # stage 2d's condition on the groups
+        if g.get("having") and not (g.get("grouped") and groups):   # a window's groups: no condition on groups                                   # stage 2d's condition on the groups
             out[rid]["having"] = g["having"]
     return {"requests": out, "warnings": warnings}
 
 
-async def run(jev, prompt, requests, schema, sources: dict, section: dict, params: dict) -> dict:
+async def run(jev, prompt, requests, schema, sources: dict, section: dict, params: dict, parts=None) -> dict:
     """section: conditions.run's section (stages 1–2); params: its section["parameters"]."""
     try:
         answers = await ask(jev, state(prompt, requests, schema, section),
-                            questions(requests, schema, sources, section, params))
+                            questions(requests, schema, sources, section, params, parts))
     except Exception as e:                                    # API error: nothing is guessed
         answers = {"error": repr(e)}
-    out = build(requests, section, params, answers)
+    out = build(requests, section, params, answers, parts, schema)
     out["jev"] = answers
     return out

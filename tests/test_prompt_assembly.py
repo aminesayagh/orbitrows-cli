@@ -126,3 +126,35 @@ def test_a_window_condition_deletes_the_records_its_ranking_leaves_out():
         db.execute(q)
     assert [r[0] for r in db.execute("SELECT sale_id FROM sales ORDER BY sale_id")] == [2, 4, 5, 6, 7, 8, 9, 10, 11,
                                                                                          12, 13, 14]
+
+
+def limited(text, answers):
+    """The grouping step on given answers for a sorted, limited read of the variants, then assembly."""
+    from orbitrows.pipeline.prompt import grouping
+    db = baseline()
+    reqs = [{"id": "r1", "text": text, "statement": "select"}]
+    sure = lambda v: (v, {v: 1.0})
+    g = grouping.build(reqs, {"requests": {"r1": {"sorted": True, "limited": True, "predicates": []}}}, {},
+                       {f"r1|{k}": sure(v) for k, v in answers.items()}, {}, store_of(db))["requests"]
+    out = assemble.assemble(db, store_of(db), reqs, {"r1": {"statement": "select"}},
+                            {"r1": {"from": {"type": "database_table", "reference": "t_variants"}}},
+                            {"r1": {"outputs": [{"column": "t_variants.c_variant_id", "aggregate": "value",
+                                                 "expression": {"type": "column", "source": "t_variants",
+                                                                "reference": "c_variant_id"}}]}}, {"r1": {}}, g, [])
+    return db, out
+
+
+def test_a_limit_in_each_group_keeps_the_first_records_of_every_group_never_a_limit_over_all():
+    """"The cheapest variant of each product" (step 2.2): a window condition, its ties kept; "the second dearest"
+    without groups is refused, never read as a limit."""
+    db, out = limited("Show the cheapest variant of each product.",
+                      {"sort": "t_variants.c_price_mad", "direction": "asc", "limit": "one", "per_group": "each",
+                       "per": "t_variants.c_product_id"})
+    sql = out["program"][0]["sql"][0]
+    assert "LIMIT" not in sql and sorted(r[0] for r in db.execute(sql)) == sorted(r[0] for r in db.execute(
+        "SELECT variant_id FROM variants v WHERE price_mad = (SELECT MIN(price_mad) FROM variants w "
+        "WHERE w.product_id = v.product_id)")), sql
+    _, out = limited("Show the second most expensive variant.",
+                     {"sort": "t_variants.c_price_mad", "direction": "desc", "limit": "p0", "per_group": "all",
+                      "per": "none"})
+    assert out["program"] == [] and any("one place over all" in q["problem"] for q in out["questions"]), out

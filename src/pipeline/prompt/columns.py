@@ -33,6 +33,17 @@ def name_words(sql_name: str, table_words: set) -> list[str]:
     return [w for w in (lemma(w) for w in words) if w not in table_words]
 
 
+def unit_word(sql_name: str) -> str | None:
+    """The unit written after the column name's last "_" (the unit dictionary's reading, a code in any case: price_mad
+    → mad), else None. A written unit names the column ("under 150 MAD"); its meaning is no name's: "cheap" is 0.71 to
+    price, 0.55 to "price mad" (2026-10-28, step 2.2)."""
+    from orbitrows.units.dictionary import declared
+    if "_" not in sql_name:
+        return None
+    head, last = sql_name.rsplit("_", 1)
+    return last.lower() if declared(sql_name) or declared(f"{head}_{last.upper()}") else None
+
+
 def lemma(word: str) -> str:
     return nlp("en")(word)[0].lemma_.lower()
 
@@ -84,7 +95,9 @@ def find(text: str, schema, tables=None, meaning: bool = True, db=None) -> dict:
     if meaning:
         from .values import encoder
         ps = phrases(doc)
-        named = {k: " ".join(ws) for k, ws in cols.items() if ws and k not in out}
+        units = {f"{d['table_id']}.{c['column_id']}": unit_word(c["sql_name"]) for d in defs for c in d["columns"]}
+        named = {k: " ".join(w for w in ws if w != units[k]) for k, ws in cols.items()   # by meaning: the name
+                 if [w for w in ws if w != units[k]] and k not in out}                    # without its unit
         if ps and named:
             enc = encoder()
             pv = enc.encode(ps, normalize_embeddings=True)
