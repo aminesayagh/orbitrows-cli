@@ -14,6 +14,7 @@ its own declaration; no step keeps its own list of operations or its own rules f
                                          the wrong type is a problem, never a guess; a missing optional slot keeps
                                          its declared default
     build(entry, parameters)             the entry's own builder: our AST (sql/dml.py)
+    reads_column(entry)                  whether its value depends on the value it changes (probed, not listed)
 
 Values: a number or a percentage as a number, or a node (another step's result: "never above twice the cost"); a
 text or a value as a text (it becomes a literal) or a node; a column as a column node, but the value an entry applies
@@ -82,6 +83,19 @@ def fill(entry: dict, given: dict) -> tuple[dict, list[str]]:
         params[name] = {"type": "literal", "value": v} if p["type"] in ("text", "value") and not isinstance(v, dict) \
             else v
     return params, problems
+
+
+def reads_column(entry: dict) -> bool:
+    """Whether the entry's value depends on the value it changes (raise it, round it, prefix it) or not (set it to a
+    value, copy another column, empty it): its builder probed with a marked column, every slot a sample value."""
+    import json
+    sample = {"number": 1, "percentage": 1, "text": "x", "value": "x", "condition": None, "sql_type": "TEXT",
+              "column_reference": {"type": "column", "source": "t_", "reference": "c_other"}}
+    given = {"column": {"type": "column", "source": "t_", "reference": "c_probe"}}
+    for p in slots(entry):
+        given[p["name"]] = (p.get("constraints", {}).get("one_of") or [sample.get(p["type"], 1)])[0]
+    params, problems = fill(entry, given)
+    return bool(problems) or "c_probe" in json.dumps(build(entry, params))
 
 
 def build(entry: dict, params: dict) -> dict:

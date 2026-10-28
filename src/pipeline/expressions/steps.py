@@ -73,6 +73,114 @@ def plain_options(text: str) -> dict:
         "no": "None of these."}
 
 
+def slot_options(words: str, kind: str) -> dict:
+    """What a written text (or, for a date column, a number) may fill: each slot of the catalog's changes the shared
+    search finds for its words ("Replace a text: the text replaced" / "…: the text put in its place"); then none."""
+    from orbitrows.pipeline.operations import use
+    c, out = use.catalog()["entries"], {}
+    fills = ("text", "value", "number") if kind == "date" else ("text", "value")
+    for i in [i for i in use.search(words, "value", kind, len(c)) if any(
+            x["type"] in fills for x in use.slots(c[i]))][:use.K]:
+        for x in use.slots(c[i]):
+            if x["type"] in fills:
+                out[f"{i}.{x['name']}"] = f"{c[i]['name']}: {x['description']} (e.g. '{c[i]['examples'][0]}')"
+    return out | {"none": TEXT_KIND["none"]}
+
+
+def plain_text_options(text: str, kind: str) -> dict:
+    """The catalog's changes of a text or date column with nothing to fill (capitals, lower case, trimmed, emptied)."""
+    from orbitrows.pipeline.operations import use
+    c = use.catalog()["entries"]
+    ids = [i for i in use.search(text, "value", kind, len(c)) if not use.slots(c[i])][:use.K]
+    return {i: f"{c[i]['name']}: {c[i]['behavior']} (e.g. '{c[i]['examples'][0]}')" for i in ids} | {
+        "no": "None of these."}
+
+
+def catalog_steps(cands, ans, add, start_of, column_of, ambiguities, stored, dated, target, text, names):
+    """The text pass on the catalog (step 1.3): each written text (a number, for a date column) fills the slot its
+    answer names; the slots of one change are grouped in text order ("replace X with Y": one step, X its old text, Y
+    its new one); a slot still missing is taken from the change's previous step ("…, but with Orbit+ for the active
+    ones": the replaced text said before), else asked; a value is checked as the old pass did (a date for a date
+    column, a stored spelling). Then a change with nothing to fill (plain_text)."""
+    from orbitrows.pipeline.operations import use
+    c_ = use.catalog()["entries"]
+    groups = []
+    for c in cands:
+        pick, kp = ans.get(f"{c['occ']}_kind", (None, {}))
+        if pick is None or kp.get(pick, 0) < MIN:
+            ambiguities.append({"problem": "what this text does: uncertain", "occurrence": c["occ"], "text": c["text"],
+                                "start": c["start"], "end": c["end"], "answer": pick,
+                                "probability": round(kp.get(pick, 0), 2)})
+            continue
+        if pick == "none" or "." not in pick:
+            continue
+        eid, slot = pick.split(".", 1)
+        decl = next(x for x in use.slots(c_[eid]) if x["name"] == slot)
+        fill = {}
+        if decl["type"] == "value":                         # a new value: the old pass's checks
+            v = c.get("iso") if c["kind"] == "date" else c["text"]
+            if dated and c["kind"] != "date":
+                ambiguities.append({"problem": f"'{c['text']}' is not a date the column can hold",
+                                    "start": c["start"], "end": c["end"]})
+                continue
+            if c["kind"] == "date" and not v:
+                ambiguities.append({"problem": f"date not read: '{c['text']}'", "start": c["start"], "end": c["end"]})
+                continue
+            same = next((x for x in stored if c["text"].casefold() == x.casefold()), None)
+            if same:
+                v = same
+            elif stored and c["kind"] == "text" and not c.get("quoted"):
+                sv, sp = ans.get(f"{c['occ']}_stored", ("as_written", {}))
+                if sv != "as_written" and sp.get(sv, 0) >= MIN:
+                    v = stored[int(sv[1:])]
+            if stored and v not in stored:
+                ambiguities.append({"problem": f"'{v}' is not one of the existing values ({', '.join(stored)})",
+                                    "question": f"{c['occ']}_stored", "answer": v, "probability": 0.0,
+                                    "status": "flagged", "start": c["start"], "end": c["end"]})
+            fill[slot] = v
+        elif decl["type"] == "number":                      # a length of time for a date: its unit
+            unit, up = (c["unit"], {c["unit"]: 1}) if c.get("unit") else ans.get(f"{c['occ']}_unit", ("none", {}))
+            if unit == "none" or up.get(unit, 0) < MIN:
+                ambiguities.append({"problem": f"duration unit of '{c['text']}' unclear", "start": c["start"],
+                                    "end": c["end"]})
+                continue
+            fill[slot] = c["value"] * (7 if unit == "weeks" else 1)
+            if any(x["name"] == "unit" for x in use.slots(c_[eid])):
+                fill["unit"] = "days" if unit == "weeks" else unit
+        else:
+            fill[slot] = c["text"]
+        named = column_of(c)
+        a, b = start_of(c), c["end"] + (1 if text[c["end"]:c["end"] + 1] in ("'", '"') else 0)
+        g = next((g for g in reversed(groups) if g["entry"] == eid and slot not in g["fill"]), None)
+        if g is None:
+            groups.append(g := {"entry": eid, "fill": {}, "a": a, "b": b, "named": named})
+        g["fill"] |= fill
+        g["a"], g["b"], g["named"] = min(g["a"], a), max(g["b"], b), g["named"] or named
+    for i, g in enumerate(groups):
+        e = c_[g["entry"]]
+        for x in use.slots(e):                              # a slot not written here: the change's previous step's
+            if x["required"] and x["name"] not in g["fill"]:
+                prev = next((h for h in reversed(groups[:i]) if h["entry"] == g["entry"] and x["name"] in h["fill"]),
+                            None)
+                if prev:
+                    g["fill"][x["name"]] = prev["fill"][x["name"]]
+        _, missing = use.fill(e, {"column": {"type": "column", "source": "t_", "reference": "c_"}} | g["fill"])
+        if missing:
+            ambiguities.append({"problem": f"'{text[g['a']:g['b']]}': {'; '.join(missing)}", "start": g["a"],
+                                "end": g["b"]})
+            continue
+        left = ({"column": g["named"]} if g["named"] else {"unresolved": True}) if use.reads_column(e) else None
+        add(entry_role(e), f"entry:{g['entry']}", left, {"fill": g["fill"], "source": text[g["a"]:g["b"]]},
+            g["a"], g["b"], f"catalog.{g['entry']}")
+    pt, pp = ans.get("plain_text", ("no", {}))
+    e = plain_entry(pt) if pp.get(pt, 0) >= MIN else None
+    if e is not None and (use.reads_column(e) or not groups):   # emptying, when no value is set: as the old pass
+        t = next((c for c in names.values() if c["column"] == target), None)
+        a, b = (t["start"], t["end"]) if t else (0, len(text))
+        add(entry_role(e), f"entry:{pt}", ({"column": target} if t else {"unresolved": True})
+            if use.reads_column(e) else None, None, a, b, f"catalog.{pt}")
+
+
 def plain_entry(answer: str):
     from orbitrows.pipeline.operations import use
     return use.catalog()["entries"].get(answer) if answer not in (None, "no") else None
@@ -280,7 +388,8 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
             right = {"value": slot_value(slot, o), "source": o["text"], "slot": slot["name"]}
             if other and c and c["column"] != upstream["target"]:   # "10% of the cost": the cost is its other column
                 right["other"], left = {"column": c["column"]}, {"unresolved": True}
-            add(entry_role(e), f"entry:{kind}", left, right, a, b, f"catalog.{kind}", [o["occ"]])
+            add(entry_role(e), f"entry:{kind}", left if use.reads_column(e) else None, right, a, b,
+                f"catalog.{kind}", [o["occ"]])
             continue
         v, p, rule = o["value"], o["percent"], f"jev.{kind}"
         val = {"value": v, "source": o["text"]}
@@ -439,6 +548,10 @@ def read_as(answer, of: dict) -> tuple:
 
 
 UNIT = {"days": "days", "weeks": "weeks", "months": "months", "years": "years", "none": "Not a duration."}
+CASE_RULES = ["A text written or replaced that happens to be in capitals is not a case change: 'replace Orbit with "
+              "ORBIT', 'add ' NEW' at the end' change only those words: answer none.",
+              "A case change is asked for the column's whole text: 'write the brands in capitals', 'put the colours in "
+              "lower case', 'capitalise the names'."]
 TEXT_USE = {"target": "It is the column the request changes.",
             "set_to": "The changed column becomes this column's value ('set the barcode to the SKU').",
             "other": "None of these."}
@@ -513,8 +626,11 @@ async def extract_textdate(jev, text: str, upstream: dict, lang: str = "en") -> 
     col_opts["none"] = "No column is named in this step's own words."
     q = {}
     stored = upstream.get("stored_values") or []           # a short list of existing values (a status): A02
+    cat, tkind = catalog_mode(), ("date" if dated else "text")
     for c in cands:
-        q[f"{c['occ']}_kind"] = choice(TEXT_CONTEXT, f"What does {c['occ']} ('{c['text']}') do?", text_kinds())
+        clause = text[slice(*segment_of(segments(text), c["start"]))].strip()
+        q[f"{c['occ']}_kind"] = choice(TEXT_CONTEXT, f"What does {c['occ']} ('{c['text']}') do?",
+                                       slot_options(clause, tkind) if cat else text_kinds())
         exact = any(c["text"].casefold() == v.casefold() for v in stored)
         if stored and c["kind"] == "text" and not c.get("quoted") and not exact:   # "blue" IS a stored value: no question
             q[f"{c['occ']}_stored"] = choice(TEXT_CONTEXT, f"If {c['occ']} ('{c['text']}') gives the column's new value, "
@@ -544,15 +660,17 @@ async def extract_textdate(jev, text: str, upstream: dict, lang: str = "en") -> 
         if p["start"] >= 0:
             q[f"{p['id']}_role"] = choice(TEXT_CONTEXT, f"What does the request do with the records '{p['text']}'?",
                                          ROLE, ROLE_RULES)
-    q["empty"] = choice(TEXT_CONTEXT, "Does the request empty the column (clear it, remove its value, leave it blank)?",
-                        {"yes": "Yes, the column is emptied (for all or some records).", "no": "No."})
-    if not dated:                                           # letter case (2026-10-16, user: in the basic version)
+    if cat:                                                 # a change with nothing to fill: the catalog's
+        q["plain_text"] = choice(TEXT_CONTEXT, "Does the request change the column's whole value in one of these ways, "
+                                               "with nothing written to fill?", plain_text_options(text, tkind),
+                                 CASE_RULES)
+    else:
+        q["empty"] = choice(TEXT_CONTEXT, "Does the request empty the column (clear it, remove its value, leave it "
+                                          "blank)?", {"yes": "Yes, the column is emptied (for all or some records).",
+                                                      "no": "No."})
+    if not dated and not cat:                               # letter case (2026-10-16, user: in the basic version)
         q["case"] = choice(TEXT_CONTEXT, "Does the request change the letter case of the column's WHOLE text?",
-                           case_kinds(),
-                           ["A text written or replaced that happens to be in capitals is not a case change: 'replace "
-                            "Orbit with ORBIT', 'add ' NEW' at the end' change only those words: answer none.",
-                            "A case change is asked for the column's whole text: 'write the brands in capitals', 'put "
-                            "the colours in lower case', 'capitalise the names'."])
+                           case_kinds(), CASE_RULES)
     marked_text = marked(text, [{"start": c["start"], "end": c["end"], "occ": c["occ"]} for c in cands])
     ans = await ask(jev, {"request": marked_text, "columns named in the request": col_opts}, q)
     if piped:
@@ -591,7 +709,9 @@ async def extract_textdate(jev, text: str, upstream: dict, lang: str = "en") -> 
         return best if best and meant[best] >= MIN and meant[best] > cp.get("none", 0) else None
 
     replaced, replacement = [], []
-    for c in cands:
+    if cat:                                                 # step 1.3: each text fills a slot of a catalog change
+        catalog_steps(cands, ans, add, start_of, column_of, ambiguities, stored, dated, target, text, names)
+    for c in (cands if not cat else []):
         kind, kp = read_as(ans.get(f"{c['occ']}_kind"), TEXT_KIND_OF)
         if kind is None or kp.get(kind, 0) < MIN:
             ambiguities.append({"problem": "what this text does: uncertain", "occurrence": c["occ"], "text": c["text"],
@@ -660,7 +780,7 @@ async def extract_textdate(jev, text: str, upstream: dict, lang: str = "en") -> 
         use, up = ans.get(f"{k}_use", ("other", {}))
         if use == "set_to" and up.get(use, 0) >= MIN and c["column"] != target:
             add("calculation", "set", None, {"column": c["column"]}, c["start"], c["end"], "jev.column_set_to")
-    cs, cp_ = read_as(ans.get("case", ("none", {"none": 1.0})), CASE_OF)
+    cs, cp_ = read_as(ans.get("case", ("none", {"none": 1.0})), {} if cat else CASE_OF)
     if cs not in ("none", None) and cp_.get(cs, 0) >= MIN:
         t = next((c for c in names.values() if c["column"] == target), None)
         a, b = (t["start"], t["end"]) if t else (0, len(text))

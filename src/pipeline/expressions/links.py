@@ -44,7 +44,7 @@ def label(r: dict) -> str:
     if f and f.startswith("entry:"):                        # a catalog change: what its own builder writes, on
         from orbitrows.pipeline.operations import use      # "value" (the value the step applies to)
         e = catalog_entry(f[6:])
-        given = {"column": {"type": "column", "source": "t_", "reference": "c_value"}}
+        given = {"column": {"type": "column", "source": "t_", "reference": "c_value"}} | right.get("fill", {})
         if right.get("slot"):
             given[right["slot"]] = right.get("value")
         if right.get("other"):
@@ -255,7 +255,7 @@ def build(recs, links, target, preds) -> dict:
         if f.startswith("entry:"):                          # a catalog change (step 1.3): its own declaration
             from orbitrows.pipeline.operations import use
             e, right = catalog_entry(f[6:]), r["right"] or {}
-            given = {"column": operand(r["left"], r, "left")}
+            given = {"column": operand(r["left"], r, "left") if r["left"] else col(target)} | right.get("fill", {})
             if right.get("slot"):                           # the number as written, or the step that computes it
                 given[right["slot"]] = node(ids[links[(r["id"], "right")]]) if (r["id"], "right") in links \
                     else right["value"]
