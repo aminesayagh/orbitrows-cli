@@ -8,7 +8,7 @@ from orbitrows.pipeline.operations import builders
 from orbitrows.pipeline.operations.catalog import connect, entries
 
 TYPES = {"column_reference", "number", "percentage", "text", "value", "comparison_operator", "aggregate",
-         "linked_table", "date_unit", "condition", "sql_type"}
+         "linked_table", "date_unit", "condition", "sql_type", "order_direction"}
 MIN_EXAMPLES = 3
 
 

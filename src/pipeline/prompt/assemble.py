@@ -341,6 +341,10 @@ def statement(r, st, main, schema, src, part, cond6, group6, built, warnings, nu
                 columns.append({"expression": rewrite(cases(o["expression"]), {main: a}),
                                 "alias": f"computed_{o['column'].split('.')[1][2:]}"})
                 continue
+            if o["aggregate"] == "window":                  # over the record's group (step 2.2): the main table's
+                columns.append({"expression": rewrite(o["expression"], {main: a}),   # columns, through its alias
+                                "alias": f"{o['operation'].lower()}_{o['column'].split('.')[1][2:]}"})
+                continue
             if o["aggregate"] != "value" and (e := totalled(o, main, a, schema, names)):
                 columns.append({"expression": e, "alias": f"{o['aggregate']}_{o['column'].split('.')[1][2:]}"})
                 continue

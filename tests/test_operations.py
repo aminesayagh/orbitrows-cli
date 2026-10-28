@@ -27,6 +27,7 @@ def lit(v):
 
 
 PRICE, COST = col("variants", "price_mad"), col("variants", "cost_mad")
+PRODUCT, VARIANT = col("variants", "product_id"), col("variants", "variant_id")
 SEVENTH = {"type": "arithmetic", "operator": "/", "left": PRICE, "right": lit(7.0)}      # fractions
 LOSS = {"type": "arithmetic", "operator": "/", "left": {"type": "arithmetic", "operator": "-", "left": COST,
                                                        "right": PRICE}, "right": lit(7.0)}   # negative fractions
@@ -85,6 +86,22 @@ CHECKS = {
     "COUNT_VALUES": ("variants", {"column": col("variants", "color")}, "SELECT COUNT(color) FROM variants"),
     "COUNT_DISTINCT_VALUES": ("variants", {"column": col("variants", "color")},
                               "SELECT COUNT(DISTINCT color) FROM variants"),
+    # step 2.2: over each product's variants, in the variants' order (ties never decide a value)
+    "RANK_VALUES": ("variants", {"column": PRICE, "within": PRODUCT, "direction": "desc"},
+                    "SELECT RANK() OVER (PARTITION BY product_id ORDER BY price_mad DESC) FROM variants"),
+    "PERCENTILE_RANK": ("variants", {"column": PRICE, "within": PRODUCT, "direction": "asc"},
+                        "SELECT PERCENT_RANK() OVER (PARTITION BY product_id ORDER BY price_mad) * 100 FROM variants"),
+    "PREVIOUS_VALUE": ("variants", {"column": PRICE, "within": PRODUCT, "order": VARIANT, "direction": "asc"},
+                       "SELECT LAG(price_mad) OVER (PARTITION BY product_id ORDER BY variant_id) FROM variants"),
+    "NEXT_VALUE": ("variants", {"column": PRICE, "within": PRODUCT, "order": VARIANT, "direction": "asc"},
+                   "SELECT LEAD(price_mad) OVER (PARTITION BY product_id ORDER BY variant_id) FROM variants"),
+    "RUNNING_TOTAL": ("variants", {"column": PRICE, "order": VARIANT, "direction": "asc"},
+                      "SELECT SUM(price_mad) OVER (ORDER BY variant_id) FROM variants"),
+    "FIRST_IN_GROUP": ("variants", {"column": PRICE, "within": PRODUCT, "order": VARIANT, "direction": "asc"},
+                       "SELECT FIRST_VALUE(price_mad) OVER (PARTITION BY product_id ORDER BY variant_id) FROM variants"),
+    "LAST_IN_GROUP": ("variants", {"column": PRICE, "within": PRODUCT, "order": VARIANT, "direction": "asc"},
+                      "SELECT LAST_VALUE(price_mad) OVER (PARTITION BY product_id ORDER BY variant_id ROWS BETWEEN "
+                      "UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM variants"),
     "SUM_VALUES": ("variants", {"column": PRICE}, "SELECT SUM(price_mad) FROM variants"),
     "AVERAGE_VALUES": ("variants", {"column": PRICE}, "SELECT AVG(price_mad) FROM variants"),
     "MINIMUM_VALUE": ("variants", {"column": PRICE}, "SELECT MIN(price_mad) FROM variants"),
@@ -162,7 +179,8 @@ def test_an_entry_builds_the_sql_it_describes(shipped, entry_id):
     sql = program([{"id": "q", "type": "select", "from": {"type": "database_table", "reference": f"t_{table}",
                                                           "alias": f"t_{table}"}, "columns": columns, "scope": scope}],
                   store_of(db))[0]
-    rounded = lambda rows: sorted(tuple(round(x, 6) if isinstance(x, float) else x for x in r) for r in rows)
+    rounded = lambda rows: sorted((tuple(round(x, 6) if isinstance(x, float) else x for x in r) for r in rows),
+                                  key=repr)                         # NULL beside numbers (a first record's previous)
     got, expected = rounded(db.execute(sql)), rounded(db.execute(want))
     assert got == expected and got, (sql, got, expected)
 

@@ -366,16 +366,17 @@ def questions_2(db, requests, schema, sources, values, a1) -> dict:
     return q
 
 
-def build(db, requests, schema, sources, values, a1, a2, named=None) -> dict:
+def build(db, requests, schema, sources, values, a1, a2, named=None, a3=None) -> dict:
     out, warnings = {}, []
 
     def pick(rid, key, problem, default=None, labels=None):
         """labels: the user's names for opaque options (a number's id, a text's x0), in its question."""
-        c, probs = a2.get(key, a1.get(key, (default, {})))
+        src = next((x for x in (a3, a2) if x and key in x), a1)   # a3: the window displays' call
+        c, probs = src.get(key, (default, {}))
         if c is not None and c != "none" and probs.get(c, 1) < SURE:
             out[rid]["flagged"] = True
             warnings.append({"request": rid, "problem": f"{problem} uncertain", "answer": c,
-                             "probability": round(probs.get(c, 0), 2)} | question(a2 if key in a2 else a1, key, labels))
+                             "probability": round(probs.get(c, 0), 2)} | question(src, key, labels))
         return None if c == "none" else c
 
     def unsure_yes(rid, key, what, low=1 - SURE):
@@ -449,6 +450,10 @@ def build(db, requests, schema, sources, values, a1, a2, named=None) -> dict:
                 unsure_yes(rid, f"{rid}_shows_{key}", f"shows {key}", 0.5)
                 shown = entry(pick(rid, f"{rid}_{key}_aggregate", f"aggregate of {key}", "SHOW_VALUES",
                                    labels={x["id"]: x["name"] for x in _OUTPUTS})) or entry("SHOW_VALUES")
+                if shown["builder_key"] == "window":         # over the record's group: its groups, order, direction
+                    if (e := windowed(rid, key, shown, own_id, pick, warnings)) is not None:
+                        outs.append({"column": key, "aggregate": "window", "expression": e, "operation": shown["id"]})
+                    continue
                 e = BUILDERS[shown["builder_key"]]({"column": _col(*key.split("."))}, shown["config"])
                 outs.append({"column": key, "aggregate": aggregate_of(shown), "expression": e,
                              "operation": shown["id"]})
@@ -531,6 +536,27 @@ def build(db, requests, schema, sources, values, a1, a2, named=None) -> dict:
     return {"requests": out, "warnings": warnings}
 
 
+def windowed(rid, key, e, own_id, pick, warnings) -> dict | None:
+    """A window display filled from its declaration: the groups and the order Jev chose (no order said: the column
+    itself for a rank, else the records' own order, their id), the direction (else the entry's default)."""
+    from orbitrows.pipeline.operations import use
+    what = f"{e['name'].lower()} of {key}"
+    within, order = pick(rid, f"{rid}_{key}_within", f"groups of the {what}"), \
+        pick(rid, f"{rid}_{key}_order", f"order of the {what}")
+    if order is None and e["config"]["function"] not in ("rank", "percent_rank") and own_id:
+        order = sorted(own_id)[0]
+    if within and within == (order or key):                 # groups of equal values have nothing left to order:
+        within = None                                       # the column orders the records ("by sale date")
+    given = {"column": _col(*key.split(".")), "within": within and _col(*within.split(".")),
+             "order": order and _col(*order.split(".")), "direction": pick(rid, f"{rid}_{key}_direction",
+                                                                             f"direction of the {what}")}
+    params, problems = use.fill(e, {k: v for k, v in given.items() if v})
+    if problems:
+        warnings.append({"request": rid, "problem": "; ".join(problems)})
+        return None
+    return use.build(e, params)
+
+
 def statement(r, main, part) -> dict | None:
     """The request as one AST statement on all rows (its conditions come later), to compile and check."""
     rid, t = r["id"], {"type": "database_table", "reference": main, "alias": main}
@@ -553,16 +579,46 @@ def statement(r, main, part) -> dict | None:
     return None
 
 
+def questions_3(requests, schema, sources, a2) -> dict:
+    """A shown value computed over the record's group (a window display: its rank, the previous record's value, a
+    running total; step 2.2): the groups, the order and its direction, asked only for those."""
+    q = {}
+    for r in requests:
+        rid, main = r["id"], main_table(requests, sources, r["id"])
+        if r["statement"] != "select" or not main:
+            continue
+        for key, (pick, _) in ((k.split("_", 1)[1].removesuffix("_aggregate"), v) for k, v in a2.items()
+                               if k.startswith(f"{rid}_") and k.endswith("_aggregate")):
+            e = entry(pick)
+            if not e or e["builder_key"] != "window":
+                continue
+            cols, what = columns_of(schema, [main]), f"the {e['name'].lower()} of {key.split('.c_')[-1]}"
+            q[f"{rid}_{key}_within"] = choice(CONTEXT, f"In {said(r)}, {what}: within which groups is it computed "
+                                                       f"(the records sharing this column's value)?",
+                                              {k: v for k, v in cols.items() if k != key}
+                                              | {"none": "None: over all the records together."})
+            q[f"{rid}_{key}_order"] = choice(CONTEXT, f"In {said(r)}, {what}: which column puts the records in "
+                                                      f"order for it?", cols | {"none": "None is said."})
+            if any(x["name"] == "direction" for x in e["parameters"]):   # first / last say their own way
+                q[f"{rid}_{key}_direction"] = choice(CONTEXT, f"In {said(r)}, {what}: in which direction are the "
+                                                              f"records ordered?",
+                                                     {"asc": "From the lowest or the earliest.",
+                                                      "desc": "From the highest or the latest."})
+    return q
+
+
 async def run(jev, db, prompt, requests, schema, sources: dict, values: list[dict], named=None) -> dict:
     """sources: step 4's section["requests"]; values: step 3's section["values"]. A number column's change is left to
     the formula steps (2026-10-15); another column's is one of the catalog's changes (2026-10-25)."""
-    a1, a2 = {}, {}
+    a1, a2, a3 = {}, {}, {}
     try:
         st = state(prompt, requests, schema, sources, values)
         a1 = await ask(jev, st, questions_1(requests, schema, sources, named))
         a2 = await ask(jev, st, questions_2(db, requests, schema, sources, values, a1))
+        if q3 := questions_3(requests, schema, sources, a2):
+            a3 = await ask(jev, st, q3)
     except Exception as e:                                    # API error: nothing is guessed
         a1 = a1 or {"error": repr(e)}
-    section = build(db, requests, schema, sources, values, a1, a2, named)
-    section["jev"] = {"call_1": a1, "call_2": a2}
+    section = build(db, requests, schema, sources, values, a1, a2, named, a3)
+    section["jev"] = {"call_1": a1, "call_2": a2} | ({"call_3": a3} if a3 else {})
     return section

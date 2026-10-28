@@ -278,8 +278,21 @@ def aggregate(p, config):
             "distinct": bool(config.get("distinct"))}
 
 
+def window(p, config):
+    """each record's rank within its group (config {"function": "rank"}), its percentile ("percent_rank", as 0–100),
+    the previous or next record's value ("lag", "lead"), the running total ("sum"), the group's first or last value
+    ("first_value", "last_value", config {"whole": true}): over the records sharing `within`, in the order of `order`
+    (else the column itself)."""
+    f = config["function"]
+    w = {"type": "window", "function": f, "arguments": [] if f in ("rank", "percent_rank") else [p["column"]],
+         "partition_by": [p["within"]] if p.get("within") else [],
+         "order_by": [{"expression": p.get("order") or p["column"], "direction": p.get("direction") or "asc"}],
+         "whole": bool(config.get("whole"))}
+    return arith("*", w, lit(100)) if f == "percent_rank" else w
+
+
 BUILDERS = {f.__name__: f for f in (
     percent_of_column, multiple_of_column, relative_difference, difference, table_aggregate, linked_aggregate,
     percent_change, add_amount, multiply, divide, share_of_column, from_column, round_digits, round_to_step, clamp,
     set_value, fill_empty, capitalize, affix, replace_text, text_function, shift_date, clear, aggregate,
-    length_compare, absolute_difference, days_between, remainder, function_of, power)}
+    length_compare, absolute_difference, days_between, remainder, function_of, power, window)}
