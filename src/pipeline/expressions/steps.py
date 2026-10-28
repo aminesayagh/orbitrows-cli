@@ -18,44 +18,12 @@ KIND = {   # what a number does that is not one operation of the catalog: a part
     "lower_limit_computed": "This number computes a minimum from a column ('10%' in 'never below the cost plus 10%').",
     "none": "Not a change of the value: part of a condition, a count, a name, or a repeated step already counted.",
 }
-KIND_OF = {   # the operations catalog's entries a number can be (2026-10-25: one list of operations), and the kind this
-    "INCREASE_PERCENT": "increase", "ADD_AMOUNT": "increase",         # pass reads it as: several entries, one kind
-    "DECREASE_PERCENT": "decrease", "SUBTRACT_AMOUNT": "decrease", "SET_VALUE": "set", "MULTIPLY_BY": "multiply",
-    "DIVIDE_BY": "divide", "ADD_PERCENT_OF_COLUMN": "share_added", "SUBTRACT_PERCENT_OF_COLUMN": "share_removed",
-    "ROUND_DECIMALS": "round_decimals", "ROUND_TO_NEAREST": "round_multiple", "CLAMP_MAX": "upper_limit",
-    "CLAMP_MIN": "lower_limit", "RAISE_TO_POWER": "power",
-}
-PLAIN_OF = {   # the catalog's changes that take no number ("round the prices up"), and the function this pass writes
-    "ROUND_UP": "ceil", "ROUND_DOWN": "floor", "DROP_DECIMALS": "trunc", "ABSOLUTE_VALUE": "abs", "SQUARE_ROOT": "sqrt",
-}
-_KINDS = {}
-
-
-def kinds() -> dict:
-    """The kind question's options: each catalog entry of KIND_OF (what it does, an example), then KIND."""
-    if not _KINDS:
-        from orbitrows.pipeline.operations.catalog import connect, get
-        db = connect()
-        for i in KIND_OF:
-            e = get(db, i)
-            _KINDS[i] = f"{e['name']}: {e['behavior']} (e.g. '{e['examples'][0]}')"
-        _KINDS.update(KIND)
-    return _KINDS
-
-
 FILLED_BY_NUMBER = ("number", "percentage", "value")         # the slot types a request's number fills
-
-
-def catalog_mode() -> bool:
-    """Step 1.3 (2026-10-28): the number pass searches the catalog (operations/use.py), measured as good as its old
-    lists or better on every set (composed 3/3, was 2/3); ORBITROWS_FORMULA=lists runs the old path until it goes."""
-    import os
-    return os.environ.get("ORBITROWS_FORMULA") != "lists"
 
 
 def number_options(words: str) -> dict:
     """The catalog's changes closest to a number's own words (use.search: changes of a number column, those with a
-    slot a number fills), described as the old list was; then what a number does that is no operation (KIND)."""
+    slot a number fills); then what a number does that is no operation (KIND)."""
     from orbitrows.pipeline.operations import use
     c = use.catalog()["entries"]
     ids = [i for i in use.search(words, "value", "number", len(c))
@@ -291,7 +259,7 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
     for o in occs:
         clause = text[slice(*segment_of(segments(text), o["start"]))].strip()
         q[f"{o['occ']}_kind"] = choice(CONTEXT, f"What does the number {o['occ']} ('{o['text']}') do?",
-                                       number_options(clause) if catalog_mode() else kinds(),
+                                       number_options(clause),
                                        KIND_RULES + upstream.get("rules", []))
         q[f"{o['occ']}_column"] = choice(CONTEXT, f"The step with {o['occ']} ('{o['text']}', in '{clause}'): do its own "
                                                   f"words name the column it changes or starts from? Which one?",
@@ -308,8 +276,7 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
             q[f"{p['id']}_role"] = choice(CONTEXT, f"What does the request do with the records '{p['text']}'?", ROLE,
                                          ROLE_RULES)
     q["plain_function"] = choice(CONTEXT, "Does the request change the value in one of these ways, without giving a "
-                                          "number?", plain_options(text) if catalog_mode() else
-                                 described(PLAIN_OF, {"no": "None of these."}))
+                                          "number?", plain_options(text))
     q["round_plain"] = choice(CONTEXT, "Does the request round the value without giving a number of decimals or a "
                                        "multiple ('round the price', 'round everything')? If so, which named column?",
                               {**{k: f"Yes, it rounds {v}" for k, v in col_opts.items() if k != "none"},
@@ -347,7 +314,7 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
         return tok.idx if tok is not None and seg[0] <= tok.idx < o["start"] else o["start"]
 
     for o in occs:
-        kind, kp = read_as(ans.get(f"{o['occ']}_kind"), {} if catalog_mode() else KIND_OF)
+        kind, kp = ans.get(f"{o['occ']}_kind") or (None, {})
         col, cp = ans.get(f"{o['occ']}_column", ("none", {}))
         if kind is None or kp.get(kind, 0) < MIN:
             ambiguities.append({"problem": "what this number does: uncertain", "occurrence": o["occ"], "text": o["text"],
@@ -374,13 +341,11 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
                 ambiguities.append({"problem": f"the change starts from {col[2:]}, which no word names: to confirm",
                                     "occurrence": o["occ"], "answer": col, "probability": round(cp.get(col, 0), 2),
                                     "status": "flagged"})
-        if kind.startswith("share_") and (c is None or c["column"] == upstream["target"]):
-            kind = "increase" if kind == "share_added" else "decrease"   # a share is OF another column, else a plain %
         left = {"column": c["column"]} if c else {"unresolved": True}
         a, b = phrase_start(o), o["end"]
         if c:
             a, b = min(a, c["start"]), max(b, c["end"])
-        if catalog_mode() and kind not in KIND:              # a catalog change: its own step, its slot filled
+        if kind not in KIND:                                  # a catalog change: its own step, its slot filled
             from orbitrows.pipeline.operations import use
             e = use.catalog()["entries"][kind]
             slot = next(x for x in use.slots(e) if x["type"] in FILLED_BY_NUMBER)
@@ -392,39 +357,8 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
                 f"catalog.{kind}", [o["occ"]])
             continue
         v, p, rule = o["value"], o["percent"], f"jev.{kind}"
-        val = {"value": v, "source": o["text"]}
         pct = lambda f: {"value": round(f, 6), "source": o["text"]}
-        frac = o["kind"] == "factor" and v < 1                # "by a third", "by half": a fraction of the value
-        if kind == "increase":
-            add("calculation", "*" if p or frac else "+", left,
-                pct(1 + v / 100) if p else pct(1 + v) if frac else val, a, b, rule, [o["occ"]])
-        elif kind == "decrease":
-            add("calculation", "*" if p or frac else "-", left,
-                pct(1 - v / 100) if p else pct(1 - v) if frac else val, a, b, rule, [o["occ"]])
-        elif kind == "set":
-            add("calculation", "set", None, val, a, b, rule, [o["occ"]])
-        elif kind == "multiply":
-            add("calculation", "*", left, pct(v / 100) if p else val, a, b, rule, [o["occ"]])
-        elif kind == "divide":
-            add("calculation", "/", left, val, a, b, rule, [o["occ"]])
-        elif kind in ("share_added", "share_removed"):          # "10% of the cost": the part, then its use
-            add("calculation", "*", left, pct(v / 100) if p else val, o["start"], max(o["end"], c["end"] if c else 0),
-                rule, [o["occ"]])
-            seg = segment_of(segs, o["start"])
-            t = next((x for x in cols if x["column"] == upstream["target"] and seg[0] <= x["start"] < seg[1]), None)
-            add("calculation", "+" if kind == "share_added" else "-",
-                {"column": t["column"]} if t else {"unresolved": True}, {"unresolved": True},
-                phrase_start(o) if phrase_start(o) < o["start"] else seg[0], max(b, t["end"] if t else b), rule + ".apply")
-        elif kind == "round_decimals":
-            add("rounding", "round", left, val, a, b, rule, [o["occ"]])
-        elif kind == "round_multiple":
-            add("rounding", "round_to", left, val, a, b, rule, [o["occ"]])
-        elif kind == "power":                                   # "squared", "to the power of 3"
-            add("calculation", "pow", left, val, a, b, rule, [o["occ"]])
-        elif kind in ("upper_limit", "lower_limit"):
-            add("guard", "clamp_max" if kind == "upper_limit" else "clamp_min", {"unresolved": True}, val, a, b, rule,
-                [o["occ"]])
-        else:                                                   # a limit computed from a column: bound + guard
+        if kind in ("upper_limit_computed", "lower_limit_computed"):   # a limit computed from a column: bound + guard
             fn = "clamp_max" if kind == "upper_limit_computed" else "clamp_min"
             # a percentage or a factor word multiplies the column ("plus 10%" → × 1.1, "twice" → × 2); a plain
             # number is added to it ("the cost plus 10" → + 10)
@@ -456,9 +390,8 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
                 c["end"], f"jev.column_{use}")
     rp, rpp = ans.get("round_plain", ("no", {}))
     pf, pfp = ans.get("plain_function", ("no", {}))
-    plain = plain_entry(pf) if catalog_mode() and pfp.get(pf, 0) >= MIN else None   # the catalog's, step 1.3
-    rounds = (plain is not None and entry_role(plain) == "rounding") or (
-        pf in PLAIN_OF and pfp.get(pf, 0) >= MIN and PLAIN_OF[pf] in ("ceil", "floor", "trunc"))
+    plain = plain_entry(pf) if pfp.get(pf, 0) >= MIN else None   # the catalog's change with nothing to fill
+    rounds = plain is not None and entry_role(plain) == "rounding"
     if rp != "no" and rpp.get(rp, 0) >= MIN and not any(r.role == "rounding" for r in records) and not rounds:
         # "round them up": the plain function's rounding, never a second one
         m = re.search(r"\bround", text, re.I)
@@ -470,11 +403,6 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
         t = next((c for c in cols if c["column"] == upstream["target"]), None)   # steps give (pass 2 links it)
         a, b = (t["start"], t["end"]) if t else (0, len(text))
         add(entry_role(plain), f"entry:{pf}", {"unresolved": True}, None, a, b, f"catalog.{pf}")
-    elif pf in PLAIN_OF and pfp.get(pf, 0) >= MIN:            # round up, round down, drop the decimals, absolute value,
-        t = next((c for c in cols if c["column"] == upstream["target"]), None)   # square root: on the value the
-        a, b = (t["start"], t["end"]) if t else (0, len(text))                  # other steps give (pass 2 links it)
-        add("rounding" if PLAIN_OF[pf] in ("ceil", "floor", "trunc") else "calculation", PLAIN_OF[pf],
-            {"unresolved": True}, None, a, b, f"jev.plain_{PLAIN_OF[pf]}")
 
     for p in preds:
         if p["start"] < 0:
@@ -507,46 +435,8 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
 TEXT_CONTEXT = ("A user wrote one request that changes a text or date column of their shop database. The texts, "
                 "numbers and dates of the request that may be part of the change are marked [x1: …].")
 TEXT_KIND = {   # what a text or a date does that is not one operation of the catalog
-    "replaced": "This text, inside the column's text, is replaced by another one ('replace cotton with …': cotton).",
     "none": "Not a change of the column: part of a condition, a name used to choose the records, or a count.",
 }
-TEXT_KIND_OF = {"SET_VALUE": "new_value", "ADD_PREFIX": "add_start", "ADD_SUFFIX": "add_end",   # the catalog's
-                "REPLACE_TEXT": "replacement", "REMOVE_TEXT": "removed",                        # entries (2026-10-25)
-                "SHIFT_DATE": "later", "SHIFT_DATE_EARLIER": "earlier"}
-CASE = {"every_word": "The first letter of EACH word in capital ('Orbit Tee Kids').",
-        "none": "The letter case does not change."}
-CASE_OF = {"UPPER_CASE": "upper", "LOWER_CASE": "lower", "CAPITALIZE": "first_capital"}
-_TEXT = {}
-
-
-def described(ids, extra) -> dict:
-    """{entry id: what it does, an example} for `ids`, then `extra` (the options that are not operations)."""
-    from orbitrows.pipeline.operations.catalog import connect, get
-    db = connect()
-    return {i: f"{(e := get(db, i))['name']}: {e['behavior']} (e.g. '{e['examples'][0]}')" for i in ids} | extra
-
-
-def text_kinds() -> dict:
-    if "kinds" not in _TEXT:
-        _TEXT.update(kinds=described(TEXT_KIND_OF, TEXT_KIND), case=described(CASE_OF, CASE))
-    return _TEXT["kinds"]
-
-
-def case_kinds() -> dict:
-    text_kinds()
-    return _TEXT["case"]
-
-
-def read_as(answer, of: dict) -> tuple:
-    """(kind, probabilities by kind): the answer's entry read as this pass's kind (the others pass as they are);
-    the entries of one kind add up ("raise by 15%" split between a percentage and an amount is still an increase)."""
-    choice_, probs = answer if answer else (None, {})
-    by = {}
-    for k, pr in probs.items():
-        by[of.get(k, k)] = by.get(of.get(k, k), 0) + pr
-    return of.get(choice_, choice_), by
-
-
 UNIT = {"days": "days", "weeks": "weeks", "months": "months", "years": "years", "none": "Not a duration."}
 CASE_RULES = ["A text written or replaced that happens to be in capitals is not a case change: 'replace Orbit with "
               "ORBIT', 'add ' NEW' at the end' change only those words: answer none.",
@@ -626,11 +516,11 @@ async def extract_textdate(jev, text: str, upstream: dict, lang: str = "en") -> 
     col_opts["none"] = "No column is named in this step's own words."
     q = {}
     stored = upstream.get("stored_values") or []           # a short list of existing values (a status): A02
-    cat, tkind = catalog_mode(), ("date" if dated else "text")
+    tkind = "date" if dated else "text"
     for c in cands:
         clause = text[slice(*segment_of(segments(text), c["start"]))].strip()
         q[f"{c['occ']}_kind"] = choice(TEXT_CONTEXT, f"What does {c['occ']} ('{c['text']}') do?",
-                                       slot_options(clause, tkind) if cat else text_kinds())
+                                       slot_options(clause, tkind))
         exact = any(c["text"].casefold() == v.casefold() for v in stored)
         if stored and c["kind"] == "text" and not c.get("quoted") and not exact:   # "blue" IS a stored value: no question
             q[f"{c['occ']}_stored"] = choice(TEXT_CONTEXT, f"If {c['occ']} ('{c['text']}') gives the column's new value, "
@@ -660,17 +550,8 @@ async def extract_textdate(jev, text: str, upstream: dict, lang: str = "en") -> 
         if p["start"] >= 0:
             q[f"{p['id']}_role"] = choice(TEXT_CONTEXT, f"What does the request do with the records '{p['text']}'?",
                                          ROLE, ROLE_RULES)
-    if cat:                                                 # a change with nothing to fill: the catalog's
-        q["plain_text"] = choice(TEXT_CONTEXT, "Does the request change the column's whole value in one of these ways, "
-                                               "with nothing written to fill?", plain_text_options(text, tkind),
-                                 CASE_RULES)
-    else:
-        q["empty"] = choice(TEXT_CONTEXT, "Does the request empty the column (clear it, remove its value, leave it "
-                                          "blank)?", {"yes": "Yes, the column is emptied (for all or some records).",
-                                                      "no": "No."})
-    if not dated and not cat:                               # letter case (2026-10-16, user: in the basic version)
-        q["case"] = choice(TEXT_CONTEXT, "Does the request change the letter case of the column's WHOLE text?",
-                           case_kinds(), CASE_RULES)
+    q["plain_text"] = choice(TEXT_CONTEXT, "Does the request change the column's whole value in one of these ways, "
+                                           "with nothing written to fill?", plain_text_options(text, tkind), CASE_RULES)
     marked_text = marked(text, [{"start": c["start"], "end": c["end"], "occ": c["occ"]} for c in cands])
     ans = await ask(jev, {"request": marked_text, "columns named in the request": col_opts}, q)
     if piped:
@@ -708,91 +589,11 @@ async def extract_textdate(jev, text: str, upstream: dict, lang: str = "en") -> 
         best = max(meant, key=meant.get) if meant else None
         return best if best and meant[best] >= MIN and meant[best] > cp.get("none", 0) else None
 
-    replaced, replacement = [], []
-    if cat:                                                 # step 1.3: each text fills a slot of a catalog change
-        catalog_steps(cands, ans, add, start_of, column_of, ambiguities, stored, dated, target, text, names)
-    for c in (cands if not cat else []):
-        kind, kp = read_as(ans.get(f"{c['occ']}_kind"), TEXT_KIND_OF)
-        if kind is None or kp.get(kind, 0) < MIN:
-            ambiguities.append({"problem": "what this text does: uncertain", "occurrence": c["occ"], "text": c["text"],
-                                "start": c["start"], "end": c["end"], "answer": kind,
-                                "probability": round(kp.get(kind, 0), 2)})
-            continue
-        if kind == "none":
-            continue
-        named = column_of(c)
-        left = {"column": named} if named else {"unresolved": True}
-        a, b = start_of(c), c["end"] + (1 if text[c["end"]:c["end"] + 1] in ("'", '"') else 0)
-        if kind == "new_value":
-            v = c.get("iso") if c["kind"] == "date" else c["text"]
-            if dated and c["kind"] != "date":               # a date column only ever receives a date (A46)
-                ambiguities.append({"problem": f"'{c['text']}' is not a date the column can hold",
-                                    "start": c["start"], "end": c["end"]})
-                continue
-            if c["kind"] == "date" and not v:
-                ambiguities.append({"problem": f"date not read: '{c['text']}'", "start": c["start"], "end": c["end"]})
-                continue
-            same = next((x for x in stored if c["text"].casefold() == x.casefold()), None)
-            if same:                                        # the stored spelling of the same word
-                v = same
-            elif stored and c["kind"] == "text" and not c.get("quoted"):
-                sv, sp = ans.get(f"{c['occ']}_stored", ("as_written", {}))
-                if sv != "as_written" and sp.get(sv, 0) >= MIN:      # "Archive" → the stored 'archived'
-                    v = stored[int(sv[1:])]
-            if stored and v not in stored:                  # a value the column has never held: always shown
-                ambiguities.append({"problem": f"'{v}' is not one of the existing values ({', '.join(stored)})",
-                                    "question": f"{c['occ']}_stored", "answer": v, "probability": 0.0,
-                                    "status": "flagged", "start": c["start"], "end": c["end"]})
-            add("calculation", "set", None, {"value": v, "source": c["text"]}, a, b, "jev.text_set")
-        elif kind in ("add_start", "add_end"):
-            add("calculation", "prefix" if kind == "add_start" else "suffix", left, {"value": c["text"]}, a, b,
-                f"jev.{kind}")
-        elif kind == "removed":
-            add("calculation", "replace", left, {"value": "", "old": c["text"]}, a, b, "jev.removed")
-        elif kind == "replaced":
-            replaced.append((c, left, a, b))
-        elif kind == "replacement":
-            replacement.append((c, a, b))
-        elif kind in ("later", "earlier") and c["kind"] == "number":
-            unit, up = (c["unit"], {c["unit"]: 1}) if c.get("unit") else ans.get(f"{c['occ']}_unit", ("none", {}))
-            if unit == "none" or up.get(unit, 0) < MIN:
-                ambiguities.append({"problem": f"duration unit of '{c['text']}' unclear", "start": c["start"],
-                                    "end": c["end"]})
-                continue
-            n = c["value"] * (7 if unit == "weeks" else 1) * (1 if kind == "later" else -1)
-            add("calculation", "date_add", left, {"value": n, "unit": "days" if unit == "weeks" else unit,
-                                                  "source": c["text"]}, a, b, f"jev.date_{kind}")
-    for i, (c, left, a, b) in enumerate(replaced):          # "replace X with Y": the replaced and its replacement
-        if i < len(replacement):
-            r, ra, rb = replacement[i]
-            add("calculation", "replace", left, {"value": r["text"], "old": c["text"]}, min(a, ra), max(b, rb),
-                "jev.replace")
-        else:
-            ambiguities.append({"problem": f"'{c['text']}' is replaced, by what?", "start": c["start"], "end": c["end"]})
-    for c, ra, rb in replacement[len(replaced):]:          # "…, but to Orbit™ for the active ones": the text it
-        if replaced:                                        # replaces is the one said before (reported as a repair)
-            old, left, _, _ = replaced[-1]
-            add("calculation", "replace", {"unresolved": True}, {"value": c["text"], "old": old["text"]}, ra, rb,
-                "repair.replacement_reuses_replaced")
-        else:
-            ambiguities.append({"problem": f"'{c['text']}' replaces what?", "start": c["start"], "end": c["end"]})
+    catalog_steps(cands, ans, add, start_of, column_of, ambiguities, stored, dated, target, text, names)
     for k, c in names.items():                              # copy another column
         use, up = ans.get(f"{k}_use", ("other", {}))
         if use == "set_to" and up.get(use, 0) >= MIN and c["column"] != target:
             add("calculation", "set", None, {"column": c["column"]}, c["start"], c["end"], "jev.column_set_to")
-    cs, cp_ = read_as(ans.get("case", ("none", {"none": 1.0})), {} if cat else CASE_OF)
-    if cs not in ("none", None) and cp_.get(cs, 0) >= MIN:
-        t = next((c for c in names.values() if c["column"] == target), None)
-        a, b = (t["start"], t["end"]) if t else (0, len(text))
-        if cs == "every_word":                              # not possible with SQLite's own functions: asked
-            ambiguities.append({"problem": "capitalising every word is not built yet", "start": a, "end": b})
-        else:
-            add("calculation", {"upper": "upper", "lower": "lower", "first_capital": "capitalize"}[cs],
-                {"column": target} if t else {"unresolved": True}, None, a, b, f"jev.case_{cs}")
-    e, ep = ans.get("empty", ("no", {}))
-    if e == "yes" and ep.get("yes", 0) >= MIN and not any(r.function == "set" for r in records):
-        add("calculation", "set", None, {"value": None}, 0, min([p["start"] for p in preds if p["start"] > 0] + [len(text)]),
-            "jev.empty")
     for p in preds:
         if p["start"] < 0:
             continue

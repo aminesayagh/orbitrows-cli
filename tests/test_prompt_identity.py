@@ -101,6 +101,11 @@ CORPIPE = {' = d', '# newdoc id = d', '# sent_id = d', '# text = ', '--epoch', '
            "[^\\W_]+(?:['’][^\\W_]+)?|-[^\\W_]+|\\S", '\\((\\w+)[^()]*?\\)|\\((\\w+)[^()]*|(\\w+)\\)', 'a', 'bin',
            'cluster', 'corpipe', 'corpipe26_onestage.py', 'corpipe_server.log', 'corpipe_server.py',
            'crac2026-corpipe', 'python', 'src', 'ufal/corpipe26-onestage-corefud1.4-large-260702'}
+FORMULA_LISTS = {   # 2026-10-28 (step 1.5): the formula's kinds of a number, a text and a letter case, their
+    # translation to its own functions and their labels are gone: every change is a catalog entry (use.py)
+    'pipeline/expressions/steps.py': {'old', 'unresolved', "' is replaced, by what?", 'set', 'round', 'capitalize', 'jev.text_set', 'share_removed', "' replaces what?", 'date_add', '.apply', 'capitalising every word is not built yet', 'jev.replace', 'earlier', 'lower_limit', "This text, inside the column's text, is replaced by another one ('replace cotton with …': cotton).", 'clamp_max', 'suffix', 'jev.', 'removed', 'jev.case_', 'empty', 'round_multiple', 'Does the request empty the column (clear it, remove its value, leave it blank)?', 'No.', 'new_value', 'round_to', 'multiply', 'occ', 'every_word', 'repair.replacement_reuses_replaced', 'share_added', 'upper_limit', 'round_decimals', 'jev.empty', 'add_start', 'decrease', 'first_capital', 'prefix', 'replacement', 'lower', 'text', 'yes', 'upper', 'case', 'replaced', 'jev.date_', 'none', 'start', 'add_end', 'problem', 'later', "The first letter of EACH word in capital ('Orbit Tee Kids').", 'Yes, the column is emptied (for all or some records).', 'increase', "Does the request change the letter case of the column's WHOLE text?", 'divide', 'calculation', 'replace', 'jev.removed', 'share_', 'end', 'clamp_min'},
+    'pipeline/expressions/links.py': {'old', "replace '", 'capitalize', 'capitalise the first letter', 'date_add', 'unit', 'suffix', "' by '", 'write in lower case', 'round to the nearest ', 'write in capitals', 'round_to', 'prefix', 'lower', "add '", "' at the start", "' at the end", 'move the date ', 'replace'},
+}
 REPLACED = {"pipeline/prompt/coref.py": CORPIPE,
             "pipeline/prompt/grouping.py": {   # the one tree question over every candidate tree (mixed ones for three
     "all", "any", "_all", "_any", "|tree", "How do the conditions of ", " combine?", "tree", "AND", "OR",  # conditions
@@ -135,12 +140,12 @@ REPLACED = {"pipeline/prompt/coref.py": CORPIPE,
     # 2026-10-27: iso() reads dates with datephrase (../date_to_number); the strptime formats are gone
     # 2026-10-27: its dates and lengths of time come from units/dates (step 6 reads them): the DATE regex and the
     # "one / a / an + time unit" word rule are gone
-    "pipeline/expressions/steps.py": set(FORMULA_KINDS) | {"%Y-%m-%d", "%d %B %Y", "%B %d, %Y",
+    "pipeline/expressions/steps.py": set(FORMULA_KINDS) | FORMULA_LISTS["pipeline/expressions/steps.py"] | {"%Y-%m-%d", "%d %B %Y", "%B %d, %Y",
         "\\b\\d{4}-\\d{2}-\\d{2}\\b|\\b\\d{1,2} (?:January|February|March|April|May|June|July|August|September|October"
         "|November|December) \\d{4}\\b|\\b(?:January|February|March|April|May|June|July|August|September|October|"
         "November|December) \\d{1,2}, \\d{4}\\b",
         "\\b(?:one|an?)(?=\\s+(?:day|week|month|year)s?\\b)"},
-    "pipeline/expressions/links.py": {"type", "value", "operator", "left", "right", "arithmetic", "name",
+    "pipeline/expressions/links.py": FORMULA_LISTS["pipeline/expressions/links.py"] | {"type", "value", "operator", "left", "right", "arithmetic", "name",
                                           "arguments", "function", "concat", "round", "upper", "parts", "date",
                                           "least", "greatest", "coalesce", "substr"}}
 MOVED = {"pipeline/prompt/formula.py": ["pipeline/expressions/__init__.py"],

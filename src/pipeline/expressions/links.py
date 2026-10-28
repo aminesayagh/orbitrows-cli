@@ -54,14 +54,7 @@ def label(r: dict) -> str:
         return f"{r['id']}: '{r['text']}' ({written})"
     v = right.get("source") or right.get("value") or right.get("column", "").split(".c_")[-1] or "?"
     what = {"*": f"× {right.get('value', '?')}", "+": f"+ {v}", "-": f"− {v}", "/": f"÷ {v}", "set": f"set to {v}",
-            "round": "round", "round_to": f"round to the nearest {v}", "clamp_max": "never above a limit",
-            "clamp_min": "never below a limit",
-            "prefix": f"add '{right.get('value')}' at the start", "suffix": f"add '{right.get('value')}' at the end",
-            "replace": f"replace '{right.get('old')}' by '{right.get('value')}'",
-            "date_add": f"move the date {right.get('value')} {right.get('unit')}",
-            "upper": "write in capitals", "lower": "write in lower case", "capitalize": "capitalise the first letter",
-            "ceil": "round up", "floor": "round down", "trunc": "drop the decimals", "abs": "absolute value",
-            "sqrt": "square root", "pow": f"to the power {v}",
+            "round": "round", "clamp_max": "never above a limit", "clamp_min": "never below a limit",
             "case": "combines the formula of these records with the formula of the other records"}.get(f, f)
     return f"{r['id']}: '{r['text']}' ({what})"
 
@@ -211,13 +204,10 @@ def lit(v):
     return {"type": "literal", "value": v}
 
 
-ENTRY = {"+": "ADD_AMOUNT", "-": "SUBTRACT_AMOUNT", "*": "MULTIPLY_BY", "/": "DIVIDE_BY", "prefix": "ADD_PREFIX",
-         "suffix": "ADD_SUFFIX", "replace": "REPLACE_TEXT", "upper": "UPPER_CASE", "lower": "LOWER_CASE",
-         "capitalize": "CAPITALIZE", "date_add": "SHIFT_DATE", "round": "ROUND_DECIMALS",
-         "round_to": "ROUND_TO_NEAREST", "clamp_max": "CLAMP_MAX", "clamp_min": "CLAMP_MIN",
-         "ceil": "ROUND_UP", "floor": "ROUND_DOWN", "trunc": "DROP_DECIMALS", "abs": "ABSOLUTE_VALUE",
-         "sqrt": "SQUARE_ROOT", "pow": "RAISE_TO_POWER"}
-# a step's function → the operations catalog's entry whose builder writes it (2026-10-25: one SQL per operation)
+ENTRY = {"+": "ADD_AMOUNT", "-": "SUBTRACT_AMOUNT", "*": "MULTIPLY_BY", "/": "DIVIDE_BY", "round": "ROUND_DECIMALS",
+         "clamp_max": "CLAMP_MAX", "clamp_min": "CLAMP_MIN"}
+# the steps this pass composes itself (a column added or subtracted, a limit computed from a column, a plain
+# rounding) → the catalog's entry whose builder writes them; every chosen change is an entry: step (step 1.3)
 _ENTRIES = {}
 
 
@@ -269,19 +259,11 @@ def build(recs, links, target, preds) -> dict:
             raise ValueError(f"unsupported function {f}")
         e, left, right = catalog_entry(ENTRY[f]), operand(r["left"], r, "left"), r["right"] or {}
         p = {"column": left}
-        if f in ("+", "-", "*", "/", "clamp_max", "clamp_min", "pow"):   # an amount, a factor, a limit, an
-            p[{"+": "amount", "-": "amount", "*": "factor", "/": "divisor",   # exponent: maybe a step's result
-               "pow": "exponent"}.get(f, "limit")] = operand(r["right"], r, "right")
-        elif f in ("prefix", "suffix"):                     # text and dates (2026-10-16)
-            p["text"] = lit(right["value"])
-        elif f == "replace":
-            p |= {"old": lit(right["old"]), "new": lit(right["value"])}
-        elif f == "date_add":
-            p |= {"amount": right["value"], "unit": right["unit"]}
+        if f in ("+", "-", "*", "/", "clamp_max", "clamp_min"):   # an amount, a factor, a limit: maybe a step's result
+            p[{"+": "amount", "-": "amount", "*": "factor", "/": "divisor"}.get(f, "limit")] = operand(r["right"], r,
+                                                                                                       "right")
         elif f == "round":
             p["digits"] = right.get("value", 0)
-        elif f == "round_to":
-            p["step"] = right.get("value")
         return BUILDERS[e["builder_key"]](p, e["config"])
 
     last = final(recs, links)
