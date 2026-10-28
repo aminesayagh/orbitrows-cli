@@ -114,6 +114,16 @@ class Compiler:
         if isinstance(n, dml.Aggregate):
             arg = exp.Star() if n.argument is None else self.value(n.argument)
             return AGG[n.function](this=exp.Distinct(expressions=[arg]) if n.distinct else arg)
+        if isinstance(n, dml.Window):
+            args = [self.value(a) for a in n.arguments]
+            fn = (AGG[n.function](this=args[0] if args else exp.Star()) if n.function in AGG
+                  else exp.Anonymous(this=n.function.upper(), expressions=args))
+            spec = exp.WindowSpec(kind="ROWS", start="UNBOUNDED", start_side="PRECEDING", end="UNBOUNDED",
+                                  end_side="FOLLOWING") if n.whole else None
+            return exp.Window(this=fn, partition_by=[self.value(x) for x in n.partition_by] or None,
+                              order=exp.Order(expressions=[exp.Ordered(this=self.value(o.expression),
+                                                                       desc=o.direction == "desc")
+                                                           for o in n.order_by]) if n.order_by else None, spec=spec)
         if isinstance(n, dml.Subquery):
             return exp.Subquery(this=self.subquery(n.query))
         if isinstance(n, dml.DerivedReference):

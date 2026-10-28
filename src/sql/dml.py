@@ -2,7 +2,7 @@
 SQLite (adapter in sql.py). Nodes follow standard SQL as SQLGlot names it (vault poc_v2/sql-ast-experimentation-guide.md
 §4 for the base set): literal, column, arithmetic, concat (||), case, scalar functions, aggregates; comparison,
 all/any/not, null check, membership (IN), between, pattern (LIKE … ESCAPE), empty check; select (GROUP BY, HAVING,
-DISTINCT, ORDER BY, LIMIT), update, delete, insert (VALUES or a select); a select as one value (subquery) or as the list
+DISTINCT, ORDER BY, LIMIT, OFFSET), a window function (OVER), update, delete, insert (VALUES or a select); a select as one value (subquery) or as the list
 of an IN. Unknown fields and node types are rejected;
 an update or delete must state its scope (filtered, or all_rows).
 """
@@ -101,6 +101,35 @@ class Aggregate(Node):                                        # COUNT(*), COUNT(
         return self
 
 
+# window functions and their arity (min, max); the ranks and lag / lead need an order (2026-10-28, step 2.1)
+WINDOW = {"row_number": (0, 0), "rank": (0, 0), "dense_rank": (0, 0), "percent_rank": (0, 0), "cume_dist": (0, 0),
+          "ntile": (1, 1), "lag": (1, 3), "lead": (1, 3), "first_value": (1, 1), "last_value": (1, 1),
+          "nth_value": (2, 2), "count": (0, 1), "sum": (1, 1), "avg": (1, 1), "min": (1, 1), "max": (1, 1)}
+ORDERED = {"row_number", "rank", "dense_rank", "percent_rank", "cume_dist", "ntile", "lag", "lead"}
+
+
+class Window(Node):
+    """function(…) OVER (PARTITION BY … ORDER BY …): a value computed over the record's group of records ("the rank
+    of each price within its product", "the previous sale's date"). whole: the frame is the whole partition (ROWS
+    BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING: the last value of the group, not of the rows so far). SQLite
+    refuses it in WHERE, GROUP BY and HAVING: a condition on it reads an earlier select's result."""
+    type: L["window"]
+    function: L[tuple(WINDOW)]
+    arguments: list["Expression"] = []
+    partition_by: list["Expression"] = []
+    order_by: list["OrderBy"] = []
+    whole: bool = False
+
+    @model_validator(mode="after")
+    def arity(self):
+        lo, hi = WINDOW[self.function]
+        if not lo <= len(self.arguments) <= hi:
+            raise ValueError(f"INVALID_FUNCTION_ARITY {self.function}: {len(self.arguments)} arguments")
+        if self.function in ORDERED and not self.order_by:
+            raise ValueError(f"{self.function} needs an order (ORDER BY)")
+        return self
+
+
 class Subquery(Node):
     """(SELECT …) used as one value: "set the price to the average price of the tees". One column, and one row for
     sure: an aggregate without GROUP BY, or LIMIT 1 (SQLite would silently take the first of several rows)."""
@@ -118,7 +147,7 @@ class Subquery(Node):
 
 
 Expression = Annotated[Union[Lit, Column, Arithmetic, Negate, Case, DerivedReference, FunctionCall, Concat, Aggregate,
-                             Subquery],
+                             Window, Subquery],
                        Field(discriminator="type")]
 
 
@@ -286,6 +315,6 @@ class Insert(Node):
 
 
 Statement = Annotated[Union[Select, Update, Delete, Insert], Field(discriminator="type")]
-for m in (Arithmetic, Negate, Branch, Case, FunctionCall, Concat, Aggregate, Subquery, All, Any, Not, Membership,
+for m in (Arithmetic, Negate, Branch, Case, FunctionCall, Concat, Aggregate, Window, Subquery, All, Any, Not, Membership,
           Select, Insert):
     m.model_rebuild()
