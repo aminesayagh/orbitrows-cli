@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS operation_parameters (
     required INTEGER NOT NULL CHECK (required IN (0, 1)),
     default_json TEXT,
     constraints_json TEXT NOT NULL DEFAULT '{}',
+    description TEXT NOT NULL DEFAULT '',               -- what the value means for this entry (Jev reads it)
     PRIMARY KEY (operation_id, name),
     UNIQUE (operation_id, position)
 );
@@ -127,10 +128,11 @@ def save(db, entry: dict) -> None:
         for key, (table, column) in LISTS.items():
             db.executemany(f"INSERT INTO {table} (operation_id, position, {column}) VALUES (?, ?, ?)",
                            [(entry["id"], i, t) for i, t in enumerate(entry.get(key, []))])
-        db.executemany("INSERT INTO operation_parameters VALUES (?, ?, ?, ?, ?, ?, ?)",
+        db.executemany("INSERT INTO operation_parameters (operation_id, name, position, value_type, required, "
+                       "default_json, constraints_json, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                        [(entry["id"], p["name"], i, p["type"], int(p.get("required", True)),
                          json.dumps(p["default"]) if "default" in p else None,
-                         json.dumps(p.get("constraints", {}), ensure_ascii=False))
+                         json.dumps(p.get("constraints", {}), ensure_ascii=False), p.get("description", ""))
                         for i, p in enumerate(entry.get("parameters", []))])
         db.execute("UPDATE catalog_state SET revision = revision + 1")
         db.execute("COMMIT")
@@ -146,7 +148,8 @@ def canonical(entry: dict) -> dict:
             **{k: list(entry.get(k, [])) for k in LISTS},
             "parameters": [{"name": p["name"], "type": p["type"], "required": bool(p.get("required", True)),
                             **({"default": p["default"]} if "default" in p else {}),
-                            "constraints": p.get("constraints", {})} for p in entry.get("parameters", [])]}
+                            "constraints": p.get("constraints", {}), "description": p.get("description", "")}
+                           for p in entry.get("parameters", [])]}
 
 
 def get(db, operation_id: str) -> dict | None:
@@ -159,9 +162,10 @@ def get(db, operation_id: str) -> dict | None:
         out[key] = [t for (t,) in db.execute(f"SELECT {column} FROM {table} WHERE operation_id = ? ORDER BY position",
                                              (operation_id,))]
     out["parameters"] = [{"name": n, "type": t, "required": bool(r), **({"default": json.loads(d)} if d is not None
-                                                                         else {}), "constraints": json.loads(c)}
-                         for n, t, r, d, c in db.execute(
-                             "SELECT name, value_type, required, default_json, constraints_json FROM "
+                                                                         else {}), "constraints": json.loads(c),
+                          "description": desc}
+                         for n, t, r, d, c, desc in db.execute(
+                             "SELECT name, value_type, required, default_json, constraints_json, description FROM "
                              "operation_parameters WHERE operation_id = ? ORDER BY position", (operation_id,))]
     return out
 
