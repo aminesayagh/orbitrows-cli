@@ -62,7 +62,8 @@ MAPPED = {"trim": (1, 1), "length": (1, 1), "lower": (1, 1), "upper": (1, 1), "a
           "replace": (3, 3), "coalesce": (2, None), "greatest": (2, None), "least": (2, None),
           "date": (2, 2), "substr": (2, 3),                                     # date(col, '+7 days'): a date moved (2026-10-16)
           "real": (1, 1),                                                       # CAST(x AS REAL): an upload's TEXT cell
-          "nullif": (2, 2)}                                                     # NULLIF(TRIM(cell), ''): an empty cell
+          "nullif": (2, 2),                                                     # NULLIF(TRIM(cell), ''): an empty cell
+          "julianday": (1, 1)}                                                  # a date as a day number: days between
 # MAPPED: written by hand in sql.py (SQLite's own forms, each checked); every other function SQLite runs comes from
 # the operations catalog's inventory (2026-10-25: ceil, floor, power, sqrt, datetime…), compiled by its SQLGlot class
 FUNCTIONS = {n: f for n, f in sql_functions().items() if n not in MAPPED}
@@ -89,7 +90,7 @@ class Concat(Node):                                           # SQL a || b
 
 class Aggregate(Node):                                        # COUNT(*), COUNT(DISTINCT x), SUM(x), …
     type: L["aggregate"]
-    function: L["count", "sum", "avg", "min", "max"]
+    function: L["count", "sum", "avg", "min", "max", "group_concat"]   # group_concat: the values listed, comma-separated
     argument: "Expression | None" = None
     distinct: bool = False
 

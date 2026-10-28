@@ -49,6 +49,8 @@ def label(r: dict) -> str:
             "replace": f"replace '{right.get('old')}' by '{right.get('value')}'",
             "date_add": f"move the date {right.get('value')} {right.get('unit')}",
             "upper": "write in capitals", "lower": "write in lower case", "capitalize": "capitalise the first letter",
+            "ceil": "round up", "floor": "round down", "trunc": "drop the decimals", "abs": "absolute value",
+            "sqrt": "square root", "pow": f"to the power {v}",
             "case": "combines the formula of these records with the formula of the other records"}.get(f, f)
     return f"{r['id']}: '{r['text']}' ({what})"
 
@@ -201,7 +203,9 @@ def lit(v):
 ENTRY = {"+": "ADD_AMOUNT", "-": "SUBTRACT_AMOUNT", "*": "MULTIPLY_BY", "/": "DIVIDE_BY", "prefix": "ADD_PREFIX",
          "suffix": "ADD_SUFFIX", "replace": "REPLACE_TEXT", "upper": "UPPER_CASE", "lower": "LOWER_CASE",
          "capitalize": "CAPITALIZE", "date_add": "SHIFT_DATE", "round": "ROUND_DECIMALS",
-         "round_to": "ROUND_TO_NEAREST", "clamp_max": "CLAMP_MAX", "clamp_min": "CLAMP_MIN"}
+         "round_to": "ROUND_TO_NEAREST", "clamp_max": "CLAMP_MAX", "clamp_min": "CLAMP_MIN",
+         "ceil": "ROUND_UP", "floor": "ROUND_DOWN", "trunc": "DROP_DECIMALS", "abs": "ABSOLUTE_VALUE",
+         "sqrt": "SQUARE_ROOT", "pow": "RAISE_TO_POWER"}
 # a step's function → the operations catalog's entry whose builder writes it (2026-10-25: one SQL per operation)
 _ENTRIES = {}
 
@@ -241,9 +245,9 @@ def build(recs, links, target, preds) -> dict:
             raise ValueError(f"unsupported function {f}")
         e, left, right = catalog_entry(ENTRY[f]), operand(r["left"], r, "left"), r["right"] or {}
         p = {"column": left}
-        if f in ("+", "-", "*", "/", "clamp_max", "clamp_min"):   # an amount, a factor, a limit: maybe a step's result
-            p[{"+": "amount", "-": "amount", "*": "factor", "/": "divisor"}.get(f, "limit")] = operand(r["right"], r,
-                                                                                                       "right")
+        if f in ("+", "-", "*", "/", "clamp_max", "clamp_min", "pow"):   # an amount, a factor, a limit, an
+            p[{"+": "amount", "-": "amount", "*": "factor", "/": "divisor",   # exponent: maybe a step's result
+               "pow": "exponent"}.get(f, "limit")] = operand(r["right"], r, "right")
         elif f in ("prefix", "suffix"):                     # text and dates (2026-10-16)
             p["text"] = lit(right["value"])
         elif f == "replace":
@@ -273,7 +277,7 @@ def sql(n) -> str:
         return f"({sql(n['left'])} {n['operator']} {sql(n['right'])})"
     if t == "function":
         name = {"least": "MIN", "greatest": "MAX", "round": "ROUND", "coalesce": "COALESCE", "replace": "REPLACE",
-                "date": "date", "upper": "UPPER", "lower": "LOWER", "substr": "substr"}[n["name"]]
+                "date": "date", "upper": "UPPER", "lower": "LOWER", "substr": "substr"}.get(n["name"], n["name"].upper())
         return f"{name}({', '.join(sql(a) for a in n['arguments'])})"
     if t == "concat":
         return "(" + " || ".join(sql(x) for x in n["parts"]) + ")"

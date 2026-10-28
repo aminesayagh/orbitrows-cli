@@ -127,6 +127,30 @@ def linked_aggregate(p, config):
     return compare(p["operator"], total, given(p["number"]))
 
 
+def length_compare(p, config):
+    """names longer than 20 characters: LENGTH(column) OP number."""
+    return compare(p["operator"], func("length", p["column"]), given(p["number"]))
+
+
+def absolute_difference(p, config):
+    """price and cost more than 50 apart, either way: ABS(column − other) OP amount."""
+    return compare(p["operator"], func("abs", arith("-", p["column"], p["other"])), given(p["amount"]))
+
+
+def days_between(p, config):
+    """sold more than 30 days after the product was created: JULIANDAY(column) − JULIANDAY(other) OP number (days,
+    the later date first)."""
+    return compare(p["operator"], arith("-", func("julianday", p["column"]), func("julianday", p["other"])),
+                   given(p["number"]))
+
+
+def remainder(p, config):
+    """the even values (config {"divisor": 2, "remainder": 0}), the odd ones ({"divisor": 2, "remainder": 1}), the
+    multiples of a number (no config: the request's number): column % divisor = remainder."""
+    divisor = config.get("divisor") or p.get("divisor")
+    return compare("=", arith("%", p["column"], given(divisor)), lit(config.get("remainder", 0)))
+
+
 # ---- values: they compute a new value ------------------------------------------------------------------------------
 
 def percent_change(p, config):
@@ -158,6 +182,17 @@ def share_of_column(p, config):
 def from_column(p, config):
     """set the price to the cost plus 20: other (+ amount, when one is given)."""
     return arith("+", p["other"], lit(p["amount"])) if p.get("amount") else p["other"]
+
+
+def function_of(p, config):
+    """round up to a whole number (config {"function": "ceil"}), round down ("floor"), drop the decimals ("trunc"),
+    the absolute value ("abs"), the square root ("sqrt"): FUNCTION(column)."""
+    return func(config["function"], p["column"])
+
+
+def power(p, config):
+    """the value squared (exponent 2), cubed (3): POWER(column, exponent)."""
+    return func("power", p["column"], given(p["exponent"]))
 
 
 def round_digits(p, config):
@@ -246,4 +281,5 @@ def aggregate(p, config):
 BUILDERS = {f.__name__: f for f in (
     percent_of_column, multiple_of_column, relative_difference, difference, table_aggregate, linked_aggregate,
     percent_change, add_amount, multiply, divide, share_of_column, from_column, round_digits, round_to_step, clamp,
-    set_value, fill_empty, capitalize, affix, replace_text, text_function, shift_date, clear, aggregate)}
+    set_value, fill_empty, capitalize, affix, replace_text, text_function, shift_date, clear, aggregate,
+    length_compare, absolute_difference, days_between, remainder, function_of, power)}

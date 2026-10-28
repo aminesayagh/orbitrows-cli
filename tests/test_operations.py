@@ -27,6 +27,9 @@ def lit(v):
 
 
 PRICE, COST = col("variants", "price_mad"), col("variants", "cost_mad")
+SEVENTH = {"type": "arithmetic", "operator": "/", "left": PRICE, "right": lit(7.0)}      # fractions
+LOSS = {"type": "arithmetic", "operator": "/", "left": {"type": "arithmetic", "operator": "-", "left": COST,
+                                                       "right": PRICE}, "right": lit(7.0)}   # negative fractions
 # entry → (its table, its resolved parameters, the SQL it must agree with on the demo store)
 CHECKS = {
     "COMPARE_PERCENT_OF_COLUMN": ("variants", {"column": COST, "operator": "<", "percent": 40, "other": PRICE},
@@ -100,6 +103,28 @@ CHECKS = {
                                  "WHERE v.product_id = p.product_id) > 1"),
     "FILL_EMPTY": ("variants", {"column": col("variants", "color"), "value": lit("none"), "column_type": "TEXT"},
                    "SELECT variant_id, COALESCE(NULLIF(TRIM(color), ''), 'none') FROM variants"),
+    # 2026-10-28: operations SQLite runs that no entry reached
+    "COMPARE_TEXT_LENGTH": ("products", {"column": col("products", "name"), "operator": ">", "number": 12},
+                            "SELECT product_id FROM products WHERE LENGTH(name) > 12"),
+    "COMPARE_ABSOLUTE_DIFFERENCE": ("variants", {"column": COST, "operator": "<", "amount": 60, "other": PRICE},
+                                    "SELECT variant_id FROM variants WHERE ABS(cost_mad - price_mad) < 60"),
+    "COMPARE_DAYS_BETWEEN": ("sales", {"column": col("sales", "sold_on"), "operator": ">", "number": 10,
+                                       "other": lit("2026-09-15")},          # the demo store has no second date
+                             "SELECT sale_id FROM sales WHERE JULIANDAY(sold_on) - JULIANDAY('2026-09-15') > 10"),
+    "MULTIPLE_OF_NUMBER": ("variants", {"column": col("variants", "variant_id"), "divisor": 3},
+                           "SELECT variant_id FROM variants WHERE variant_id % 3 = 0"),
+    "EVEN_VALUES": ("variants", {"column": col("variants", "variant_id")},
+                    "SELECT variant_id FROM variants WHERE variant_id % 2 = 0"),
+    "ODD_VALUES": ("variants", {"column": col("variants", "variant_id")},
+                   "SELECT variant_id FROM variants WHERE variant_id % 2 = 1"),
+    "LIST_VALUES": ("variants", {"column": col("variants", "color")}, "SELECT GROUP_CONCAT(DISTINCT color) FROM variants"),
+    "ROUND_UP": ("variants", {"column": SEVENTH}, "SELECT variant_id, CEIL(price_mad / 7.0) FROM variants"),
+    "ROUND_DOWN": ("variants", {"column": LOSS}, "SELECT variant_id, FLOOR((cost_mad - price_mad) / 7.0) FROM variants"),
+    "DROP_DECIMALS": ("variants", {"column": LOSS}, "SELECT variant_id, TRUNC((cost_mad - price_mad) / 7.0) FROM variants"),
+    "ABSOLUTE_VALUE": ("variants", {"column": LOSS}, "SELECT variant_id, ABS((cost_mad - price_mad) / 7.0) FROM variants"),
+    "SQUARE_ROOT": ("variants", {"column": col("variants", "weight_g")}, "SELECT variant_id, SQRT(weight_g) FROM variants"),
+    "RAISE_TO_POWER": ("variants", {"column": col("variants", "weight_g"), "exponent": 2},
+                       "SELECT variant_id, POWER(weight_g, 2) FROM variants"),
 }
 
 

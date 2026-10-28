@@ -129,7 +129,8 @@ REPLACED = {"pipeline/prompt/coref.py": CORPIPE,
                                  # total stock of "whose total stock is under 20" a shown column: L02, N01, N04)
                                  "Answer yes for a column whose values the request shows, sums, averages or compares "
                                  "in its answer ('the names and prices', 'the total quantity': quantity)."},
-    "sql/sql.py": {"SAVEPOINT ast_check", "ROLLBACK TO ast_check", "RELEASE ast_check"},
+    "sql/sql.py": {"SAVEPOINT ast_check", "ROLLBACK TO ast_check", "RELEASE ast_check",
+                   "date"},   # 2026-10-28: date and julianday written by one line (SQLite's own functions)
     # 2026-10-25: each formula step's SQL is written by the operations catalog's builder (one SQL per operation)
     # 2026-10-27: iso() reads dates with datephrase (../date_to_number); the strptime formats are gone
     # 2026-10-27: its dates and lengths of time come from units/dates (step 6 reads them): the DATE regex and the

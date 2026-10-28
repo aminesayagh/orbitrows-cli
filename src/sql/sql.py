@@ -25,7 +25,8 @@ STATEMENT = TypeAdapter(dml.Statement)
 DDL = {"create_table": CreateTable, "alter_table": AlterTable, "drop_table": DropTable}
 COMPARE = {"=": exp.EQ, "!=": exp.NEQ, "<": exp.LT, "<=": exp.LTE, ">": exp.GT, ">=": exp.GTE}
 ARITH = {"+": exp.Add, "-": exp.Sub, "*": exp.Mul, "/": exp.Div, "%": exp.Mod}
-AGG = {"count": exp.Count, "sum": exp.Sum, "avg": exp.Avg, "min": exp.Min, "max": exp.Max}
+AGG = {"count": exp.Count, "sum": exp.Sum, "avg": exp.Avg, "min": exp.Min, "max": exp.Max,
+       "group_concat": exp.GroupConcat}
 
 
 def ident(name: str) -> exp.Identifier:
@@ -92,8 +93,8 @@ class Compiler:
                 return exp.cast(args[0], "REAL")
             if n.name == "nullif":
                 return exp.Nullif(this=args[0], expression=args[1])
-            if n.name == "date":                            # SQLite's date(value, modifier)
-                return exp.Anonymous(this="date", expressions=args)
+            if n.name in ("date", "julianday"):             # SQLite's date(value, modifier), julianday(value)
+                return exp.Anonymous(this=n.name, expressions=args)
             if n.name == "substr":                          # SQLite's substr(text, start[, length])
                 return exp.Anonymous(this="substr", expressions=args)
             if n.name in ("greatest", "least"):

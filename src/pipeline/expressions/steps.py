@@ -23,7 +23,10 @@ KIND_OF = {   # the operations catalog's entries a number can be (2026-10-25: on
     "DECREASE_PERCENT": "decrease", "SUBTRACT_AMOUNT": "decrease", "SET_VALUE": "set", "MULTIPLY_BY": "multiply",
     "DIVIDE_BY": "divide", "ADD_PERCENT_OF_COLUMN": "share_added", "SUBTRACT_PERCENT_OF_COLUMN": "share_removed",
     "ROUND_DECIMALS": "round_decimals", "ROUND_TO_NEAREST": "round_multiple", "CLAMP_MAX": "upper_limit",
-    "CLAMP_MIN": "lower_limit",
+    "CLAMP_MIN": "lower_limit", "RAISE_TO_POWER": "power",
+}
+PLAIN_OF = {   # the catalog's changes that take no number ("round the prices up"), and the function this pass writes
+    "ROUND_UP": "ceil", "ROUND_DOWN": "floor", "DROP_DECIMALS": "trunc", "ABSOLUTE_VALUE": "abs", "SQUARE_ROOT": "sqrt",
 }
 _KINDS = {}
 
@@ -142,6 +145,8 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
         if p["start"] >= 0:
             q[f"{p['id']}_role"] = choice(CONTEXT, f"What does the request do with the records '{p['text']}'?", ROLE,
                                          ROLE_RULES)
+    q["plain_function"] = choice(CONTEXT, "Does the request change the value in one of these ways, without giving a "
+                                          "number?", described(PLAIN_OF, {"no": "None of these."}))
     q["round_plain"] = choice(CONTEXT, "Does the request round the value without giving a number of decimals or a "
                                        "multiple ('round the price', 'round everything')? If so, which named column?",
                               {**{k: f"Yes, it rounds {v}" for k, v in col_opts.items() if k != "none"},
@@ -240,6 +245,8 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
             add("rounding", "round", left, val, a, b, rule, [o["occ"]])
         elif kind == "round_multiple":
             add("rounding", "round_to", left, val, a, b, rule, [o["occ"]])
+        elif kind == "power":                                   # "squared", "to the power of 3"
+            add("calculation", "pow", left, val, a, b, rule, [o["occ"]])
         elif kind in ("upper_limit", "lower_limit"):
             add("guard", "clamp_max" if kind == "upper_limit" else "clamp_min", {"unresolved": True}, val, a, b, rule,
                 [o["occ"]])
@@ -274,12 +281,20 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
             add("guard", "clamp_max" if use == "upper_limit" else "clamp_min", {"unresolved": True}, col, c["start"],
                 c["end"], f"jev.column_{use}")
     rp, rpp = ans.get("round_plain", ("no", {}))
-    if rp != "no" and rpp.get(rp, 0) >= MIN and not any(r.role == "rounding" for r in records):
+    pf, pfp = ans.get("plain_function", ("no", {}))
+    rounds = pf in PLAIN_OF and pfp.get(pf, 0) >= MIN and PLAIN_OF[pf] in ("ceil", "floor", "trunc")
+    if rp != "no" and rpp.get(rp, 0) >= MIN and not any(r.role == "rounding" for r in records) and not rounds:
+        # "round them up": the plain function's rounding, never a second one
         m = re.search(r"\bround", text, re.I)
         c = names.get(rp)
         a = m.start() if m else (c["start"] if c else 0)
         add("rounding", "round", {"column": c["column"]} if c else {"unresolved": True}, None, a,
             c["end"] if c and c["end"] > a else a + 5, "jev.round_plain")
+    if pf in PLAIN_OF and pfp.get(pf, 0) >= MIN:              # round up, round down, drop the decimals, absolute value,
+        t = next((c for c in cols if c["column"] == upstream["target"]), None)   # square root: on the value the
+        a, b = (t["start"], t["end"]) if t else (0, len(text))                  # other steps give (pass 2 links it)
+        add("rounding" if PLAIN_OF[pf] in ("ceil", "floor", "trunc") else "calculation", PLAIN_OF[pf],
+            {"unresolved": True}, None, a, b, f"jev.plain_{PLAIN_OF[pf]}")
 
     for p in preds:
         if p["start"] < 0:

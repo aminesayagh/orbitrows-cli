@@ -52,6 +52,8 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = ["catalog: the operations' search, with the search model loaded (pytest -m catalog)"]
+addopts = "-m 'not catalog'"
 
 # CPU-only PyTorch for GLiNER2 (the build the header benchmark measured); much smaller than the CUDA build.
 [[tool.uv.index]]

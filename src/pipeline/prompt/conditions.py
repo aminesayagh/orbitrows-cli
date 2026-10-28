@@ -131,9 +131,16 @@ def around(r, key, values, params, m) -> str:
     return f"'…{t[max(0, a - 30):b].strip()}'"                # its words come before it ('over 100', 'heavier than 1 kg')
 
 
-COMPUTED = ("A value computed from the table, not written in the request: a share or a multiple of another column "
-            "('under 30% of the price', 'twice the cost'), a difference between columns, the column's average, lowest "
-            "or highest value.")
+def computed() -> str:
+    """The "computed" option: a value computed rather than the column's own, described by the catalog's own conditions
+    (a condition enabled there is offered here at once; 2026-10-28: a hand-written list hid the newer ones)."""
+    from orbitrows.pipeline.operations.catalog import connect, entries
+    if "computed" not in _CATALOG:
+        names = [e["name"].lower() for e in entries(connect()) if e["role"] == "condition"
+                 and e["builder_key"] != "linked_aggregate"]          # the linked records' comparison: stage 2c's
+        _CATALOG["computed"] = ("A value computed from the column, or from it and another column of the record, rather "
+                                "than the column's own value: " + "; ".join(names) + ".")
+    return _CATALOG["computed"]
 COMPUTED_RULES = [
     "The operation is the computation the condition compares with; which records, and showing, deleting or "
     "updating them, are not part of it.",
@@ -492,7 +499,7 @@ def questions_2(db, requests, schema, stage1, values, params, parts) -> dict:
                                                         f"exception or a negation?", NEGATE_RULES)
                 continue
             q[f"{rid}|{key}|value"] = choice(CONTEXT, f"In {said}, which value is {name} compared with (the lower "
-                                                      f"bound for a range)?", opts | {"computed": COMPUTED,
+                                                      f"bound for a range)?", opts | {"computed": computed(),
                                                                                       "none": "None of these."})
             q[f"{rid}|{key}|upper"] = choice(CONTEXT, f"In {said}, if {name} is in a range, which value is its upper "
                                                       f"bound?", opts | {"none": "None of these, or not a range."})
@@ -748,7 +755,8 @@ def catalog_candidates(text: str) -> list[str]:
         db = connect()
         _CATALOG.update(index=Index(db), entries={e["id"]: e for e in entries(db)})
     found = [i for i, _ in _CATALOG["index"].retrieve(text, len(_CATALOG["entries"]))]
-    return [i for i in found if _CATALOG["entries"][i]["role"] == "condition"][:10]
+    return [i for i in found if _CATALOG["entries"][i]["role"] == "condition"   # not the linked records' entry:
+            and _CATALOG["entries"][i]["builder_key"] != "linked_aggregate"][:10]   # stage 2c's, never built here
 
 
 _CATALOG = {}
@@ -965,6 +973,8 @@ def build_2d(requests, schema, section, params, answers) -> None:
         for c in [c for c in out[rid].get("predicates", []) if not c.get("linked") and c["operator"] == op
                   and (c["condition"].get("right") or {}).get("value") == number]:
             out[rid]["predicates"].remove(c)
+        if column and out[rid].get("refused_column") == column:   # the same comparison read on each record, as a
+            out[rid].pop("refused"); out[rid].pop("refused_column")   # computation it can't build: the group's
         agg = {"type": "aggregate", "function": "count" if f == "count_distinct" else f,
                "distinct": f == "count_distinct", **({"argument": _col(column)} if column and f != "count" else {})}
         out[rid]["having"] = {"type": "comparison", "operator": op, "left": agg,
@@ -1073,10 +1083,12 @@ def build_2b(db, requests, schema, section, params, answers) -> None:
                 warnings.append({"request": rid, "problem": out[rid]["refused"], "error": answers["error"]})
                 continue
             if entry is None:                                  # none: honest, never guessed
+                out[rid]["refused_column"] = key
                 out[rid]["refused"] = f"{said} compares with a computation no operation supports yet"
                 warnings.append({"request": rid, "problem": f"not supported: {out[rid]['refused']}"})
                 continue
             if m["missing"]:
+                out[rid]["refused_column"] = key
                 out[rid]["refused"] = f"{said} ({entry['name']}) lacks its {', '.join(m['missing'])}"
                 warnings.append({"request": rid, "problem": f"invalid parameters: {out[rid]['refused']}"})
                 continue
