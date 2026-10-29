@@ -432,7 +432,9 @@ def main(argv: list[str] | None = None) -> int:
     if session.handle is prompt:                              # the real pipeline (a test's handler loads nothing)
         if why := duckling.start():                           # the date reader's service
             log(f"dates can't be read this session: {why}")
-        ready.preload()                                       # its models, while the first message is written
+        from orbitrows.pipeline.prompt.pipeline import store_of   # its headers read here: the connection is
+        ready.preload([c["header"] or c["sql_name"] for t in store_of(session.db)   # this thread's
+                       for c in t["definition"]["columns"]])  # its models, while the first message is written
     idle = float(os.environ.get("ORBITROWS_IDLE") or IDLE)
     log(f"started, pid {os.getpid()}, owner {args.owner}, idle {idle} s")
     last, reason = time.monotonic(), None

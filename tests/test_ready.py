@@ -18,3 +18,17 @@ def test_setup_reports_each_part_not_ready_and_a_message_waits_for_the_preload(m
     ready.preload()
     ready.wait()
     assert loaded == [1]
+
+
+def test_the_preload_reads_the_units_registry_and_each_store_header_s_unit(monkeypatch):
+    """Measured (2026-10-30): after the models, the first message still spent ~5 s reading these once each."""
+    from orbitrows.pipeline.prompt import conditions
+    from orbitrows.units import header
+    read = []
+    monkeypatch.setattr(ready, "models", lambda: None)
+    monkeypatch.setattr(header, "_tables", lambda: read.append("registry"))
+    monkeypatch.setattr(conditions, "header_unit", read.append)
+    monkeypatch.setattr(ready, "_preload", [])
+    ready.preload(["Poids (kg)", "Prix"])
+    ready.wait()
+    assert read == ["registry", "Poids (kg)", "Prix"]

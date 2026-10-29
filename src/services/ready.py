@@ -5,8 +5,10 @@
                 loader (a load downloads exactly what it reads, and proves it works): GLiNER2, the meaning model
                 (values, the linker's too), the operations search model, spaCy. → the parts that aren't ready, with
                 why ([] when all are)
-    preload()   a session's start: the same models loaded in the background, so its first message doesn't wait on
-                them (a message waits for the preload to end first: no model loaded twice)
+    preload(headers)  a session's start: the same models loaded in the background, so its first message doesn't
+                wait on them (a message waits for the preload to end first: no model loaded twice); then the units
+                registry and the unit of each of the store's column headers (2026-10-30: measured, the first message
+                still took 11 s after the models, step 6 reading these once each)
 """
 import threading
 
@@ -43,10 +45,15 @@ def setup(say=print) -> list[str]:
 _preload: list[threading.Thread] = []
 
 
-def preload() -> None:
+def preload(headers=()) -> None:
     def run():
         try:
             models()
+            from orbitrows.pipeline.prompt.conditions import header_unit
+            from orbitrows.units.header import _tables
+            _tables()
+            for h in headers:
+                header_unit(h)
         except Exception:                                     # the message's own load says what is wrong
             pass
     _preload.append(threading.Thread(target=run, name="preload", daemon=True))
