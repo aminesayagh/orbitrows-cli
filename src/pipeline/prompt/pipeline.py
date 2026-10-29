@@ -25,7 +25,7 @@ from orbitrows.services.extractor import client as extractor
 from orbitrows.services.storage.store import KINDS, ROLES
 from orbitrows.sql.ddl import schema_from_sqlite
 
-from . import assemble, columns, conditions, coref, formula, grouping, guard, operation, parts, request_graph, source_route, sources, values
+from . import assemble, columns, conditions, coref, formula, grouping, guard, ledger, operation, parts, request_graph, source_route, sources, values
 
 
 
@@ -550,6 +550,19 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
     if incoming and (stopped := converted(*from_uploads(db, store, incoming, reqs, s5["requests"]),
                                           conditions=s6, grouping=g, formula=f5)):
         return stopped
+    for r in reqs:                                            # the ledger: every number, date and stored value
+        rid, c = r["id"], s6["requests"].get(r["id"])         # the request writes is used by one of its parts,
+        grp = g["requests"].get(rid) or {}                    # never run without it (2026-10-29)
+        if r["statement"] not in ("select", "update", "delete") or not c or c.get("refused") or grp.get("refused"):
+            continue
+        steps_of = [x for k, f in f5["requests"].items() if k.split(".")[0] == rid for x in f.get("records", [])]
+        missing = ledger.unaccounted(
+            ledger.found(r, s3["values"], s6.get("parameters", {}).get(rid, []), c.get("dates", [])),
+            ledger.used(c, grp, steps_of, s5["requests"].get(rid) or {}, r["text"])
+            + ledger.implied(c, s6.get("parameters", {}).get(rid, [])))
+        if missing:
+            c["refused"] = f"{', '.join(missing)} used by no part of the request (never run without it)"
+            s6["warnings"].append({"request": rid, "problem": c["refused"]})
     step("step 7 · assembly")
     a = assemble.assemble(db, store, reqs, s2["requests"], s4["requests"], s5["requests"], s6["requests"],
                           g["requests"], [("requests", s1["warnings"]), ("operation", s2["warnings"]),

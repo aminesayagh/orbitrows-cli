@@ -267,6 +267,8 @@ def build(requests, section, params, answers, parts=None, schema=None) -> dict:
             listed = spots if n and n.startswith("p") else nums
             value = 1 if n == "one" else listed[int(n[1:])][1] if n and n[1:].isdigit() and int(n[1:]) < len(listed) \
                 else None
+            if value is not None and n != "one" and (j := r["text"].find(listed[int(n[1:])][0])) >= 0:
+                out[rid]["limit_words"] = [[j, j + len(listed[int(n[1:])][0])]]   # the ledger's: the limit's words
             cond, within = per_group(g, rid, pick, schema or [], out[rid].get("order_by"), value) \
                 if r["statement"] == "select" else (None, None)
             if cond is None and n and n.startswith("p"):       # a place over all the records: not built yet, never

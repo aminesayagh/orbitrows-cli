@@ -158,3 +158,20 @@ def test_a_limit_in_each_group_keeps_the_first_records_of_every_group_never_a_li
                      {"sort": "t_variants.c_price_mad", "direction": "desc", "limit": "p0", "per_group": "all",
                       "per": "none"})
     assert out["program"] == [] and any("one place over all" in q["problem"] for q in out["questions"]), out
+
+
+def test_the_ledger_refuses_a_request_whose_number_no_part_used():
+    """A12 (2026-10-29): "without a barcode that weigh more than 200 grams" ran without the weight; "8 days" around its
+    used 8 is one occurrence read twice, accounted for; two zeros are two pieces of evidence, never one value."""
+    from orbitrows.pipeline.prompt import ledger
+    r = {"id": "r1", "start": 0, "text": "the variants without a barcode that weigh more than 200 grams"}
+    found = ledger.found(r, [], [{"text": "200 grams", "start": 51, "end": 60, "value": 200.0}], [])
+    barcode_only = {"predicates": [{"column": "t_variants.c_barcode", "words": []}]}
+    assert ledger.unaccounted(found, ledger.used(barcode_only, {}, [], {}, r["text"])) == ["the number '200 grams'"]
+    with_weight = {"predicates": [{"column": "t_variants.c_weight_g", "words": [[51, 54]]}]}
+    assert ledger.unaccounted(found, ledger.used(with_weight, {}, [], {}, r["text"])) == []
+    twice = [("the number 'no'", 10, 12), ("the number 'nothing'", 23, 30)]
+    assert ledger.unaccounted(twice, [(10, 12)]) == ["the number 'nothing'"]
+    one = [{"text": "one", "start": 26, "end": 29, "value": 1}]                 # "at least one black variant": the
+    exists = {"predicates": [{"linked": "t_variants", "operator": "in"}]}         # existence test means it
+    assert ledger.implied(exists, one) == [(26, 29)] and ledger.implied({"predicates": []}, one) == []

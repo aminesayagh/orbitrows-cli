@@ -14,7 +14,7 @@ import pytest
 COMMIT = "8c923a8"
 SRC = Path(__file__).resolve().parents[1] / "src"
 PORTED = {f"pipeline/prompt/{p.name}": f"v2/prompt_ast/{p.name}" for p in sorted((SRC / "pipeline" / "prompt").glob("*.py"))
-          if p.name not in ("pipeline.py", "asking.py", "source_route.py", "relations.py", "guard.py", "columns.py")} | {  # new, not PoC ports
+          if p.name not in ("pipeline.py", "asking.py", "source_route.py", "relations.py", "guard.py", "columns.py", "ledger.py")} | {  # new, not PoC ports
     "pipeline/expressions/words.py": "v2/prompt_ast/operations.py",          # the formula's passes: their own module
     "pipeline/expressions/steps.py": "v2/prompt_ast/operations_jev.py",      # since 2026-10-26
     "pipeline/expressions/links.py": "v2/prompt_ast/operations_map.py",

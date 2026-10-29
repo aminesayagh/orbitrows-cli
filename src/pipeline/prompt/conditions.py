@@ -667,6 +667,7 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                 for m in several:
                     built = mentioned(rid, key, m, cands[m], info, answers, out, warnings, db, schema, cands)
                     if built:
+                        built["words"] = words_of(r, key, values, params[rid], [m], cands)
                         out[rid].setdefault("predicates", []).append(built)
                 continue
             proved = [c for k, c in cands.items() if k.startswith("s")]   # step 3's values in this column (SQL)
@@ -737,7 +738,9 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
             if err := refused(db, schema, key.split(".")[0], cond):
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": f"condition on {key} refused", "error": err})
-            built = {"column": key, "operator": op, "negated": negated, "condition": cond}
+            built = {"column": key, "operator": op, "negated": negated, "condition": cond,
+                     "words": words_of(r, key, values, params[rid],
+                                       [k for k in cands if k.startswith("s")] if proved else [v, u], cands)}
             if other and (seen := compared.get((rid, frozenset((key, other))))):   # the surer side replaces it
                 out[rid]["predicates"][out[rid]["predicates"].index(seen[0])] = built
                 out[rid]["columns"] = [c for c in out[rid]["columns"] if c != seen[0]["column"]]
@@ -771,6 +774,29 @@ def kind_of(db, schema, key) -> str:
 
 _CATALOG = {}
 NUMBERS = ("percentage", "number")            # an entry's parameters a request's number fills
+def words_of(r, key, values, params, keys, cands=None) -> list[list[int]]:
+    """The request's words the chosen options stand for (positions in the request), for the ledger: a number (n), a
+    date (d), a stored value of step 3 in this column (s), a factor word (w), a text as written (x)."""
+    mine = [v for v in values if v["request"] == r["id"] and v.get("column") == key]
+    facts = [x for x in find(r["text"]) if x["kind"] == "multiplier" or x["form"] in ("fraction", "mixed_number")]
+    out = []
+    for k in map(str, keys):
+        i = int(k[1:]) if k[1:].isdigit() else None
+        if i is None:
+            continue
+        if k[0] == "n" and i < len(params) and "start" in params[i]:
+            out.append([params[i]["start"], params[i]["end"]])
+        elif k[0] == "d" and i < len(r.get("dates", [])):
+            out.append([r["dates"][i]["start"], r["dates"][i]["end"]])
+        elif k[0] == "s" and i < len(mine) and "start" in mine[i]:
+            out.append([mine[i]["start"] - r.get("start", 0), mine[i]["end"] - r.get("start", 0)])
+        elif k[0] == "w" and i < len(facts):
+            out.append([facts[i]["start"], facts[i]["end"]])
+        elif k[0] == "x" and cands and k in cands and (j := r["text"].find(str(cands[k][1]))) >= 0:
+            out.append([j, j + len(str(cands[k][1]))])
+    return out
+
+
 def factors(text: str) -> dict:
     """The multipliers and fractions a request writes ("twice", "two and a half times", "a third", "2.5x"), read by the
     shared reader (units/quantity), offered next to its numbers: {"w0": (value, "'twice' (2)")}; Jev chooses."""
@@ -909,7 +935,9 @@ def build_2c(db, requests, schema, section, params, answers) -> None:
                 warnings.append({"request": rid, "problem": f"{said} refused", "error": err})
             out[rid].setdefault("predicates", []).append({"column": f"{h['of']}.{h['link'][0]}", "operator": op,
                                                           "negated": False, "condition": cond, "linked": h["table"],
-                                                          "operation": "COMPARE_LINKED_AGGREGATE"})
+                                                          "operation": "COMPARE_LINKED_AGGREGATE",
+                                                          "words": words_of(r, None, [], params.get(rid, []), [n])
+                                                          + [w for c in within for w in c.get("words", [])]})
 
 
 GROUP_AGGREGATE = {"count": "How many records a group has ('the brands with more than 5 products').",
@@ -989,6 +1017,7 @@ def build_2d(requests, schema, section, params, answers) -> None:
                "distinct": f == "count_distinct", **({"argument": _col(column)} if column and f != "count" else {})}
         out[rid]["having"] = {"type": "comparison", "operator": op, "left": agg,
                               "right": {"type": "literal", "value": number}}
+        out[rid]["having_words"] = words_of(r, None, [], params.get(rid, []), [n])
 
 
 def questions_2b(requests, schema, section, params, db=None) -> dict:
@@ -1105,7 +1134,7 @@ def build_2b(db, requests, schema, section, params, answers, more=None) -> None:
                 given |= {x["name"]: params[rid][int(n[1:])]["value"] for x in use.slots(entry) if x["type"] in NUMBERS}
             p, missing = use.fill(entry, given) if entry else ({}, [])
             made.append({"c": c, "entry": entry, "p": p, "missing": missing, "sure": sure, "heard": heard,
-                         "other": other})
+                         "other": other, "words": words_of(r, key, [], params.get(rid, []), [n])})
         # two columns computed from each other are one condition ("priced more than twice their cost" is read from
         # the price and from the cost): the one that builds, the surer, is kept
         for i, m in enumerate(made):
@@ -1154,7 +1183,8 @@ def build_2b(db, requests, schema, section, params, answers, more=None) -> None:
                 warnings.append({"request": rid, "problem": f"condition on {key} refused", "error": err})
             out[rid].setdefault("predicates", []).append({"column": key, "operator": c["operator"],
                                                           "negated": c["negated"], "condition": cond,
-                                                          "operation": entry["id"]} | windowed(entry, m["p"]))
+                                                          "operation": entry["id"], "words": m["words"]}
+                                                         | windowed(entry, m["p"]))
 
 
 def windowed(entry, p) -> dict:
