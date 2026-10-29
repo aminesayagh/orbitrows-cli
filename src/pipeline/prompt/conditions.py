@@ -267,22 +267,27 @@ def tables_of(requests, sources, rid) -> list[str]:
     return [main] + [t for t in sources.get(rid, {}).get("reads", []) if t != main] if main else []
 
 
-def asked_columns(schema, requests, sources, rid, named, dated, db) -> dict:
+def asked_columns(schema, requests, sources, rid, named, dated, db, units=None) -> dict:
     """The columns stage 1 asks about (step 1.4, 2026-10-28): the candidates the request names (step "columns":
     words, meaning, kind), its main table's own id ("delete the variant 109"), and, when it writes a date, the
-    columns the profile says hold dates; a column step 3 tied to a value is kept without a question (build). Without
-    the step's answer (named None): every candidate, as before."""
+    columns the profile says hold dates; when it writes a number with a unit ("200 grams"), the columns whose own unit
+    it converts to (2026-10-29: "weigh" named no column, the weight's condition was lost); a column step 3 tied to a
+    value is kept without a question (build). Without the step's answer (named None): every candidate, as before."""
     every = candidates(schema, requests, sources, rid)
     if named is None:
         return every
     main = main_table(requests, sources, rid)
     own = {f"{main}.{c}" for t in schema if t["definition"]["table_id"] == main
            for c in t["definition"].get("primary_key", [])}
+    def measured(k):                                          # both units known, one converts to the other
+        info = column_info(schema, k)
+        return (info["unit"] or {}).get("unit") and any((p.get("unit") or {}).get("unit") and fits(p, info) is not None
+                                                        for p in (units or {}).get(rid, []))
     return {k: v for k, v in every.items() if k in (named.get(rid) or {}) or k in own
-            or (dated.get(rid) and holds_dates(db, schema, k))}
+            or (dated.get(rid) and holds_dates(db, schema, k)) or measured(k)}
 
 
-def questions(requests, schema, sources, named=None, dated=None, db=None) -> dict:
+def questions(requests, schema, sources, named=None, dated=None, db=None, units=None) -> dict:
     q = {}
     for r in requests:
         rid, said = r["id"], f"request {r['id']} ('{r['text']}')"
@@ -290,7 +295,7 @@ def questions(requests, schema, sources, named=None, dated=None, db=None) -> dic
             continue
         q[f"{rid}_all"] = yes_no(CONTEXT, f"Does {said} act on every record of its table, with no condition?",
                                  ALL_RULES)
-        for key, text in asked_columns(schema, requests, sources, rid, named, dated or {}, db).items():
+        for key, text in asked_columns(schema, requests, sources, rid, named, dated or {}, db, units).items():
             q[f"{rid}_chooses_{key}"] = yes_no(CONTEXT, f"Does {said} keep or exclude records by what this column "
                                                         f"holds, or by its being empty: {text}", CHOOSE_RULES)
         names = {t["definition"]["table_id"]: t["definition"]["sql_name"] for t in schema}
@@ -1262,8 +1267,10 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
             f"{r['id']}|t{i}", f"request {r['id']} ('{r['text']}')", d["text"]).items()}
     except dates.EngineUnavailable:                           # read_dates refuses those requests
         timed = {}
+    params = {r["id"]: parameters(r["text"], model) for r in requests} if db is not None and model is not None \
+        else {}                                               # read first: a number's unit names its column
     try:
-        answers = await ask(jev, st, questions(requests, schema, sources, named, found, db) | timed)
+        answers = await ask(jev, st, questions(requests, schema, sources, named, found, db, params) | timed)
     except Exception as e:                                    # API error: nothing is guessed
         answers = {"error": repr(e)}
     section = build(requests, schema, sources, values, answers)
@@ -1272,7 +1279,6 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
         if r["dates"] and r["id"] in section["requests"]:    # later"): read once
             section["requests"][r["id"]]["dates"] = r["dates"]
     if db is not None and model is not None:
-        params = {r["id"]: parameters(r["text"], model) for r in requests}
         try:
             a2 = await ask(jev, st, questions_2(db, requests, schema, section["requests"], values, params, parts))
         except Exception as e:

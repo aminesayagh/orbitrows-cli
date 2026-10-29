@@ -204,3 +204,23 @@ def test_step_6_sees_a_quantity_of_none():
             return {"entities": {}}
     got = [(p["text"], p["value"]) for p in parameters("lines with no stock and nothing reserved", NoSpans())]
     assert got == [("no", 0), ("nothing", 0)]
+
+
+def test_a_number_s_unit_names_its_column_and_a_condition_s_number_is_not_the_formula_s():
+    """ "weigh more than 200 grams": no word names the weight, its unit does (stage 1 asks about it); "raise by 5% …
+    that cost more than 60": the 60 is the condition's, read by step 6, not a step the formula lost."""
+    from orbitrows.pipeline.expressions.links import unused_numbers
+    from orbitrows.pipeline.prompt.conditions import asked_columns
+    from orbitrows.pipeline.store.profile import refresh
+    db = baseline()
+    refresh(db)
+    schema = store_of(db)
+    r = {"id": "r1", "text": "Show the variants that weigh more than 200 grams.", "statement": "select"}
+    grams = {"r1": [{"text": "200 grams", "value": 200.0, "unit": {"kind": "physical_unit", "unit": "g"}}]}
+    sources = {"r1": {"from": {"type": "database_table", "reference": "t_variants"}}}
+    asked = asked_columns(schema, [r], sources, "r1", {"r1": {}}, {}, db, grams)
+    assert "t_variants.c_weight_g" in asked and "t_variants.c_price_mad" not in asked
+    text = "Raise by 5% the price of the variants that cost more than 60."
+    i = text.find("60")
+    up = {"predicates": [{"text": "cost above 60", "words": [[i, i + 2]]}]}
+    assert unused_numbers(text, up, [], {}) == ["the number '5%' is not used in the formula"]   # not the 60

@@ -64,7 +64,8 @@ def predicate_spans(cond6, values, params, rid, off, schema, main):
         if span is None and right.get("type") == "literal":
             span = next(((x["start"], x["end"]) for x in params if x["value"] == right.get("value")), None)
         label = readable(schema, p["column"].split(".")[0], p["condition"])   # on the condition's own table
-        item = {"id": f"p{i + 1}", "text": label, "sql": p["condition"], "node": p["condition"]}
+        item = {"id": f"p{i + 1}", "text": label, "sql": p["condition"], "node": p["condition"],
+                "words": p.get("words", [])}                  # request positions the condition read (step 6)
         if span:
             item |= {"start": span[0] - off, "end": span[1] - off}
         out.append(item)

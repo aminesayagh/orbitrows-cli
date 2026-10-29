@@ -152,6 +152,7 @@ def unused_numbers(text, upstream, recs, links) -> list[str]:
     step lost on the way (pass 1 dropped it, or the map does not use it), so the user is asked."""
     from .words import occurrences
     spans = [(text.find(p["text"]), text.find(p["text"]) + len(p["text"])) for p in upstream.get("predicates", [])]
+    spans += [tuple(w) for p in upstream.get("predicates", []) for w in p.get("words", [])]   # the condition's own words
     used = reached(recs, links)
     out = []
     for o in occurrences(text, "en", [s for s in spans if s[0] >= 0]):
