@@ -32,6 +32,9 @@ PLURAL_TO_SINGULAR = {
 }
 DENOMINATORS = [*IRREGULAR_DENOMINATORS, *ORDINAL_TO_CARDINAL, *PLURAL_TO_SINGULAR]
 
+# A quantity of none said without a number: "no stock", "nothing reserved", "none left" are zero, as "zero" is.
+NONE_WORDS = ["no", "none", "nothing"]
+
 MULTIPLIERS = {
     **{w: Fraction(n) for w, n in {"once": 1, "twice": 2, "thrice": 3, "double": 2, "triple": 3, "quadruple": 4}.items()},
     # Bare "halves" is the verb; "three halves" still parses as the fraction 3/2.
@@ -50,4 +53,5 @@ digit_word: {_alts(DIGITS)}
 ord_word: {_alts(ORDINAL_TO_CARDINAL)}
 denom_word: {_alts(DENOMINATORS)}
 mult_word: {_alts(MULTIPLIERS)}
+none_word: {_alts(NONE_WORDS)}
 """

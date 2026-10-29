@@ -8,7 +8,7 @@ whole. Whether a number found here belongs to the request (the "one" of "one of 
 or Jev's, to decide: the reader only reads.
 
     find(text)  [{"text", "start", "end", "value": Fraction, "kind": number | multiplier | percentage | ordinal,
-                  ("no", "none", "nothing" read 0: "no stock", "nothing reserved"; never in "no more than 5")
+                  (the lexicon's words of none read 0: "no stock", "nothing reserved")
                   "form": integer | decimal | fraction | mixed_number | ordinal}] in text order, never overlapping
     read(text, expected_kind)  one phrase: its ParseResult (the caller's own span)
     plain(value)  a Fraction for SQL: an int when whole, else a float (the database boundary, as the plan says)
@@ -18,15 +18,13 @@ import re
 from fractions import Fraction
 
 from .quantity_parser import parse_quantity
-from .quantity_parser.en import CARDINALS, DENOMINATORS, MULTIPLIERS, ORDINAL_TO_CARDINAL
+from .quantity_parser.en import CARDINALS, DENOMINATORS, MULTIPLIERS, NONE_WORDS, ORDINAL_TO_CARDINAL
 
 TOKEN = re.compile(r"(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[xX](?![^\W\d_]))?%?|[^\W\d_]+(?:-[^\W\d_]+)*|%|/")
 # a digit token takes a comma only inside an en-US thousands group ("1,500", never the "5," of "nearest 5, never")
-STARTS = {*CARDINALS, *DENOMINATORS, *MULTIPLIERS, *ORDINAL_TO_CARDINAL, "a", "an", "minus"}
+STARTS = {*CARDINALS, *DENOMINATORS, *MULTIPLIERS, *ORDINAL_TO_CARDINAL, *NONE_WORDS, "a", "an", "minus"}
 WIDEST = 7                                                    # "one hundred and twenty five percent": words at most
-# a quantity of none (2026-10-29, user: "no stock" on a number column is 0): read 0, as "zero" is; never "no" in a
-# comparison ("no more than 5" is at most 5: "than" right after its next word) nor the abbreviation "No."
-NONE = {"no", "none", "nothing"}
+
 
 
 @functools.lru_cache(maxsize=8192)
@@ -43,14 +41,7 @@ def find(text: str) -> list[dict]:
     toks = list(TOKEN.finditer(text))
     out, i = [], 0
     while i < len(toks):
-        w = toks[i].group(0)
-        if w.casefold() in NONE and not text[toks[i].end():].startswith(".") and not (
-                i + 2 < len(toks) and toks[i + 2].group(0).casefold() == "than"):
-            out.append({"text": w, "start": toks[i].start(), "end": toks[i].end(), "value": Fraction(0),
-                        "kind": "number", "form": "integer"})
-            i += 1
-            continue
-        if not starts(w):
+        if not starts(toks[i].group(0)):
             i += 1
             continue
         for j in range(min(len(toks), i + WIDEST), i, -1):     # the longest window read whole

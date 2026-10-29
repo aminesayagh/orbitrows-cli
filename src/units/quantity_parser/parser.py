@@ -217,6 +217,8 @@ def _evaluate(tree: Tree) -> Quantity:
     node = tree.children[0]
     kind: Kind = str(node.data)  # Lark rule names are Token subclasses
     if kind == "number":
+        if _trees(node)[0].data == "none_word":             # a quantity of none: zero
+            return Quantity(Fraction(0), "integer", kind)
         return Quantity(*_signed(node), kind)
     if kind == "percentage":
         value, form = _signed(node)

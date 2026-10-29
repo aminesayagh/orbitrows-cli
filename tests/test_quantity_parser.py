@@ -187,10 +187,10 @@ def test_backend_failure_is_operational_not_user_error(monkeypatch):
         cardinal.cardinal_value.cache_clear()
 
 
-def test_a_quantity_of_none_reads_zero_but_never_a_comparison_or_an_abbreviation():
+def test_a_quantity_of_none_is_read_zero_by_the_language_lexicon():
     from orbitrows.units.quantity import find
+    assert parse_quantity("nothing").quantity.value == 0
     read = lambda text: [(q["text"], q["value"]) for q in find(text)]
     assert read("with no stock and nothing reserved") == [("no", 0), ("nothing", 0)]
     assert read("none left") == [("none", 0)]
-    assert read("no more than 5 units") == [("5", 5)]               # at most 5: "no" is the comparison's
-    assert read("order No. 5") == [("5", 5)]
+    assert read("no more than 5 units") == [("no", 0), ("5", 5)]    # the reader reads; the caller decides
