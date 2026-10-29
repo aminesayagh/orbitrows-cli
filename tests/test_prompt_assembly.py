@@ -224,3 +224,18 @@ def test_a_number_s_unit_names_its_column_and_a_condition_s_number_is_not_the_fo
     i = text.find("60")
     up = {"predicates": [{"text": "cost above 60", "words": [[i, i + 2]]}]}
     assert unused_numbers(text, up, [], {}) == ["the number '5%' is not used in the formula"]   # not the 60
+
+
+def test_an_amount_s_none_is_zero_and_a_negation_the_request_does_not_mean_is_dropped():
+    """ "with a discount": the discount is 0 when there is none, its NULL test alone was always true; "the October
+    sales except the refunded ones": October negated too, asked again as built (2n) and kept."""
+    from orbitrows.pipeline.prompt.conditions import build_2n, predicate
+    col = {"type": "column", "source": "t_sales", "reference": "c_discount_mad"}
+    assert predicate("is_not_empty", col, None, None, [], False, amount=True)["operator"] == "!="
+    assert predicate("is_not_empty", col, None, None, [], False)["type"] == "null_check"   # a key: NULL only
+    october = {"type": "comparison", "operator": "=", "left": col, "right": {"type": "literal", "value": 1}}
+    kept = {"column": "t_sales.c_sold_on", "negated": True,
+            "condition": {"type": "any", "children": [{"type": "null_check"}, {"type": "not", "operand": october}]}}
+    section = {"requests": {"r1": {"predicates": [kept]}}}
+    build_2n(section, [("r1|kept0", "r1", kept)], {"r1|kept0": 0.05})
+    assert kept["condition"] == october and not kept["negated"]

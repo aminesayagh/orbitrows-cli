@@ -162,6 +162,51 @@ NEGATE_RULES = [
 ]
 
 
+EXCLUDE_RULES = [
+    "Answer yes when the request's words leave these records out: 'except the refunded ones', 'not black', "
+    "'other than', 'excluding'.",
+    "Answer no when the request keeps these records: a negation written for another condition does not leave them "
+    "out, and words the condition already expresses do not either ('not under 100' written as price >= 100 keeps "
+    "the records whose price >= 100).",
+]
+
+
+def plain_of(cond: dict) -> dict:
+    """A negated condition without its negation (and the NULL rows a negation keeps on a nullable column)."""
+    if cond.get("type") == "any":
+        cond = next(c for c in cond["children"] if c.get("type") == "not")
+    return cond["operand"]
+
+
+def questions_2n(requests, schema, conds) -> tuple[dict, list]:
+    """Each negated condition, shown as built, asked again: does the request leave these records out (2026-10-29:
+    a bare yes/no per column negated "October" in "the October sales except the refunded ones", and negated "not
+    below" a second time once it was written >=)? Asked in stage 2b's call."""
+    from .grouping import readable
+    q, asked = {}, []
+    for r in requests:
+        for i, p in enumerate((conds.get(r["id"]) or {}).get("predicates", [])):
+            if p.get("negated") and "linked" not in p:
+                key = f"{r['id']}|kept{i}"
+                q[key] = yes_no(CONTEXT, f"In the request '{r['text']}', are the records where "
+                                         f"{readable(schema, p['column'].split('.')[0], plain_of(p['condition']))} "
+                                         f"left out?", EXCLUDE_RULES)
+                asked.append((key, r["id"], p))
+    return q, asked
+
+
+def build_2n(section, asked, answers):
+    """Not left out: the condition without its negation; unsure: the user is asked."""
+    for key, rid, p in asked:
+        y = answers.get(key, 1.0)
+        if y < 1 - SURE:
+            p["condition"], p["negated"] = plain_of(p["condition"]), False
+        elif y < SURE:
+            section["requests"][rid]["flagged"] = True
+            section.setdefault("warnings", []).append({"request": rid, "problem": f"negation of {p['column']} "
+                                                       "uncertain", "probability": round(y, 2)} | question(answers, key))
+
+
 COMPARES = ("Only those whose records of {0} compare with a number: how many there are, or a total, an average, "
             "a lowest or a highest value of them ('more than 3 {0}', 'whose {0} total over 1000', 'whose cheapest "
             "of the {0} is under 100'), or whether all of them meet a condition ('whose {0} are all black').")
@@ -528,7 +573,7 @@ def questions_2(db, requests, schema, stage1, values, params, parts) -> dict:
     return q
 
 
-def predicate(op, col, operand, upper, all_values, text_type):
+def predicate(op, col, operand, upper, all_values, text_type, amount=False):
     """The AST condition for one operator; None when an operand it needs is missing."""
     def esc(t):
         return str(t).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -551,6 +596,11 @@ def predicate(op, col, operand, upper, all_values, text_type):
     if op in ("is_empty", "is_not_empty"):
         if text_type:
             return {"type": "empty_check", "expression": col, "operator": op, "policy": "null_or_space_only"}
+        if amount:                                            # an amount's none is 0, as a text's is blank ("with a
+            zero = {"type": "comparison", "operator": "!=" if op == "is_not_empty" else "=", "left": col,   # discount":
+                    "right": _lit(0)}                         # its NULL test alone was always true, 2026-10-29)
+            return zero if op == "is_not_empty" else {"type": "any", "children": [
+                {"type": "null_check", "expression": col, "operator": "is_null"}, zero]}
         return {"type": "null_check", "expression": col, "operator": "is_null" if op == "is_empty" else "is_not_null"}
     return None
 
@@ -717,7 +767,11 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
             if other and (seen := compared.get((rid, frozenset((key, other))))) and seen[1] >= sure_op:
                 drop(rid, key, f"the comparison with {other}, built from that column")
                 continue
-            cond = predicate(op, _col(key), operand, upper, all_values, info["sql_type"] == "TEXT")
+            t, c = key.split(".")
+            d = next(x["definition"] for x in schema if x["definition"]["table_id"] == t)
+            keyed = c in d.get("primary_key", []) or any(c in fk["columns"] for fk in d.get("foreign_keys", []))
+            cond = predicate(op, _col(key), operand, upper, all_values, info["sql_type"] == "TEXT",
+                             info["sql_type"] in ("INTEGER", "REAL") and not keyed)   # a key's none is NULL only
             if cond and info["sql_type"] == "TEXT":
                 cond = cased(cond, db, schema, key)
             cond = cond and through(schema, cond, key.split(".")[0])   # a linked table's column: through the keys
@@ -1295,9 +1349,10 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
                 g["computed"] = [c for c in g.get("computed", []) if c["column"] not in routed]
             if g.get("grouped"):                              # stage 2d: a condition on its groups (HAVING)
                 g["group_of"] = main_table(requests, sources, r["id"])
+        q_n, negated = questions_2n(requests, schema, section["requests"])
         if q := questions_2b(requests, schema, section["requests"], params, db) | \
                 questions_2c(requests, schema, section["requests"], params) | \
-                questions_2d(requests, schema, section["requests"], params):   # stages 2b, 2c, 2d: one call
+                questions_2d(requests, schema, section["requests"], params) | q_n:   # 2b, 2c, 2d, 2n: one call
             try:
                 a2b = await ask(jev, st, q)
             except Exception as e:
@@ -1308,6 +1363,7 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
                 a2w = await ask(jev, st, q)
             except Exception as e:                            # API error: nothing is guessed
                 a2w = {"error": repr(e)}
+        build_2n(section, negated, a2b)
         build_2b(db, requests, schema, section, params, a2b, a2w)
         build_2c(db, requests, schema, section, params, a2b)
         build_2d(requests, schema, section, params, a2b)
