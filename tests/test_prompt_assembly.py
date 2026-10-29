@@ -254,3 +254,15 @@ def test_contested_words_go_to_one_condition_and_an_id_s_key_answers_add_up():
     schema = store_of(baseline())
     assert same_key(schema, {"t_sales.c_variant_id": 0.55, "t_variants.c_variant_id": 0.35}) == "t_sales.c_variant_id"
     assert same_key(schema, {"t_sales.c_variant_id": 0.55, "t_variants": 0.4}) is None
+
+
+def test_an_or_joins_the_branches_of_the_sentence_s_or():
+    """ "the September sales with a discount above 5 or a quantity of at least 2": the discount and the quantity are
+    the two branches; September is in neither, so it is joined to them by AND."""
+    from orbitrows.pipeline.prompt.grouping import apart
+    t = "Show the September sales with a discount above 5 or a quantity of at least 2."
+    at = lambda w: [[t.find(w), t.find(w) + len(w)]]
+    assert apart(t, at("5"), at("2")) is True
+    assert apart(t, at("September"), at("2")) is False and apart(t, at("September"), at("5")) is False
+    assert apart(t, [], at("2")) is None
+

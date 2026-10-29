@@ -845,6 +845,8 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                                        [k for k in cands if k.startswith("s")] if proved else [v, u], cands)
                      + (none_words(r, key, params[rid], section.get("named")) if op in ("is_empty", "is_not_empty")
                         else [])}
+            if op in ("is_empty", "is_not_empty"):              # where it is written, for grouping ("with a discount")
+                built["at"] = named_at(r, key, section.get("named"))
             if other and (seen := compared.get((rid, frozenset((key, other))))):   # the surer side replaces it
                 out[rid]["predicates"][out[rid]["predicates"].index(seen[0])] = built
                 out[rid]["columns"] = [c for c in out[rid]["columns"] if c != seen[0]["column"]]
@@ -899,6 +901,14 @@ def words_of(r, key, values, params, keys, cands=None) -> list[list[int]]:
         elif k[0] == "x" and cands and k in cands and (j := r["text"].find(str(cands[k][1]))) >= 0:
             out.append([j, j + len(str(cands[k][1]))])
     return out
+
+
+def named_at(r, key, named) -> list[list[int]]:
+    """Where the column finder's words for this column are in the request (a place, not evidence: the ledger skips it)."""
+    from orbitrows.pipeline.expressions.words import nlp
+    own = {w.casefold() for p in (((named or {}).get(r["id"]) or {}).get(key) or {}).get("words") or []
+           for w in str(p).split()}
+    return [[t.idx, t.idx + len(t)] for t in nlp("en")(r["text"]) if t.text.casefold() in own] if own else []
 
 
 def none_words(r, key, params, named) -> list[list[int]]:
@@ -1412,6 +1422,10 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
         build_2b(db, requests, schema, section, params, a2b, a2w)
         build_2c(db, requests, schema, section, params, a2b)
         build_2d(requests, schema, section, params, a2b)
+        for g in section["requests"].values():               # "of the Accessories category": its name's condition;
+            ps = g.get("predicates", [])                      # a linked test no words wrote ("has a category") on the
+            g["predicates"] = [p for p in ps if not (p.get("linked") and not p.get("words") and any(   # same table
+                q is not p and q["column"].split(".")[0] == p["linked"] for q in ps))]   # widened an OR (2026-10-29)
         section["parameters"] = params
         section["jev"] = {"stage_1": answers, "stage_2": a2, "stage_2b": a2b} | ({"stage_2w": a2w} if a2w else {})
         return section

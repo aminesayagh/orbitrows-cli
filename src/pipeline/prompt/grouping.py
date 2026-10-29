@@ -95,6 +95,30 @@ def tree_of(idx, both):
     return None
 
 
+def apart(text, a, b) -> bool | None:
+    """True: the two conditions' words are in different branches of one coordination of the sentence (spaCy's parse:
+    "a discount above 5 or a quantity of at least 2"); False: never so, and one of them is inside a coordination the
+    other is wholly outside of ("the September sales with [… or …]"): not alternatives; None: anything else (no place
+    in the request, or both inside one branch: the parse of an elliptic "or the white ones over 130" is not trusted)."""
+    from orbitrows.pipeline.expressions.words import nlp
+    doc = nlp("en")(text)
+    A, B = ({t.i for t in doc for s, e in spans if s <= t.idx < e} for spans in (a, b))
+    if not A or not B:
+        return None
+    outside = False
+    for cc in (t for t in doc if t.dep_ == "cc"):
+        conj = [c for c in cc.head.children if c.dep_ == "conj"]
+        if not conj:
+            continue
+        rest = {x.i for c in conj for x in c.subtree} | {cc.i}
+        branches = [{x.i for x in cc.head.subtree} - rest] + [{x.i for x in c.subtree} for c in conj]
+        ka, kb = ({k for k, r in enumerate(branches) if S & r} for S in (A, B))
+        if ka and kb and not ka & kb:
+            return True
+        outside |= bool(ka) != bool(kb)                       # one in this coordination, the other out of it
+    return False if outside else None
+
+
 def build_tree(shape, conds):
     kind, children = shape
     return {"type": kind, "children": [build_tree(c, conds) if isinstance(c, tuple) else conds[c] for c in children]}
@@ -245,6 +269,12 @@ def build(requests, section, params, answers, parts=None, schema=None) -> dict:
             names = [p["column"].split(".c_")[-1] for p in ps]
             said = {(i, j): pick(rid, f"{i}|{j}", what=f"how {names[i]} and {names[j]} combine")
                     for i, j in pairs(len(conds))}
+            cols = [p["column"] for p in ps]                  # a column written twice: an elliptic "or" repeats the
+            for (i, j), a in said.items():                    # phrase ("black … or the white ones over 130"): kept
+                if a == "or" and cols.count(cols[i]) == cols.count(cols[j]) == 1 and apart(   # one outside an "or"
+                        r["text"], ps[i].get("words") or ps[i].get("at") or [],  # ("the September sales with … or
+                        ps[j].get("words") or ps[j].get("at") or []) is False:  # …"), are joined by AND (2026-10-29)
+                    said[(i, j)] = "and"
             shape = None if None in said.values() else tree_of(list(range(len(conds))), lambda i, j: said[
                 min(i, j), max(i, j)] == "and")
             if shape is None:                                 # no answer, or answers no tree fits: every condition,
