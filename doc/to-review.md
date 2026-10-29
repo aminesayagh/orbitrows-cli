@@ -104,10 +104,11 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 
 ## Prompt to SQL: gaps left for after the first delivery (2026-10-29)
 
-Measured on the hard sets A–E (129 requests, `.bench/sentences/attach_cases*.py`, run with `run_today.py`) and the 21 regression sets (174 requests, `.bench/run.py`). A wrong query runs without warning; a held-back request is refused with its reason, so it's safe. Each fix is measured on both before it's committed, two fixes per run.
+**Fresh set F** (24 client-like requests written before any run, `.bench/sentences/fresh_cases.py`, run once with real Jev calls, 2026-10-30): **22 / 24 right**, 8 questions to the user in total; the two wrong are F15 and F23 below. Measured on the hard sets A–E (129 requests, `.bench/sentences/attach_cases*.py`, run with `run_today.py`) and the 21 regression sets (174 requests, `.bench/run.py`). A wrong query runs without warning; a held-back request is refused with its reason, so it's safe. Each fix is measured on both before it's committed, two fixes per run.
 
 **Run wrong queries (most urgent):**
-- [ ] **A column the request doesn't name:** "no **stock**" (B09) and "lines that are not **empty**" (E14) mean the quantity; "**below** their reorder point" (B04) compares an implied quantity, and comes out reversed. Settled when the column finder ties these words to the quantity column (no word lists in a step).
+- [ ] **A column the request doesn't name:** "no **stock**" (B09; fresh set F15 "nothing in stock and nothing reserved" deleted every line with nothing reserved) and "lines that are not **empty**" (E14) mean the quantity; "**below** their reorder point" (B04) compares an implied quantity, and comes out reversed. Settled when the column finder ties these words to the quantity column (no word lists in a step).
+- [ ] **An amount read as a percentage (F23, fresh set):** "raise the price of the Orbit Hoodie variants by 20" ran `price * 1.2`: the formula took the catalog's "increase by a percentage" for a number written with no "%" or "percent". The number reader knows how each number is written (`units/quantity`: kind `percentage`); a percentage slot should take only a number written as one, else the user is asked.
 - [ ] **"not discounted" (A24)** is read as "discount = ?" (no value) instead of "is empty". The fix is in step 6's operator text ("on an amount, 0 is no value"), but that text is part of every stage-2 question: changing it re-asks all 300 benchmark requests (paid). Do it together with the next change that re-asks them anyway.
 
 **Held back (refused, with the reason):**
