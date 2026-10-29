@@ -253,7 +253,31 @@ def questions_1(ps, schema) -> dict:
     return q
 
 
-def build(ps: list[dict], a1: dict, candidates: dict, a2: dict) -> dict:
+def same_key(schema, probs: dict) -> str | None:
+    """The key column Jev's split answer names: a foreign key and the key it references hold the same value
+    ("variant 101": sales.variant_id 0.55, variants.variant_id 0.35), so their answers add up; their best one when
+    the sum is sure."""
+    if not schema:
+        return None
+    of = {}
+    for t in schema:
+        d = t["definition"]
+        for c in d.get("primary_key", []):
+            of[f"{d['table_id']}.{c}"] = f"{d['table_id']}.{c}"
+        for fk in d.get("foreign_keys", []):
+            for c, rc in zip(fk["columns"], fk["references"]["columns"]):
+                of[f"{d['table_id']}.{c}"] = f"{fk['references']['table']}.{rc}"
+    sums = {}
+    for k, p in probs.items():
+        if k in of:
+            sums[of[k]] = sums.get(of[k], 0) + p
+    best = max(sums, key=sums.get, default=None)
+    if best is None or sums[best] < SURE:
+        return None
+    return max((k for k in probs if of.get(k) == best), key=probs.get)
+
+
+def build(ps: list[dict], a1: dict, candidates: dict, a2: dict, schema=None) -> dict:
     """ps: phrases; a1: call 1; candidates: {phrase id: search result}; a2: call 2."""
     out, warnings = [], []
     for p in ps:
@@ -274,7 +298,9 @@ def build(ps: list[dict], a1: dict, candidates: dict, a2: dict) -> dict:
                                      "probability": round(np_.get(named, 0), 2)} | question(a1, f"{p['id']}_named"))
             else:
                 found = candidates.get(p["id"], [])
-                if not found:
+                if not found and (k := same_key(schema, np_)):   # an id: never found as a text, its key said
+                    v |= {"column": k, "match": "given"}
+                elif not found:
                     v |= {"column": None, "match": "none", "stored": []}
                     warnings.append({"value": p["id"], "problem": "not found in the store", "text": p["text"]})
                 else:
@@ -430,6 +456,6 @@ async def run(jev, db, prompt: str, requests: list[dict], schema: list[dict], mo
         a2 = await ask(jev, state(prompt, requests, schema, ps), q2)
     except Exception as e:                                    # API error: nothing is guessed
         a1 = a1 or {"error": repr(e)}
-    section = build(ps, a1, candidates, a2)
+    section = build(ps, a1, candidates, a2, schema)
     section["jev"] = {"call_1": a1, "candidates": candidates, "call_2": a2}
     return section

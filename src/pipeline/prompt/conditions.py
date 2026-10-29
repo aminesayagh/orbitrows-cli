@@ -207,6 +207,46 @@ def build_2n(section, asked, answers):
                                                        "uncertain", "probability": round(y, 2)} | question(answers, key))
 
 
+OWNER_RULES = [
+    "Written words belong to one condition: the one the words around them describe ('created in May': the "
+    "creation date; 'costing 40': the cost).",
+]
+
+
+def questions_2x(requests, schema, conds) -> tuple[dict, list]:
+    """Words two columns' conditions both took (2026-10-29: "created in September … sold in September" put both
+    Septembers on both dates, "heavier than 250 grams or priced at 250" the price's 250 on the weight too): which
+    condition they belong to, asked once with both shown. Asked in stage 2b's call."""
+    from .grouping import readable
+    q, asked = {}, []
+    for r in requests:
+        preds, spans = (conds.get(r["id"]) or {}).get("predicates", []), {}
+        for i, p in enumerate(preds):
+            for w in {tuple(w) for w in p.get("words", [])}:
+                spans.setdefault(w, []).append(i)
+        for (a, b), idx in spans.items():
+            if len({preds[i]["column"] for i in idx}) < 2:
+                continue
+            key, t = f"{r['id']}|owner{a}", r["text"]
+            q[key] = choice(CONTEXT, f"In the request '{t}', which condition do the words '{t[a:b]}' (in "
+                                     f"'…{t[max(0, a - 30):b]}') belong to?",
+                            {str(i): readable(schema, preds[i]["column"].split(".")[0], preds[i]["condition"])
+                             for i in idx}, OWNER_RULES)
+            asked.append((key, r["id"], {str(i): preds[i] for i in idx}))
+    return q, asked
+
+
+def build_2x(section, asked, answers):
+    """Sure: the other one-occurrence conditions on those words are dropped; unsure: kept, the ledger refuses."""
+    for key, rid, preds in asked:
+        pick, probs = answers.get(key, (None, {}))
+        if probs.get(pick, 0) < SURE:
+            continue
+        own = section["requests"][rid]["predicates"]
+        lost = [p for i, p in preds.items() if i != pick and p.get("mention")]
+        section["requests"][rid]["predicates"] = [p for p in own if not any(p is x for x in lost)]
+
+
 COMPARES = ("Only those whose records of {0} compare with a number: how many there are, or a total, an average, "
             "a lowest or a highest value of them ('more than 3 {0}', 'whose {0} total over 1000', 'whose cheapest "
             "of the {0} is under 100'), or whether all of them meet a condition ('whose {0} are all black').")
@@ -493,6 +533,9 @@ def operands(db, schema, r, key, values, params, parts_req) -> dict:
             if not found:                                     # in another language ("variantes noires" → black):
                 found = [f for f in meant(db, schema, v["text"]) if f["column"] == key][:1]   # the meaning, in that column
                 by_meaning = bool(found)
+            if not found and info["sql_type"] in ("INTEGER", "REAL") and \
+                    not v["text"].replace(".", "", 1).lstrip("-").isdigit():
+                continue                                      # "variant 106" on an id: its number is the operand
             stored = found[0]["stored"] if found else [v["text"]]
             if by_meaning:                                    # a meaning is not SQL's proof: the user confirms
                 out[f"s{i}"] = (f"'{v['text']}' (meaning {', '.join(stored)})", stored, v["text"], "meaning")
@@ -1350,9 +1393,10 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
             if g.get("grouped"):                              # stage 2d: a condition on its groups (HAVING)
                 g["group_of"] = main_table(requests, sources, r["id"])
         q_n, negated = questions_2n(requests, schema, section["requests"])
+        q_x, owned = questions_2x(requests, schema, section["requests"])
         if q := questions_2b(requests, schema, section["requests"], params, db) | \
                 questions_2c(requests, schema, section["requests"], params) | \
-                questions_2d(requests, schema, section["requests"], params) | q_n:   # 2b, 2c, 2d, 2n: one call
+                questions_2d(requests, schema, section["requests"], params) | q_n | q_x:   # 2b-2d, 2n, 2x: one call
             try:
                 a2b = await ask(jev, st, q)
             except Exception as e:
@@ -1364,6 +1408,7 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
             except Exception as e:                            # API error: nothing is guessed
                 a2w = {"error": repr(e)}
         build_2n(section, negated, a2b)
+        build_2x(section, owned, a2b)
         build_2b(db, requests, schema, section, params, a2b, a2w)
         build_2c(db, requests, schema, section, params, a2b)
         build_2d(requests, schema, section, params, a2b)

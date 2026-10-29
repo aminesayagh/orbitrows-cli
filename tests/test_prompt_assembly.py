@@ -239,3 +239,18 @@ def test_an_amount_s_none_is_zero_and_a_negation_the_request_does_not_mean_is_dr
     section = {"requests": {"r1": {"predicates": [kept]}}}
     build_2n(section, [("r1|kept0", "r1", kept)], {"r1|kept0": 0.05})
     assert kept["condition"] == october and not kept["negated"]
+
+
+def test_contested_words_go_to_one_condition_and_an_id_s_key_answers_add_up():
+    """ "created in September … sold in September": each September on both dates; Jev, shown both, gives each its
+    own (2x). "variant 101": sales.variant_id 0.55 and variants.variant_id 0.35 are one key, sure together."""
+    from orbitrows.pipeline.prompt.conditions import build_2x
+    from orbitrows.pipeline.prompt.values import same_key
+    created, sold = ({"column": c, "mention": "d1", "words": [[70, 79]], "condition": {}} for c in ("p.created",
+                                                                                                     "s.sold"))
+    section = {"requests": {"r1": {"predicates": [created, sold]}}}
+    build_2x(section, [("r1|owner70", "r1", {"0": created, "1": sold})], {"r1|owner70": ("1", {"1": 0.95})})
+    assert section["requests"]["r1"]["predicates"] == [sold]
+    schema = store_of(baseline())
+    assert same_key(schema, {"t_sales.c_variant_id": 0.55, "t_variants.c_variant_id": 0.35}) == "t_sales.c_variant_id"
+    assert same_key(schema, {"t_sales.c_variant_id": 0.55, "t_variants": 0.4}) is None
