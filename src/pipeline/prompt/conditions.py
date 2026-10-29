@@ -740,7 +740,9 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                 warnings.append({"request": rid, "problem": f"condition on {key} refused", "error": err})
             built = {"column": key, "operator": op, "negated": negated, "condition": cond,
                      "words": words_of(r, key, values, params[rid],
-                                       [k for k in cands if k.startswith("s")] if proved else [v, u], cands)}
+                                       [k for k in cands if k.startswith("s")] if proved else [v, u], cands)
+                     + (none_words(r, key, params[rid], section.get("named")) if op in ("is_empty", "is_not_empty")
+                        else [])}
             if other and (seen := compared.get((rid, frozenset((key, other))))):   # the surer side replaces it
                 out[rid]["predicates"][out[rid]["predicates"].index(seen[0])] = built
                 out[rid]["columns"] = [c for c in out[rid]["columns"] if c != seen[0]["column"]]
@@ -794,6 +796,24 @@ def words_of(r, key, values, params, keys, cands=None) -> list[list[int]]:
             out.append([facts[i]["start"], facts[i]["end"]])
         elif k[0] == "x" and cands and k in cands and (j := r["text"].find(str(cands[k][1]))) >= 0:
             out.append([j, j + len(str(cands[k][1]))])
+    return out
+
+
+def none_words(r, key, params, named) -> list[list[int]]:
+    """The words of none ("no", "nothing": the reader's) attached in the parse to this column's own words ("no barcode"):
+    an empty test's evidence. One attached elsewhere ("no reviews and zero stock") is not this condition's: the ledger
+    refuses it if nothing else uses it."""
+    from orbitrows.pipeline.expressions.words import nlp
+    own = {w.casefold() for p in (((named or {}).get(r["id"]) or {}).get(key) or {}).get("words") or []
+           for w in str(p).split()}
+    if not own:
+        return []
+    doc = nlp("en")(r["text"])
+    out = []
+    for p in params:
+        t = next((t for t in doc if t.idx == p.get("start")), None) if p.get("none") else None
+        if t is not None and (t.head.text.casefold() in own or t.text.casefold() in own):
+            out.append([p["start"], p["end"]])
     return out
 
 
@@ -1257,7 +1277,9 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
             a2 = await ask(jev, st, questions_2(db, requests, schema, section["requests"], values, params, parts))
         except Exception as e:
             a2 = {"error": repr(e)}
+        section["named"] = named or {}                       # the column finder's words, for an empty test's evidence
         build_2(db, requests, schema, section["requests"], values, params, parts, a2, section)
+        section.pop("named", None)
         a2b = {}
         for r in requests:                                    # stage 2c's comparisons over linked records; a
             g = section["requests"].get(r["id"]) or {}        # computed one among them is not stage 2b's

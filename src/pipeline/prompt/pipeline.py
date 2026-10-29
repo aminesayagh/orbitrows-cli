@@ -562,6 +562,9 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
         if missing:
             c["refused"] = f"{', '.join(missing)} used by no part of the request (never run without it)"
             s6["warnings"].append({"request": rid, "problem": c["refused"]})
+        elif twice := ledger.shared(c, r["text"]):            # one occurrence, one condition
+            c["refused"] = f"{', '.join(twice)} read by two conditions (one is a misreading)"
+            s6["warnings"].append({"request": rid, "problem": c["refused"]})
     step("step 7 · assembly")
     a = assemble.assemble(db, store, reqs, s2["requests"], s4["requests"], s5["requests"], s6["requests"],
                           g["requests"], [("requests", s1["warnings"]), ("operation", s2["warnings"]),

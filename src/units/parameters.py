@@ -20,6 +20,7 @@ from babel.numbers import get_currency_symbol
 from .dictionary import NUMBER, PIECE, plain, to_number
 from .header import currencies, lookup
 from .quantity import find, plain as as_number
+from .quantity_parser.en import NONE_WORDS
 
 LABELS = {
     "amount": "a number with its unit, currency or percent sign when one is written: '10%', '750 grams', '20 €', "
@@ -136,4 +137,8 @@ def parameters(text: str, model, store: str | None = None) -> list[dict]:
             if glued(text, a, b, unit):
                 continue
             out.append({"text": text[a2:b2], "start": a2, "end": b2, "value": to_number(m.group(0)), "unit": unit})
+    for q in find(text):                                      # a quantity of none, by the reader's lexicon ("no stock",
+        if q["text"].casefold() in NONE_WORDS and not any(    # "nothing reserved"): 0, which GLiNER2 never proposes;
+                o["start"] < q["end"] and q["start"] < o["end"] for o in out):   # last, so the others keep their order
+            out.append({"text": q["text"], "start": q["start"], "end": q["end"], "value": 0, "unit": None, "none": True})
     return out

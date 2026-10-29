@@ -172,3 +172,35 @@ def test_the_ledger_refuses_a_request_whose_number_no_part_used():
     assert ledger.unaccounted(found, ledger.used(with_weight, {}, [], {}, r["text"])) == []
     twice = [("the number 'no'", 10, 12), ("the number 'nothing'", 23, 30)]
     assert ledger.unaccounted(twice, [(10, 12)]) == ["the number 'nothing'"]
+
+
+def test_one_occurrence_is_one_condition_s_and_a_word_of_none_belongs_to_its_own_column():
+    """B25 (2026-10-29): "sold on or after October 4" read the 4 of the date again as quantity = 4: refused. A word of
+    none is an empty test's evidence only when the parse attaches it to that column's words ("no barcode")."""
+    from orbitrows.pipeline.prompt import conditions, ledger
+    text = "sales with a quantity of exactly 2, sold on or after October 4"
+    d = text.find("October 4")
+    two = {"predicates": [{"words": [[d, d + 9]], "condition": {"date": ">="}},
+                          {"words": [[d + 8, d + 9]], "condition": {"quantity": "="}}]}
+    assert ledger.shared(two, text) == ["'4'"] and ledger.shared({"predicates": [{"words": [[d, d + 9]]}]}, text) == []
+    same = {"type": "comparison"}                             # the same condition built twice: a duplicate
+    assert ledger.shared({"predicates": [{"words": [[d, d + 9]], "condition": same},
+                                         {"words": [[d, d + 9]], "condition": same}]}, text) == []
+    twice = "created in September and sold in September"      # the second September, used by no condition
+    assert ledger.shared({"predicates": [{"words": [[11, 20]], "condition": {"created": "in"}},
+                                         {"words": [[11, 20]], "condition": {"sold": "in"}}]}, twice) == []
+    r = {"id": "r1", "text": "products with no barcode and no stock"}
+    params = [{"text": "no", "start": 14, "end": 16, "value": 0, "none": True},
+              {"text": "no", "start": 29, "end": 31, "value": 0, "none": True}]
+    named = {"r1": {"t_variants.c_barcode": {"words": ["barcode"]}}}
+    assert conditions.none_words(r, "t_variants.c_barcode", params, named) == [[14, 16]]
+
+
+def test_step_6_sees_a_quantity_of_none():
+    from orbitrows.units.parameters import parameters
+
+    class NoSpans:
+        def extract_entities(self, *a, **k):
+            return {"entities": {}}
+    got = [(p["text"], p["value"]) for p in parameters("lines with no stock and nothing reserved", NoSpans())]
+    assert got == [("no", 0), ("nothing", 0)]
