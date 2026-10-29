@@ -6,10 +6,11 @@ weight). Evidence is an occurrence in the request, never a value: two "0"s are t
     found(r, values, params, dates)  [(label, start, end)]: step 3's stored values, the numbers, the dates
     used(cond, group, formula, part, text)  [(start, end)]: the words the request's parts consumed (each condition's
                                      "words", the limit's, the formula's steps, a change's written value)
-    implied(cond, params)            the numbers a test of related records means: 1 for an existence, 0 for an absence
     unaccounted(found, used)         the labels of the evidence no consumed words overlap (a duration around its
                                      number, the number inside a date: one occurrence read two ways, accounted for)
-Positions are the request's own (step 3's are the prompt's: shifted by the request's start)."""
+Positions are the request's own (step 3's are the prompt's: shifted by the request's start). An existence test's
+implied count ("at least one black variant") covers no written 1 or 0: it would cover the 0 of another, dropped
+condition (expert review, 2026-10-29); such a request is refused until the existence test's own words are tracked."""
 
 
 def found(r: dict, values: list[dict], params: list[dict], dates: list[dict]) -> list[tuple[str, int, int]]:
@@ -30,14 +31,6 @@ def used(cond: dict, group: dict, formula: list[dict], part: dict, text: str) ->
         if isinstance(v, (str, int, float)) and (i := text.find(str(v))) >= 0:
             out.append((i, i + len(str(v))))
     return out
-
-
-def implied(cond: dict, params: list[dict]) -> list[tuple[int, int]]:
-    """The numbers a test of related records means without writing them: an existence test is a count of at least 1
-    ("at least one black variant"), an absence a count of 0 ("with no orders"): those numbers are its own."""
-    kinds = {p.get("operator") for p in cond.get("predicates", []) if p.get("linked")}
-    means = ({1} if "in" in kinds else set()) | ({0} if "not_in" in kinds else set())
-    return [(p["start"], p["end"]) for p in params if "start" in p and p.get("value") in means]
 
 
 def unaccounted(found: list[tuple[str, int, int]], used: list[tuple[int, int]]) -> list[str]:

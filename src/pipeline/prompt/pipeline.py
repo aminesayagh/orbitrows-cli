@@ -558,8 +558,7 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
         steps_of = [x for k, f in f5["requests"].items() if k.split(".")[0] == rid for x in f.get("records", [])]
         missing = ledger.unaccounted(
             ledger.found(r, s3["values"], s6.get("parameters", {}).get(rid, []), c.get("dates", [])),
-            ledger.used(c, grp, steps_of, s5["requests"].get(rid) or {}, r["text"])
-            + ledger.implied(c, s6.get("parameters", {}).get(rid, [])))
+            ledger.used(c, grp, steps_of, s5["requests"].get(rid) or {}, r["text"]))
         if missing:
             c["refused"] = f"{', '.join(missing)} used by no part of the request (never run without it)"
             s6["warnings"].append({"request": rid, "problem": c["refused"]})

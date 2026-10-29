@@ -172,6 +172,3 @@ def test_the_ledger_refuses_a_request_whose_number_no_part_used():
     assert ledger.unaccounted(found, ledger.used(with_weight, {}, [], {}, r["text"])) == []
     twice = [("the number 'no'", 10, 12), ("the number 'nothing'", 23, 30)]
     assert ledger.unaccounted(twice, [(10, 12)]) == ["the number 'nothing'"]
-    one = [{"text": "one", "start": 26, "end": 29, "value": 1}]                 # "at least one black variant": the
-    exists = {"predicates": [{"linked": "t_variants", "operator": "in"}]}         # existence test means it
-    assert ledger.implied(exists, one) == [(26, 29)] and ledger.implied({"predicates": []}, one) == []
