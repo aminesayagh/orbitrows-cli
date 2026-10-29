@@ -101,3 +101,37 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 - [ ] **Keys that differ only by format** (`'7'` and `'007'`, or `' A1'` and `'A1'`) pass the duplicate check as two keys, yet SQLite matches both `'7'` and `'007'` to an INTEGER store key 7 (numeric affinity): an update then takes one of them arbitrarily. Normalise the upload key (trim; for an INTEGER store key, compare as integers) before the duplicate check.
 - [ ] **An insert copies the upload key as written** (untrimmed): `' A1'` passes "not in the store" when the store has `'A1'`, then a STRICT TEXT key stores `' A1'` beside it.
 - [ ] **An update from several columns of one upload** runs only on rows where every taken cell is filled: a row with one empty cell keeps all its values, even those the file had.
+
+## Prompt to SQL: gaps left for after the first delivery (2026-10-29)
+
+Measured on the hard sets A–E (129 requests, `.bench/sentences/attach_cases*.py`, run with `run_today.py`) and the 21 regression sets (174 requests, `.bench/run.py`). A wrong query runs without warning; a held-back request is refused with its reason, so it's safe. Each fix is measured on both before it's committed, two fixes per run.
+
+**Run wrong queries (most urgent):**
+- [ ] **A column the request doesn't name:** "no **stock**" (B09) and "lines that are not **empty**" (E14) mean the quantity; "**below** their reorder point" (B04) compares an implied quantity, and comes out reversed. Settled when the column finder ties these words to the quantity column (no word lists in a step).
+- [ ] **"not discounted" (A24)** is read as "discount = ?" (no value) instead of "is empty". The fix is in step 6's operator text ("on an amount, 0 is no value"), but that text is part of every stage-2 question: changing it re-asks all 300 benchmark requests (paid). Do it together with the next change that re-asks them anyway.
+
+**Held back (refused, with the reason):**
+- [ ] **Zero words in deletes:** "delete the sales with **no** discount that were refunded" (C05), "hold **nothing**" (C24), "**no longer** active" (C13): the "no" is a 0 no condition uses, so the ledger refuses.
+- [ ] **A repeated number on two columns:** "heavier than 250 grams or priced at 250 or more" (B08): the stage-2x question isn't sure which condition takes the second 250.
+- [ ] **A fill on a text column leaves blanks (E10, runs a wrong change):** "set the size of the variants without a size to one-size" selects the NULL and blank sizes, but the new value `COALESCE(size, 'one-size')` replaces only the NULL ones. `fill_empty` (`operations/builders.py:225`) handles blanks when it gets `column_type = TEXT`, but this change's value doesn't come through the formula's catalog call (passing the type there didn't change it): find where the assignment is built.
+- [ ] **Several ids:** "variants 101 **or 102**" (D12: the reader never sees "102" as a variant); "variant 101 or variant 109" (D16).
+- [ ] **"At least one"** (B13, M02): the existence test doesn't record its own words, so the ledger can't account for the "one".
+- [ ] **"fewer than 30 units"** (E23): the 30 is used by no condition.
+- [ ] **A value read from another record:** "priced the same as variant 101" (C23): no catalog operation computes it yet.
+
+**The 21 regression sets: 15 old failures out of 174:** dates (T11, T16, T17), formulas (F03, Y03, E05), linked records (L04, L06, M06), same-column cases (S05, S06), text changes (T03), new operations (N01, N06, N10).
+
+**Not started:** the unified grouping decision; date parts ("per month"); statistics (median, percentiles).
+
+## Production readiness (Codex review, 2026-10-29), filed for after the pipeline
+
+A read-only review (Codex, high reasoning) of the repo for a first pilot delivery. Its verdict was "not ready", for reasons outside the prompt pipeline; the top three were checked in the code. To fix after the pipeline work.
+
+- [ ] **A change runs as soon as it's built** (`src/services/session/server.py:239`): the user sees the changed rows afterwards and can undo until the session ends (commit on exit). That's the chosen design, but the README still says "applies nothing until a human approves", and describes an older product. Decide: a preview and a yes before an UPDATE/DELETE/INSERT runs, keep run-then-undo and fix the README, or a preview only above a row count.
+- [ ] **A failed Jev call on the link between two requests** (`src/pipeline/prompt/link.py:205`, `:159`) treats them as independent, with a warning: "select these products, then change their prices" could change a different scope. Settled by a test that simulates the failure on a two-part write and checks that nothing runs.
+- [ ] **Export can leave a mixed set of files** (`src/services/storage/export.py:27-46`): each file is replaced safely, but not the set; if file two fails, file one is already replaced. Write every file to a temporary folder, then swap them all.
+- [ ] **Store data, the journal and crash logs use the machine's default permissions** (`registry.py:24`, `store.py:117`, `server.py:156`, `crash.py:17`): on a shared machine another user can read them. Restrict the data folder to its owner, and say how to protect `.env`.
+- [ ] **No stated store-size limit**: import reads the whole CSV in memory (`services/csv/reader.py:74`), export fetches every row (`pipeline/store/schema.py:249`), a write's `RETURNING` fetches every changed row (`server.py:267`). Test at the pilot client's real file size, then state the limit or stream these paths.
+- [ ] **The README's install steps are incomplete** (`README.md:11`, `:33`): setup uses `uv run --env-file .env`, the examples a bare `orbitrows`; Python 3.13 and uv aren't listed. Rehearse one install on a clean machine.
+- [ ] **The Duckling check accepts any service on its port** (`services/duckling.py:24`), and the Docker image is `latest` (`:19`): check a real Duckling answer and pin the image.
+- [ ] **Pilot docs**: backup and restore, the supported size, what data is sent to Jev, how to diagnose a failed session.

@@ -150,7 +150,8 @@ def lift(cond, main, main_alias, schema, names, warnings, rid):
         kids = [lift(c, main, main_alias, schema, names, warnings, rid) for c in cond["children"]]
         kids = [k for k in kids if k is not None]
         return kids[0] if len(kids) == 1 else {"type": cond["type"], "children": kids} if kids else None
-    if cond.get("type") == "not" and tables_in(cond) - {main}:
+    if cond.get("type") == "not" and tables_in(cond) - {main} and len(tables_in(cond)) > 1:   # one other table:
+        # a leaf, its NOT inside the chain ("suppliers outside Morocco": sales whose supplier's country is not it)
         inner = lift(cond["operand"], main, main_alias, schema, names, warnings, rid)
         return inner and {"type": "not", "operand": inner}
     tables = tables_in(cond)

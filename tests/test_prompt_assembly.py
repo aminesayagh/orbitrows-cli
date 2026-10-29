@@ -266,3 +266,16 @@ def test_an_or_joins_the_branches_of_the_sentence_s_or():
     assert apart(t, at("September"), at("2")) is False and apart(t, at("September"), at("5")) is False
     assert apart(t, [], at("2")) is None
 
+
+
+def test_a_negated_leaf_on_a_linked_table_is_negated_inside_its_chain():
+    """ "sales of products from suppliers outside Morocco": NOT inside the IN chain (sales whose supplier's country
+    is not Morocco), not around it (which kept the sales of products with no supplier)."""
+    from orbitrows.pipeline.prompt.assemble import Names, lift
+    schema = store_of(baseline())
+    leaf = {"type": "comparison", "operator": "=", "left": {"type": "column", "source": "t_suppliers",
+                                                             "reference": "c_country"},
+            "right": {"type": "literal", "value": "Morocco"}}
+
+    out = lift({"type": "not", "operand": leaf}, "t_sales", "s", schema, Names(schema), [], "r1")
+    assert out["type"] != "not" and '"not"' in json.dumps(out)
