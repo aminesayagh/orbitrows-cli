@@ -279,3 +279,27 @@ def test_a_negated_leaf_on_a_linked_table_is_negated_inside_its_chain():
 
     out = lift({"type": "not", "operand": leaf}, "t_sales", "s", schema, Names(schema), [], "r1")
     assert out["type"] != "not" and '"not"' in json.dumps(out)
+
+
+def test_a_percentage_slot_takes_a_number_written_as_one_and_more_numbers_than_named_columns_asks_the_others():
+    """Fresh set F23: "raise … by 20" ran price * 1.2; F15: "nothing in stock and nothing reserved" named only the
+    reserved column, so the quantity's 0 was lost."""
+    from orbitrows.pipeline.expressions.links import not_percentages
+    from orbitrows.pipeline.prompt.conditions import asked_columns
+    step = lambda t: [{"role": "calculation", "function": "entry:INCREASE_PERCENT", "start": 0, "end": len(t),
+                       "right": {"slot": "percent", "value": 20}}]
+    t = "Raise the price of the Hoodie variants by 20."
+    assert not_percentages(t, step(t)) and not not_percentages(t.replace("20", "20%"), step(t + "%"))
+    t = "Lower the price of the variants heavier than 20 g by 20%."   # the same number twice, one a percentage
+    assert not not_percentages(t, step(t))
+    schema = store_of(baseline())
+    t = "Remove the inventory lines that have nothing in stock and nothing reserved."
+    zeros = {"r1": [{"text": "nothing", "value": 0, "start": t.find("nothing"), "end": t.find("nothing") + 7},
+                    {"text": "nothing", "value": 0, "start": t.rfind("nothing"), "end": t.rfind("nothing") + 7}]}
+    r = {"id": "r1", "text": t, "statement": "delete"}
+    sources = {"r1": {"target": {"type": "database_table", "reference": "t_inventory"}}}
+    asked = asked_columns(schema, [r], sources, "r1", {"r1": {"t_inventory.c_reserved": {}}}, {}, None, zeros)
+    assert "t_inventory.c_quantity" in asked and "t_inventory.c_warehouse" not in asked
+    one = {"r1": zeros["r1"][1:]}                             # one number, one named column: nothing added
+    assert "t_inventory.c_quantity" not in asked_columns(schema, [r], sources, "r1",
+                                                         {"r1": {"t_inventory.c_reserved": {}}}, {}, None, one)

@@ -355,7 +355,9 @@ def tables_of(requests, sources, rid) -> list[str]:
 def asked_columns(schema, requests, sources, rid, named, dated, db, units=None) -> dict:
     """The columns stage 1 asks about (step 1.4, 2026-10-28): the candidates the request names (step "columns":
     words, meaning, kind), its main table's own id ("delete the variant 109"), and, when it writes a date, the
-    columns the profile says hold dates; when it writes a number with a unit ("200 grams"), the columns whose own unit
+    columns the profile says hold dates; when it writes more numbers than the number columns it names take ("nothing
+    in stock and nothing reserved": two, only reserved named), the main table's other number columns; when it writes
+    a number with a unit ("200 grams"), the columns whose own unit
     it converts to (2026-10-29: "weigh" named no column, the weight's condition was lost); a column step 3 tied to a
     value is kept without a question (build). Without the step's answer (named None): every candidate, as before."""
     every = candidates(schema, requests, sources, rid)
@@ -368,8 +370,18 @@ def asked_columns(schema, requests, sources, rid, named, dated, db, units=None) 
         info = column_info(schema, k)
         return (info["unit"] or {}).get("unit") and any((p.get("unit") or {}).get("unit") and fits(p, info) is not None
                                                         for p in (units or {}).get(rid, []))
-    return {k: v for k, v in every.items() if k in (named.get(rid) or {}) or k in own
-            or (dated.get(rid) and holds_dates(db, schema, k)) or measured(k)}
+    def numeric(k):                                           # a number column, no key
+        t, c = k.split(".")
+        d = next(x["definition"] for x in schema if x["definition"]["table_id"] == t)
+        return column_info(schema, k)["sql_type"] in ("INTEGER", "REAL") and c not in d.get("primary_key", []) \
+            and not any(c in fk["columns"] for fk in d.get("foreign_keys", []))
+    days = [(d["start"], d["end"]) for d in (dated or {}).get(rid, []) if "start" in d]
+    written = [p for p in (units or {}).get(rid, []) if p.get("value") is not None and "start" in p
+               and not any(a < p["end"] and p["start"] < b for a, b in days)]   # a date's numbers are the date's
+    short = len(written) > sum(numeric(k) for k in (named.get(rid) or {}) if k in every)   # more numbers than the
+    return {k: v for k, v in every.items() if k in (named.get(rid) or {}) or k in own   # named number columns take:
+            or (dated.get(rid) and holds_dates(db, schema, k)) or measured(k)       # the main table's others too
+            or (short and k.split(".")[0] == main and numeric(k))}   # ("nothing in stock": 2026-10-30, Jev judges)
 
 
 def questions(requests, schema, sources, named=None, dated=None, db=None, units=None) -> dict:

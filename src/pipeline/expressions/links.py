@@ -166,6 +166,25 @@ def unused_numbers(text, upstream, recs, links) -> list[str]:
     return out
 
 
+def not_percentages(text, recs) -> list[str]:
+    """A catalog step whose slot is a percentage takes a number written as one ("by 20%", "15 percent") or a fraction
+    ("by half"): "raise the price by 20" read as +20% ran price * 1.2 (fresh set F23, 2026-10-30); the user is asked."""
+    from .words import occurrences
+    occs, out = occurrences(text, "en", []), []
+    for r in recs:
+        f, right = r.get("function") or "", r.get("right") or {}
+        if not f.startswith("entry:") or not right.get("slot") or not isinstance(right.get("value"), (int, float)):
+            continue
+        kind = next((p["type"] for p in catalog_entry(f[6:])["parameters"] if p["name"] == right["slot"]), None)
+        mine = [o for o in occs if float(o["value"]) == float(right["value"])   # its number, in its own words
+                and (r.get("start") is None or r["start"] <= o["start"] < r["end"])]
+        if kind == "percentage" and mine and not any(o["percent"] or o["kind"] not in ("digits", "words")
+                                                      for o in mine):   # "heavier than 60 g by 60%": either 60
+            o = mine[0]
+            out.append(f"'{o['text']}' is not written as a percentage: {o['text']}% or an amount of {o['text']}?")
+    return out
+
+
 def possible(recs, links, rid, slot, src) -> bool:
     """Could rid.slot take src, given the other links? Not when it closes a cycle, nor when one formula of a branch
     would take the other formula's result (in "…; Atlas gets 5 more instead", +5 cannot start from the +1)."""
@@ -342,7 +361,7 @@ async def resolve(jev, text: str, upstream: dict, records: list[dict]) -> dict:
             [f"NOT COALESCE(({preds[r['left']['pred']]}), 0)" for r in recs if r["role"] == "where_not"]
     problems = check(recs, links) if not out_q else []
     if not out_q and not problems:
-        problems += unused_numbers(text, upstream, recs, links)
+        problems += unused_numbers(text, upstream, recs, links) + not_percentages(text, recs)
     out = {"map": {f"{a}.{b}": s for (a, b), s in links.items()}, "answers": ans, "flagged": flagged, "repaired": repaired,
            "questions": out_q + [{"problem": p} for p in problems], "where": where}
     if out["questions"]:
