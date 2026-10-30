@@ -1,5 +1,7 @@
 # To review
 
+Since the first release (v0.1.0, 2026-10-30), each open item below is also a GitHub issue: https://github.com/aminesayagh/orbitrows-cli/issues
+
 Decisions taken to move forward, and assumptions to check later on real data. Each item says why it's open and what would settle it. Tick an item when it's decided, or delete it when it no longer applies.
 
 ## Store upload: column profile
@@ -63,10 +65,10 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 
 ## Command line
 
-- [ ] **`incoming` only checks the file:** it saves and merges nothing yet.
+- [x] **`incoming` only checks the file:** it saves and merges nothing yet. (Done: an upload is saved through the session, and a message can update or insert from it.)
 - [ ] **Only the store schema is saved, not the step sections.** `store` writes the classification into `session.db` (`_store_columns`, `_column_context`, `_export`), and each column's profile (`_store_columns.profile_json`), but not the rest of the sections behind it (the probabilities, the warnings). Every Jev answer with its probabilities is kept in the store's `import.json` (with the user's answers to its questions), outside `session.db`. Warnings are printed once. Decide whether the merge needs them, and save them in `session.db` if it does. The profile describes the data as imported: no request changes it yet, so mark it stale (or recount it) once requests run.
 - [ ] **Role, kind and level are stored as integers** (user decision 2026-10-21): the index in `ROLES`, `KINDS` and `LEVELS` (`src/services/storage/store.py`). The order must stay fixed once stores exist. `created_by`/`edited_by` aren't stored yet: `_history` exists (its first row is the import), and they come once requests write to it.
-- [ ] **No guardrail on `message`** since the Jev intent check was removed with the chat. Add it back when messages run: is it about the data, and for the store or the incoming file.
+- [x] **No guardrail on `message`** (done: `prompt/guard.py` and `source_route.py`) since the Jev intent check was removed with the chat. Add it back when messages run: is it about the data, and for the store or the incoming file.
 
 ## Store upload: questions to the user (review leftovers, all low)
 
@@ -137,6 +139,6 @@ A read-only review (Codex, high reasoning) of the repo for a first pilot deliver
 - [ ] **Export can leave a mixed set of files** (`src/services/storage/export.py:27-46`): each file is replaced safely, but not the set; if file two fails, file one is already replaced. Write every file to a temporary folder, then swap them all.
 - [ ] **Store data, the journal and crash logs use the machine's default permissions** (`registry.py:24`, `store.py:117`, `server.py:156`, `crash.py:17`): on a shared machine another user can read them. Restrict the data folder to its owner, and say how to protect `.env`.
 - [ ] **No stated store-size limit**: import reads the whole CSV in memory (`services/csv/reader.py:74`), export fetches every row (`pipeline/store/schema.py:249`), a write's `RETURNING` fetches every changed row (`server.py:267`). Test at the pilot client's real file size, then state the limit or stream these paths.
-- [ ] **The README's install steps are incomplete** (`README.md:11`, `:33`): setup uses `uv run --env-file .env`, the examples a bare `orbitrows`; Python 3.13 and uv aren't listed. Rehearse one install on a clean machine.
+- [ ] **Rehearse the install on a clean machine.** The README was rewritten for the first release (2026-10-30: Python 3.13, uv, Docker and the API key listed; an `orbitrows` alias for `uv run --env-file .env orbitrows`). Still owed: one install from a fresh clone on a machine that has never run it, following only the README.
 - [ ] **The Duckling check accepts any service on its port** (`services/duckling.py:24`), and the Docker image is `latest` (`:19`): check a real Duckling answer and pin the image.
 - [ ] **Pilot docs**: backup and restore, the supported size, what data is sent to Jev, how to diagnose a failed session.
