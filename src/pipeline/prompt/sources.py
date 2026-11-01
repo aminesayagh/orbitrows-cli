@@ -215,7 +215,8 @@ def build(requests: list[dict], answers: dict, schema: list[dict], values: list[
                     if any(v.get("flagged") for v in found):
                         warnings.append({"request": rid, "problem": "reads a table for a value to confirm (step 3)",
                                          "table": tid, "values": [v["text"] for v in found if v.get("flagged")]})
-                if 1 - SURE < p < SURE and tid != main and not found:
+                if 0.5 <= p < SURE and tid != main and not found:   # leaning no: not read, unasked (a condition
+                    # needing it then has no column to read, and the ledger refuses its value; 3 of 3 on set G)
                     warnings.append({"request": rid, "problem": "uses table uncertain", "table": tid,
                                      "probability": round(p, 2)} | question(answers, f"{rid}_uses_{tid}"))
             src = out[rid].get("from") or {}

@@ -421,8 +421,11 @@ def build(requests, schema, sources, values, answers) -> dict:
     out, warnings = {}, []
 
     def yes(rid, key, what):
+        """Whether the column chooses the rows. Asked only when Jev leans yes without being sure: leaning no, the
+        column is left out unasked, since a value only it could take is then used by no part of the request and the
+        ledger refuses it (2026-11-01: 5 of 6 such questions, on set G, ended right with no)."""
         p = answers.get(key, 0.0)
-        if 1 - SURE < p < SURE:
+        if 0.5 <= p < SURE:
             out[rid]["flagged"] = True
             warnings.append({"request": rid, "problem": f"{what} uncertain", "probability": round(p, 2)}
                             | question(answers, key))

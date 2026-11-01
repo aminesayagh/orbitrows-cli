@@ -315,3 +315,19 @@ def test_a_column_named_in_full_and_not_a_unit_alone():
     assert in_full(schema, "t_sales.c_unit_price_mad", {"how": "word", "words": ["unit", "price", "mad"]})
     assert not in_full(schema, "t_variants.c_cost_mad", {"how": "word", "words": ["mad"]})
     assert not in_full(schema, "t_sales.c_quantity", {"how": "meaning", "words": ["units"]})
+
+
+def test_a_column_jev_leans_against_is_left_out_unasked_and_one_it_leans_towards_is_asked():
+    """Set G: "does variant_id choose the rows?" at yes 0.42 was asked, and no was right 5 times of 6; leaning no, the
+    ledger catches a value only that column could take."""
+    from orbitrows.pipeline.prompt.conditions import build
+    from orbitrows.services.model.client import Answers
+    schema = store_of(baseline())
+    requests = [{"id": "r1", "statement": "select", "text": "Show the variants that have no barcode."}]
+    sources = {"r1": {"from": {"type": "database_table", "reference": "t_variants"}}}
+
+    def asked(p):
+        answers = Answers({"r1_chooses_t_variants.c_sku": p})
+        answers.call = "c1"
+        return [w for w in build(requests, schema, sources, [], answers)["warnings"] if "question" in w]
+    assert asked(0.42) == [] and len(asked(0.6)) == 1
