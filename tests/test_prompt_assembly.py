@@ -331,3 +331,39 @@ def test_a_column_jev_leans_against_is_left_out_unasked_and_one_it_leans_towards
         answers.call = "c1"
         return [w for w in build(requests, schema, sources, [], answers)["warnings"] if "question" in w]
     assert asked(0.42) == [] and len(asked(0.6)) == 1
+
+
+def test_a_column_with_several_written_numbers_still_gets_its_blank_condition(no_gliner):
+    """Composed F01 (2026-11-01): "without a cost" survives numbers used by the price formula."""
+    from orbitrows.pipeline.prompt import conditions
+    from orbitrows.pipeline.store.profile import refresh
+    from orbitrows.services.model.client import Answers
+    db = baseline()
+    refresh(db)
+    schema = store_of(db)
+    key = "t_variants.c_cost_mad"
+    text = "Raise the Orbit variants by 15%, then take 5 off. Leave the variants without a cost unchanged."
+    r = {"id": "r1", "text": text, "statement": "update"}
+    params = {"r1": [{"text": s, "value": v, "unit": None, "start": text.find(s), "end": text.find(s) + len(s)}
+                     for s, v in (("15%", 15), ("5", 5))]}
+    stage1 = {"r1": {"columns": [key]}}
+    questions = conditions.questions_2(db, [r], schema, stage1, [], params, {"r1": {}})
+    op_key = f"r1|{key}|blank|op"
+    assert set(questions[op_key]["criteria"]) == {"is_empty", "is_not_empty", "none"}
+    assert f"r1|{key}|blank|not" in questions
+
+    def built(op):
+        answers = Answers({f"r1|{key}|n{i}|op": ("none", {"none": 0.9}) for i in range(2)} |
+                          {op_key: (op, {op: 0.9}), f"r1|{key}|blank|not": 0.9})
+        section = {"requests": {"r1": {"columns": [key], "predicates": []}}, "warnings": [],
+                   "named": {"r1": {key: {"words": ["cost"]}}}}
+        conditions.build_2(db, [r], schema, stage1, [], params, {"r1": {}}, answers, section)
+        return section["requests"]["r1"]["predicates"], section["warnings"]
+
+    got, warnings = built("is_empty")
+    assert not warnings and len(got) == 1
+    assert got[0]["column"] == key and got[0]["operator"] == "is_empty" and got[0]["negated"]
+    assert got[0]["condition"]["type"] == "not"
+    assert got[0]["condition"]["operand"]["type"] in ("null_check", "empty_check", "any")
+    assert "words" in got[0] and "at" in got[0]
+    assert built("none")[0] == []

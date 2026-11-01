@@ -615,6 +615,13 @@ def questions_2(db, requests, schema, stage1, values, params, parts) -> dict:
                     q[f"{rid}|{key}|{m}|not"] = yes_no(CONTEXT, f"In {said}, is the condition on {name} with "
                                                                 f"{with_} written as an exception or a negation?",
                                                        NEGATE_RULES + MENTION_RULES[-1:])
+                q[f"{rid}|{key}|blank|op"] = choice(
+                    CONTEXT, f"How does {said} choose its records by {name} without a value written for it?",
+                    {k: OPERATORS[k] for k in ("is_empty", "is_not_empty")} |
+                    {"none": "No condition on this column without a written value."})
+                q[f"{rid}|{key}|blank|not"] = yes_no(
+                    CONTEXT, f"In {said}, is the condition on {name} without a written value an exception or a "
+                             f"negation?", NEGATE_RULES)
                 continue
             q[f"{rid}|{key}|op"] = choice(CONTEXT, f"How does {said} choose its records by {name}?", ops)
             if any(k.startswith("s") for k in cands):         # step 3 proved the value with SQL: nothing to ask
@@ -750,6 +757,14 @@ def mentioned(rid, key, m, cand, info, answers, out, warnings, db, schema, cands
     return {"column": key, "mention": m, "operator": op, "negated": p >= 0.5, "condition": cond}
 
 
+def amount_of(schema, key, info) -> bool:
+    """A number that is not a key: its missing value can also be zero."""
+    t, c = key.split(".")
+    d = next(x["definition"] for x in schema if x["definition"]["table_id"] == t)
+    keyed = c in d.get("primary_key", []) or any(c in fk["columns"] for fk in d.get("foreign_keys", []))
+    return info["sql_type"] in ("INTEGER", "REAL") and not keyed
+
+
 def build_2(db, requests, schema, stage1, values, params, parts, answers, section) -> None:
     """Adds the predicates of stage 2 to stage 1's section. Two conditions are dropped, with their warnings (the
     request stays flagged only for what remains):
@@ -759,7 +774,8 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
         it is the other request's (r1's "heavier than 60 g" is not r2's).
     Two condition columns compared with each other ("recommended below our price") are one comparison: kept once,
     from the column whose operator Jev was surer of (read from both, it may come out reversed, and the two together
-    would match nothing)."""
+    would match nothing). 2026-11-01, composed F01: "Leave the variants without a cost unchanged" was dropped when
+    formula numbers made several mentions of cost; a blank test still applies when none of those values chooses rows."""
     out, warnings = section["requests"], section["warnings"]
     compared = {}                                             # (request, {column, column}) → (its predicate, sureness)
 
@@ -770,18 +786,53 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
             out[rid].pop("flagged", None)
         out[rid].setdefault("dropped", []).append({"column": key, "why": why})
 
+    def blank(r, key, info):
+        rid, op_key = r["id"], f"{r['id']}|{key}|blank|op"
+        op, probs = answers.get(op_key, (None, {}))
+        if op not in ("is_empty", "is_not_empty"):
+            return None
+        if probs.get(op, 1) < SURE:
+            out[rid]["flagged"] = True
+            warnings.append({"request": rid, "problem": f"op of {key} uncertain", "answer": op,
+                             "probability": round(probs.get(op, 0), 2)}
+                            | question(answers, op_key, {k: OPERATORS[k] for k in ("is_empty", "is_not_empty")}))
+        cond = predicate(op, _col(key), None, None, [], info["sql_type"] == "TEXT", amount_of(schema, key, info))
+        cond = cond and through(schema, cond, key.split(".")[0])
+        if cond is None:
+            out[rid]["flagged"] = True
+            warnings.append({"request": rid, "problem": f"condition on {key}: a part is missing", "operator": op})
+            return None
+        not_key = f"{rid}|{key}|blank|not"
+        p = answers.get(not_key, 0.0)
+        if 1 - SURE < p < SURE:
+            out[rid]["flagged"] = True
+            warnings.append({"request": rid, "problem": f"negation of {key} uncertain", "probability": round(p, 2)}
+                            | question(answers, not_key))
+        if p >= 0.5:
+            cond = {"type": "not", "operand": cond}
+        if err := refused(db, schema, key.split(".")[0], cond):
+            out[rid]["flagged"] = True
+            warnings.append({"request": rid, "problem": f"condition on {key} refused", "error": err})
+        return {"column": key, "operator": op, "negated": p >= 0.5, "condition": cond,
+                "words": none_words(r, key, params[rid], section.get("named")),
+                "at": named_at(r, key, section.get("named"))}
+
     for r in requests:
         rid = r["id"]
         for key in list(stage1.get(rid, {}).get("columns", [])):
             info = column_info(schema, key)
             cands = operands(db, schema, r, key, values, params[rid], parts.get(rid, {}))
 
-            if len(several := mentions(cands)) > 1:           # one condition per value written
+            if len(several := mentions(cands)) > 1:           # F01: numbers need not consume a missing-cost condition
+                found = False
                 for m in several:
                     built = mentioned(rid, key, m, cands[m], info, answers, out, warnings, db, schema, cands)
                     if built:
                         built["words"] = words_of(r, key, values, params[rid], [m], cands)
                         out[rid].setdefault("predicates", []).append(built)
+                        found = True
+                if not found and (built := blank(r, key, info)):
+                    out[rid].setdefault("predicates", []).append(built)
                 continue
             proved = [c for k, c in cands.items() if k.startswith("s")]   # step 3's values in this column (SQL)
 
@@ -825,11 +876,8 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
             if other and (seen := compared.get((rid, frozenset((key, other))))) and seen[1] >= sure_op:
                 drop(rid, key, f"the comparison with {other}, built from that column")
                 continue
-            t, c = key.split(".")
-            d = next(x["definition"] for x in schema if x["definition"]["table_id"] == t)
-            keyed = c in d.get("primary_key", []) or any(c in fk["columns"] for fk in d.get("foreign_keys", []))
             cond = predicate(op, _col(key), operand, upper, all_values, info["sql_type"] == "TEXT",
-                             info["sql_type"] in ("INTEGER", "REAL") and not keyed)   # a key's none is NULL only
+                             amount_of(schema, key, info))   # a key's none is NULL only
             if cond and info["sql_type"] == "TEXT":
                 cond = cased(cond, db, schema, key)
             cond = cond and through(schema, cond, key.split(".")[0])   # a linked table's column: through the keys
