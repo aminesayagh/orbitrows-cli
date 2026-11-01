@@ -27,8 +27,9 @@ def send(path, request: dict) -> dict:
     return json.loads(line)
 
 
-def start(path) -> dict | None:
-    """A detached server for the store, once it answers; → the changes its last session lost, if any. Owned by this
+def start(path) -> dict:
+    """A detached server for the store, once it answers; → what its first reply told of the last session: the changes
+    restored and those lost ({"restored"?, "lost"?}). Owned by this
     terminal's session only from a real terminal: a command run without one (an LLM's shell) owns nothing."""
     command = [sys.executable, "-m", "orbitrows.services.session", path.parent.name]
     if sys.stdin and sys.stdin.isatty():
@@ -39,7 +40,8 @@ def start(path) -> dict | None:
     deadline = time.monotonic() + START
     while time.monotonic() < deadline:
         try:
-            return send(path, {"op": "status"}).get("lost")
+            first = send(path, {"op": "status"})
+            return {k: first[k] for k in ("restored", "lost") if first.get(k)}
         except (FileNotFoundError, ConnectionRefusedError):   # not listening yet
             pass
         if server.poll() is not None:
@@ -63,9 +65,9 @@ def ask(store_id: str, request: dict, launch: bool = True) -> dict | None:
         path.unlink(missing_ok=True)
     if not launch:
         return None
-    lost = start(path)
+    told = start(path)
     try:
         reply = send(path, request)
     except OSError as e:
         raise Unavailable(f"The store's session stopped: {e}. Its log: {path.with_name('session.log')}") from None
-    return reply | ({"lost": lost} if lost else {})
+    return reply | told

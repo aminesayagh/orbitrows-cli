@@ -88,8 +88,9 @@ Code only: one AST statement per request (`src/sql/`), conditions on other table
 One background process per store holds one open SQLite transaction on `session.db`:
 
 - each change runs in its own **savepoint**, so `undo` rolls back the last one;
-- every change is appended to `journal.jsonl`, so a crash loses nothing silently;
-- everything is **committed** on `exit`, when the terminal closes, or after 30 idle minutes;
+- every change is appended to `journal.jsonl`. After 30 idle minutes, a crash or a reboot, the session ends **without saving**, and the next session **replays** the journal, each change in its own savepoint again, so nothing is lost and undo still works. A change it can't replay is reported lost, with the ones after it;
+- a message waiting for answers is kept in `pending.json`, so it survives the session's end;
+- everything is **committed** on `exit`, or when the terminal that started it closes;
 - at start, it **preloads** the models, the units registry and the unit of every column header, so the first message doesn't wait on them (`src/services/ready.py`).
 
 Questions pause a message. Once answered, it runs again from the start, replaying Jev's recorded answers (`Recorded` in `src/services/model/client.py`), so nothing is paid twice.

@@ -60,6 +60,7 @@ orbitrows export -o out/
 | `message "REQUEST"` | Runs a request in plain English: shows the rows, or changes them. |
 | `answer ID ANSWER` | Answers a question the CLI asked, then carries on. |
 | `undo` | Reverts the session's last change. |
+| `status` | Shows the unsaved changes and the questions waiting for your answer. |
 | `exit` | Saves the session's changes and ends it. |
 | `export -o FOLDER` | Writes the store's files back, with the changes. |
 | `incoming FILE` | Adds a supplier file to the store, to compare with or to update the store from. The file itself is never changed. |
@@ -82,8 +83,9 @@ Your changes run inside a **session**, a background process per store:
 
 - Each change applies at once, so the next request sees it, but nothing is saved yet.
 - `undo` reverts the last change, as many times as you need.
-- `exit` saves everything. The session also saves when the terminal that started it closes, or after 30 minutes without a request.
-- If the session crashes, the unsaved changes are lost, but the next command lists them, so you can send them again.
+- `exit` saves everything. The session also saves when the terminal that started it closes.
+- **Nothing is saved without you.** After 30 minutes without a request, the session ends **without saving**. A crash or a reboot does the same. Your unsaved changes and any question waiting for your answer are kept on disk, and the next command restores them: undo still works, and `exit` saves them.
+- `status` shows where things stand: the unsaved changes and the questions waiting. Run it first when you come back after a break.
 
 ## Good to know (version 0.1.0)
 

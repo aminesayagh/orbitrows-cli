@@ -1,17 +1,23 @@
 """A store's session server: `python -m orbitrows.services.session <store_id> [--owner <sid>]`, started detached by
 the CLI. It holds one transaction open on the store's session.db: each change runs in its own SAVEPOINT (undo rolls
-back to it), and the whole session is committed when it ends: `orbitrows exit`, the owner's terminal closed (--owner,
-the terminal's session leader), ORBITROWS_IDLE seconds without a request, SIGTERM or SIGHUP. A crash loses the
-session: the journal says what was lost.
+back to it), and the whole session is committed when it ends on `orbitrows exit`, the owner's terminal closed (--owner,
+the terminal's session leader), SIGTERM or SIGHUP. ORBITROWS_IDLE seconds without a request end it WITHOUT saving
+(2026-11-01: an agent interrupted for a while must not have its changes saved unasked): its changes stay in the
+journal, and the next session replays them, in order, each in its own savepoint again, so undo still works; a crash is
+replayed the same way. A change that can't be replayed (an older journal, or SQLite refusing it) is reported lost,
+with every change after it.
 
-A message runs the prompt pipeline (prompt()). One that pauses on questions waits in memory (one at a time, a new
-message replaces it) until each is answered (op "answer", ids m_…), then runs again, its model answers replayed.
+A message runs the prompt pipeline (prompt()). One that pauses on questions waits (one at a time, a new message
+replaces it) until each is answered (op "answer", ids m_…), then runs again, its model answers replayed; it is kept in
+pending.json too, so it survives the session's end.
 An incoming upload, classified by the CLI, is written as a change too (op "incoming"): its CSV stays in its pending
 folder until the COMMIT moves it under incoming/, and an undo removes that folder.
 
     session.sock   the Unix socket: one JSON request line in, one JSON reply line out, one client at a time
-    journal.jsonl  each change applied ({"n", "prompt", "sql", "at"}) or undone ({"undo": n}), fsynced; removed by a
-                   successful COMMIT. A next server finding it kept it as journal-lost-<time>.jsonl and says so
+    journal.jsonl  each change applied ({"n", "prompt", "sql", "by": [[request, sql]], "ast", "at"}; an upload's with
+                   "folder") or undone ({"undo": n}), fsynced; removed by a successful COMMIT, replayed by the next
+                   server; what can't be replayed is kept as journal-lost-<time>.jsonl and said
+    pending.json   the message waiting for answers, written after every request; removed once none waits
     session.lock   flock'd while a server runs: one server per store, and a new one waits for the last one's COMMIT
     session.log    the server's output
 """
@@ -119,29 +125,38 @@ class Session:
         self.failed = None                                    # why the COMMIT failed, once ended
         self.changes = []                                     # [(n, prompt)], each one's savepoint open, oldest first
         self.pending = None                                   # the message waiting for answers: {"prompt", "calls",
-                                                              # "open", "answered", "step", "shown"}, in memory only
+                                                              # "open", "answered", "step", "shown"}; pending.json too
+        self.waiting = self.dir / "pending.json"
+        self.changed = {}                                     # {n: rows the change changed}, for status
         self.count = 0                                        # the last change's n
         self.uploads = {}                                     # {n: (pending folder, source_file)}: placed on COMMIT
         self.db = sqlite3.connect(f"file:{self.dir / 'session.db'}?mode=rw", uri=True, isolation_level=None)
         for pragma in ("foreign_keys = ON", "synchronous = FULL", "journal_mode = DELETE"):   # per connection
             self.db.execute(f"PRAGMA {pragma}")
         self.db.execute("BEGIN IMMEDIATE")
-        self.lost = self.recover()                            # told in the first reply
+        self.restored, self.lost = self.recover()             # told in the first reply
+        if self.waiting.is_file():                            # the message an ended session left waiting
+            try:
+                self.pending = json.loads(self.waiting.read_text())
+            except (OSError, ValueError):
+                self.waiting.unlink(missing_ok=True)
         self.socket.unlink(missing_ok=True)                   # a dead server's: we hold the lock
         self.listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.listener.bind(str(self.socket))
         self.listener.listen()
         self.listener.settimeout(TICK)
 
-    def recover(self) -> dict | None:
-        """A journal left behind: the last session ended without its COMMIT. Kept aside; → its changes net of undos
-        ({"file", "changes": [{"prompt", "sql"}]}), or None. ponytail: told, never replayed."""
+    def recover(self) -> tuple[list, dict | None]:
+        """A journal left behind: the last session ended without its COMMIT (idle, or a crash). Its changes, net of
+        undos, are replayed in order, each as a change of this session; → (the prompts restored, what couldn't be:
+        {"file", "changes": [{"prompt", "sql"}]} or None). The first change that can't be replayed (no "by": an older
+        journal; an upload whose folder is gone; SQLite refusing it) stops the replay: it and the ones after are lost."""
         if not self.journal.is_file() or not self.journal.stat().st_size:
-            return None
-        kept = self.dir / f"journal-lost-{datetime.now(UTC):%Y%m%dT%H%M%S%fZ}.jsonl"
-        os.replace(self.journal, kept)
+            return [], None
+        old = self.dir / f"journal-replay-{datetime.now(UTC):%Y%m%dT%H%M%S%fZ}.jsonl"
+        os.replace(self.journal, old)
         changes = {}
-        for line in kept.read_text().splitlines():
+        for line in old.read_text().splitlines():
             try:
                 entry = json.loads(line)
             except json.JSONDecodeError:                      # the line the crash cut
@@ -149,9 +164,39 @@ class Session:
             if "undo" in entry:
                 changes.pop(entry["undo"], None)
             else:
-                changes[entry["n"]] = {"prompt": entry["prompt"], "sql": entry["sql"]}
-        log(f"the last session wasn't saved: its journal is {kept.name}")
-        return {"file": str(kept), "changes": list(changes.values())} if changes else None
+                changes[entry["n"]] = entry
+        restored, todo = [], [changes[n] for n in sorted(changes)]
+        while todo:
+            if not self.replay(todo[0]):
+                break
+            restored.append(todo.pop(0)["prompt"])
+        if not todo:
+            old.unlink()
+            if restored:
+                log(f"the last session wasn't saved: its {len(restored)} change(s) restored")
+            return restored, None
+        kept = old.with_name(old.name.replace("journal-replay-", "journal-lost-"))
+        kept.write_text("".join(json.dumps(e, ensure_ascii=False) + "\n" for e in todo))
+        old.unlink()
+        log(f"the last session wasn't saved: {len(restored)} change(s) restored, {len(todo)} lost ({kept.name})")
+        return restored, {"file": str(kept), "changes": [{"prompt": e["prompt"], "sql": e["sql"]} for e in todo]}
+
+    def replay(self, entry: dict) -> bool:
+        """One change of an unsaved journal applied again, as this session's next change. → whether it was."""
+        if "folder" in entry:                                 # an upload: written again from its pending folder
+            return Path(entry["folder"]).is_dir() and self.incoming(Path(entry["folder"])).get("ok", False)
+        if "by" not in entry:                                 # an older journal: its requests' ids weren't kept
+            return False
+        n, before = self.count + 1, self.db.total_changes
+        program = [{"ast": a} for a in entry.get("ast", [])]
+        self.db.execute(f"SAVEPOINT c{n}")
+        try:
+            reply = self.run(n, entry["prompt"], program, [tuple(x) for x in entry["by"]], entry["sql"], before,
+                             False, {"ok": True, "ran": [], "notices": []})
+        except BaseException:
+            self.drop(n)
+            raise
+        return reply.get("n") == n
 
     def write(self, entry: dict) -> None:
         with open(self.journal, "a") as f:
@@ -289,11 +334,13 @@ class Session:
                             (registry.now(), text if len(text) <= NAME else text[:NAME - 1] + "…", text,
                              json.dumps([p["ast"] for p in program if "ast" in p], ensure_ascii=False),
                              json.dumps(statements, ensure_ascii=False)))
-            self.write({"n": n, "prompt": text, "sql": statements, "at": registry.now()})
-        except (sqlite3.Error, OSError) as e:
+            self.write({"n": n, "prompt": text, "sql": statements, "by": [list(x) for x in by],
+                        "ast": [p["ast"] for p in program if "ast" in p], "at": registry.now()})
+        except (sqlite3.Error, OSError, TypeError, ValueError) as e:   # TypeError: an ast JSON can't hold
             return self.cancel(n, f"The change couldn't be recorded: {e}")
         self.count = n
         self.changes.append((n, text))
+        self.changed[n] = sum(r.get("changed", 0) for r in reply["ran"])
         return reply | {"n": n}
 
     def incoming(self, folder: Path) -> dict:
@@ -305,7 +352,8 @@ class Session:
         try:
             written = incoming.upload(self.db, self.dir, folder)
             refresh(self.db, [written["table"]])
-            self.write({"n": n, "prompt": written["name"], "sql": written["sql"], "at": registry.now()})
+            self.write({"n": n, "prompt": written["name"], "sql": written["sql"], "folder": str(folder),
+                        "at": registry.now()})
         except (sqlite3.Error, OSError, ValueError, KeyError) as e:   # ValueError: a bad AST, bad JSON too
             return self.cancel(n, f"The upload couldn't be written: {type(e).__name__}: {e}")
         except BaseException:
@@ -313,6 +361,7 @@ class Session:
             raise
         self.count = n
         self.changes.append((n, written["name"]))
+        self.changed[n] = written.get("rows", 0)
         self.uploads[n] = (folder, written["source_file"])
         return {"ok": True, "n": n} | {k: written[k] for k in ("id", "table", "source_file", "rows", "columns")}
 
@@ -350,6 +399,8 @@ class Session:
             except OSError as e:                              # only its CSV copy is missing from incoming/
                 log(f"{source_file} not placed, its CSV is still in {folder}: {e}")
         self.uploads = {}
+        self.pending = None
+        self.waiting.unlink(missing_ok=True)                  # saved: no message waits any more
         self.close()
         try:
             if (ok := self.db.execute("PRAGMA quick_check").fetchone()[0]) != "ok":
@@ -359,6 +410,18 @@ class Session:
         except (sqlite3.Error, OSError) as e:
             self.failed = f"{type(e).__name__}: {e}"
         return self.failed
+
+    def keep_pending(self) -> None:
+        """pending.json as the waiting message now is (written whole, then renamed); removed when none waits."""
+        try:
+            if self.pending:
+                tmp = self.waiting.with_suffix(".tmp")
+                tmp.write_text(json.dumps(self.pending, ensure_ascii=False, default=str))
+                os.replace(tmp, self.waiting)
+            else:
+                self.waiting.unlink(missing_ok=True)
+        except OSError as e:                                  # kept in memory still; only a restart would lose it
+            log(f"pending.json not written: {e}")
 
     def close(self) -> None:
         self.listener.close()
@@ -380,7 +443,12 @@ class Session:
                 case "undo":
                     reply = self.undo()
                 case "status":
-                    reply = {"ok": True, "pid": os.getpid(), "changes": len(self.changes)}
+                    reply = {"ok": True, "pid": os.getpid(), "changes": len(self.changes),
+                             "unsaved": [{"n": n, "prompt": t, "changed": self.changed.get(n, 0)}
+                                         for n, t in self.changes]} | (
+                        {"waiting": {"prompt": self.pending["prompt"], "questions": [
+                            {k: q.get(k) for k in QUESTION} for q in self.pending.get("open", [])]}}
+                        if self.pending else {})
                 case "export":                                # on the open transaction: unsaved changes included
                     from orbitrows.services.storage.export import export
                     try:
@@ -402,6 +470,9 @@ class Session:
             reply = {"ok": False, "error": f"The request failed: {type(e).__name__}: {e}"}
         if self.lost:
             reply["lost"], self.lost = self.lost, None
+        if self.restored:
+            reply["restored"], self.restored = self.restored, []
+        self.keep_pending()
         try:
             client.sendall((json.dumps(reply, ensure_ascii=False, default=str) + "\n").encode())
         except OSError as e:                                  # the client left; what was applied stays applied
@@ -449,6 +520,13 @@ def main(argv: list[str] | None = None) -> int:
             last = time.monotonic()
         reason = reason or (stop and stop[0]) or (args.owner and not alive(args.owner) and "owner gone") \
             or (time.monotonic() - last > idle and "idle")
+    if reason == "idle":                                      # not saved: the next session replays the journal
+        session.keep_pending()
+        session.close()
+        session.db.execute("ROLLBACK")
+        log(f"ended (idle), NOT saved on purpose: {len(session.changes)} change(s) kept in the journal, restored by the "
+            "next command" + ("; the message waiting for answers kept" if session.pending else ""))
+        return 0
     error = session.failed if reason == "exit" else session.end()   # exit ended it already
     if error:
         session.close()

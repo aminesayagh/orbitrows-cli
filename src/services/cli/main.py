@@ -401,14 +401,62 @@ def ask(target: tuple[str, str | None], request: dict, launch: bool = True) -> d
         reply = session.ask(target[0], request, launch)
     except session.Unavailable as e:
         raise Refusal(str(e)) from None
+    if reply and reply.get("restored"):
+        print(f"The last session of store {label(target)} ended without saving; its {len(reply['restored'])} "
+              "change(s) were restored, still unsaved (orbitrows undo reverts them, orbitrows exit saves them):",
+              file=sys.stderr)
+        for prompt in reply["restored"]:
+            print(f"  {prompt}", file=sys.stderr)
     if reply and reply.get("lost"):
-        print(f"The last session of store {label(target)} ended without saving (a crash?), so these changes were "
-              f"lost. Send them again if they're still wanted (journal: {reply['lost']['file']}):", file=sys.stderr)
+        print(f"The last session of store {label(target)} ended without saving, and these changes couldn't be "
+              f"restored. Send them again if they're still wanted (journal: {reply['lost']['file']}):", file=sys.stderr)
         for change in reply["lost"]["changes"]:
             print("\n    ".join([f"  {change['prompt']}"] + change["sql"]), file=sys.stderr)
     if reply and not reply["ok"]:
         raise Refusal(reply["error"])
     return reply
+
+
+def unsaved(store_id: str) -> bool:
+    """An ended session left work on disk: unsaved changes (its journal) or a message waiting for answers."""
+    path = storage.folder(store_id)
+    return (path / "journal.jsonl").is_file() and (path / "journal.jsonl").stat().st_size > 0 or \
+        (path / "pending.json").is_file()
+
+
+def status(ref: str | None) -> None:
+    """Where the store's session stands, as one JSON object: open or not, its unsaved changes, the message waiting for
+    answers. Never starts a session: without one, what an ended session left on disk (restored by the next command)."""
+    target = resolve(ref)
+    head = {"store": target[0], "name": target[1]}
+    reply = ask(target, {"op": "status"}, launch=False)
+    if reply is not None:
+        print(json.dumps(head | {"session": "open", "unsaved": reply.get("unsaved", [])}
+                         | ({"waiting": reply["waiting"]} if "waiting" in reply else {}), ensure_ascii=False))
+        return
+    path, changes = storage.folder(target[0]), {}
+    if (path / "journal.jsonl").is_file():
+        for line in (path / "journal.jsonl").read_text().splitlines():
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if "undo" in entry:
+                changes.pop(entry["undo"], None)
+            else:
+                changes[entry["n"]] = {"n": entry["n"], "prompt": entry["prompt"]}
+    out = head | {"session": "closed", "unsaved": [changes[n] for n in sorted(changes)]}
+    if (path / "pending.json").is_file():
+        try:
+            p = json.loads((path / "pending.json").read_text())
+            out["waiting"] = {"prompt": p["prompt"], "questions": [{k: q.get(k) for k in ("id", "request", "step",
+                                                                                            "problem")}
+                                                                     for q in p.get("open", [])]}
+        except (OSError, ValueError, KeyError):
+            pass
+    if out["unsaved"] or "waiting" in out:
+        out["note"] = "the next command restores them (orbitrows exit saves, orbitrows undo reverts)"
+    print(json.dumps(out, ensure_ascii=False))
 
 
 def message(text: str, ref: str | None) -> int:
@@ -425,9 +473,13 @@ def answered(question: str, given: str | None, ref: str | None) -> int:
     """answer for a message's question: sent to the session of --store, else of the latest ready store that has one."""
     if ref:
         target = resolve(ref)
-    elif not (target := next((s for s in registry.find() if (storage.folder(s[0]) / "session.sock").exists()), None)):
+    elif not (target := next((s for s in registry.find() if (storage.folder(s[0]) / "session.sock").exists()
+                              or (storage.folder(s[0]) / "pending.json").is_file()), None)):
         raise Refusal("No store has an open session, so no message is waiting for answers.")
-    if not (reply := ask(target, {"op": "answer", "id": question, "answer": given}, launch=False)):
+    waiting = (storage.folder(target[0]) / "pending.json").is_file()   # an ended session's: restarted for it
+    if waiting:
+        need_key()
+    if not (reply := ask(target, {"op": "answer", "id": question, "answer": given}, launch=waiting)):
         raise Refusal(f"Store {label(target)} has no open session, so no message is waiting for answers.")
     return replied(target, reply)
 
@@ -448,7 +500,7 @@ def replied(target: tuple[str, str | None], reply: dict) -> int:
 
 def undo(ref: str | None) -> None:
     target = resolve(ref)
-    if not (reply := ask(target, {"op": "undo"}, launch=False)):
+    if not (reply := ask(target, {"op": "undo"}, launch=unsaved(target[0]))):   # an ended session's: restored first
         raise Refusal(f"Nothing to undo: store {label(target)} has no open session.")
     print(f"Undone: change {reply['undone']} ({reply['prompt']}).")
 
@@ -456,7 +508,7 @@ def undo(ref: str | None) -> None:
 def leave(ref: str | None) -> None:
     """exit: the session's changes are committed, then its server stops."""
     target = resolve(ref)
-    if not (reply := ask(target, {"op": "exit"}, launch=False)):
+    if not (reply := ask(target, {"op": "exit"}, launch=unsaved(target[0]))):   # an ended session's: restored, saved
         print(f"Nothing to save: store {label(target)} has no open session.")
         return
     if not reply.get("ok"):                                   # the COMMIT failed: nothing is said saved
@@ -470,7 +522,8 @@ def export(folder: Path, force: bool, ref: str | None) -> None:
     target, folder = resolve(ref), folder.resolve()          # absolute: the session runs in another folder
     path = storage.folder(target[0])
     request = {"op": "export", "folder": str(folder), "force": force}
-    if (path / "session.sock").exists() and (reply := ask(target, request, launch=False)) is not None:
+    if ((path / "session.sock").exists() or unsaved(target[0])) and \
+            (reply := ask(target, request, launch=unsaved(target[0]))) is not None:   # unsaved changes included
         files = reply["files"]
     else:
         with contextlib.closing(sqlite3.connect(f"file:{path / 'session.db'}?mode=ro", uri=True)) as db:
@@ -503,10 +556,12 @@ def parser() -> argparse.ArgumentParser:
     e = commands.add_parser("exit", help="save the session's changes and end it")
     commands.add_parser("setup", help="prepare everything a message needs, once: Duckling (dates, in Docker) and "
                                       "the models (about 2 GB the first time)")
+    t = commands.add_parser("status", help="the session's unsaved changes and the message waiting for answers, as "
+                                           "JSON; run it first after an interruption")
     x = commands.add_parser("export", help="write the store's files, rebuilt from its tables, into a folder")
     x.add_argument("-o", "--output", type=Path, required=True, metavar="folder")
     x.add_argument("--force", action="store_true", help="replace files already in the folder")
-    for sub in (i, m, u, e, x):
+    for sub in (i, m, u, e, t, x):
         sub.add_argument("-s", "--store", help="store id or name (default: the latest store)")
     return cli
 
@@ -526,6 +581,8 @@ def main(argv: list[str] | None = None) -> int:
                 return message(" ".join(args.text), args.store)
             case "undo":
                 undo(args.store)
+            case "status":
+                status(args.store)
             case "exit":
                 leave(args.store)
             case "export":

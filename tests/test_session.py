@@ -193,25 +193,38 @@ def test_a_change_failing_after_its_statements_ran_keeps_nothing(served, monkeyp
     assert not (served.folder / "journal.jsonl").exists() or not (served.folder / "journal.jsonl").read_text()
 
 
-def test_a_crash_loses_the_session_and_the_next_one_says_what(served, capsys):
+def test_a_crash_restores_the_unsaved_changes_and_undo_still_works(served, capsys):
     assert run(capsys, "message", "UPDATE products SET price = 0")[0] == 0
     assert run(capsys, "message", "UPDATE products SET price = 5")[0] == 0
-    assert run(capsys, "undo")[0] == 0                        # undone: not lost
+    assert run(capsys, "undo")[0] == 0                        # undone: not restored
     first = pid(served)
     os.kill(first, signal.SIGKILL)
     assert ended(first)
     code, out, err = run(capsys, "message", SELECT)           # a new server, on the stale socket
-    assert code == 0 and seen(out) == [10.0, 20.0]
-    assert "these changes were lost" in err and "  UPDATE products SET price = 0\n" in err and "= 5" not in err, err
+    assert code == 0 and seen(out) == [0.0, 0.0], err         # the change is back, unsaved
+    assert "were restored" in err and "UPDATE products SET price = 0" in err and "= 5" not in err, err
     assert pid(served) != first and prices(served) == [10.0, 20.0]
+    assert "restored" not in run(capsys, "message", SELECT)[2]   # told once
+    assert run(capsys, "undo")[0] == 0 and seen(run(capsys, "message", SELECT)[1]) == [10.0, 20.0]
+
+
+def test_an_older_journal_s_changes_are_said_lost(served, capsys):
+    (served.folder / "journal.jsonl").write_text(json.dumps({"n": 1, "prompt": "zero", "sql": [
+        "UPDATE products SET price = 0"], "at": "2026-10-01"}) + "\n")   # no "by": written before replays
+    code, out, err = run(capsys, "message", SELECT)
+    assert code == 0 and seen(out) == [10.0, 20.0] and "couldn't be restored" in err and "  zero" in err, err
     assert len(list(served.folder.glob("journal-lost-*.jsonl"))) == 1
-    assert "were lost" not in run(capsys, "message", SELECT)[2]   # told once
 
 
-def test_idle_saves_and_ends(served):
+def test_idle_ends_without_saving_and_the_next_command_restores(served, capsys):
     proc = server(served, idle="1")
     change(served)
-    assert proc.wait(timeout=10) == 0 and prices(served) == [1.0, 1.0]
+    assert proc.wait(timeout=10) == 0 and prices(served) == [10.0, 20.0]   # ended, nothing saved unasked
+    code, out, _ = run(capsys, "status")                      # no session: what is on disk
+    told = json.loads(out)
+    assert code == 0 and told["session"] == "closed" and [c["prompt"] for c in told["unsaved"]] == [
+        "UPDATE products SET price = 1"]
+    assert run(capsys, "exit")[1] == "Saved.\n" and prices(served) == [1.0, 1.0]   # restored, then saved
 
 
 @pytest.mark.parametrize("number", [signal.SIGTERM, signal.SIGHUP])
@@ -293,6 +306,22 @@ def piped(served, monkeypatch):
     yield SimpleNamespace(session=s, calls=calls)
     s.end()                                                   # its socket removed
     s.db.close()
+
+
+def test_a_message_waiting_for_answers_is_kept_when_the_session_ends(piped, served, capsys):
+    assert run(capsys, "message", "double", "the prices")[0] == 3
+    assert json.loads((served.folder / "pending.json").read_text())["prompt"] == "double the prices"
+    s = piped.session
+    s.db.execute("ROLLBACK")                                  # the session ends, unsaved
+    s.close()
+    again = sessions.Session(served.id, sessions.handler())
+    try:
+        assert again.pending["prompt"] == "double the prices" and again.pending["open"][0]["id"] == "m_1a2b3c4d"
+    finally:
+        again.db.execute("ROLLBACK")
+        again.close()
+        again.db.close()
+    s.db.execute("BEGIN IMMEDIATE")                           # for the fixture's own end
 
 
 def test_a_message_waits_for_its_answers_then_is_applied(piped, served, capsys):
