@@ -87,6 +87,17 @@ Your changes run inside a **session**, a background process per store:
 - **Nothing is saved without you.** After 30 minutes without a request, the session ends **without saving**. A crash or a reboot does the same. Your unsaved changes and any question waiting for your answer are kept on disk, and the next command restores them: undo still works, and `exit` saves them.
 - `status` shows where things stand: the unsaved changes and the questions waiting. Run it first when you come back after a break.
 
+## Use it from an AI agent
+
+OrbitRows is built to be driven by an agent such as Claude Code or Codex: results are JSON, exit codes say what happened (0 done, 1 refused, 3 waiting for answers), and questions come with ids and options. The skill in [`skills/orbitrows/SKILL.md`](skills/orbitrows/SKILL.md) (the open Agent Skills format) teaches the agent the rules: check `status` after a resume, pass your words as they are, relay every question to you, and save only when you say so.
+
+Install it by copying the folder into the agent's skills folder:
+
+```bash
+cp -r skills/orbitrows ~/.claude/skills/        # Claude Code, for every project
+cp -r skills/orbitrows .agents/skills/          # Codex and other agents, in a project
+```
+
 ## Good to know (version 0.1.0)
 
 - **Write the value, and name the column when it's ambiguous.** "Quantity 0 and reserved 0" is safer than "nothing in stock and nothing reserved".
