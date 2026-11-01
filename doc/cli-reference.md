@@ -11,6 +11,8 @@ uv run --env-file .env orbitrows setup   # once: everything a message needs (a f
 uv run --env-file .env orbitrows --help
 ```
 
+Installed as a command (`uv tool install git+https://github.com/aminesayagh/orbitrows-cli`), there's no `.env`: the key is read from `$XDG_CONFIG_HOME/orbitrows/env` (default `~/.config/orbitrows/env`, `KEY=value` lines), the environment winning; the session started by a command inherits it.
+
 `orbitrows setup` prepares, and checks, each part a message needs, skipping what is already there:
 
 - **Duckling**, the service dates are read with: started in Docker (container `orbitrows-duckling`, image

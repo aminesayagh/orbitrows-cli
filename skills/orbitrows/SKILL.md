@@ -12,7 +12,7 @@ metadata:
 
 The `orbitrows` CLI turns the user's request into SQL and runs it on their store. **You never write SQL and never touch the database files yourself**: you pass the user's words to the CLI, relay its questions to the user, and report what it did. Its safety (it asks instead of guessing, refuses what it can't build, lets every change be undone) only holds if you follow the rules below.
 
-If `orbitrows` isn't on the PATH, run it as `uv run --env-file .env orbitrows` from the CLI's folder.
+If `orbitrows` isn't installed, tell the user: `uv tool install git+https://github.com/aminesayagh/orbitrows-cli`, their key in `~/.config/orbitrows/env` (`TYPESAFE_API_KEY=…`), then `orbitrows setup`.
 
 ## Rule 1: after any start or resume, check the status first
 

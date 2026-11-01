@@ -860,3 +860,18 @@ def test_a_table_split_out_of_a_file_is_named_or_skipped(env, capsys, monkeypatc
     with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db:
         names = {n for n, in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"export", "record_1", "customers"} <= names and "record_2" not in names
+
+
+def test_the_installed_command_reads_its_key_from_its_settings_file(tmp_path, monkeypatch):
+    """`uv tool install` leaves no .env beside the command: the key comes from $XDG_CONFIG_HOME/orbitrows/env; the
+    environment still wins."""
+    from orbitrows.services.cli import main as cli
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    (tmp_path / "orbitrows").mkdir()
+    (tmp_path / "orbitrows" / "env").write_text("# my key\nexport TYPESAFE_API_KEY='abc'\n")
+    cli.configured()
+    assert os.environ["TYPESAFE_API_KEY"] == "abc"
+    monkeypatch.setenv("TYPESAFE_API_KEY", "from-env")
+    cli.configured()
+    assert os.environ["TYPESAFE_API_KEY"] == "from-env"

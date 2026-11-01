@@ -15,21 +15,23 @@ How a request becomes SQL is explained in [ARCHITECTURE.md](ARCHITECTURE.md). Ev
 
 ## Install
 
-```bash
-git clone https://github.com/aminesayagh/orbitrows-cli.git
-cd orbitrows-cli
-uv sync
-cp .env.example .env          # then put your TYPESAFE_API_KEY in it
-uv run --env-file .env orbitrows setup
-```
-
-`setup` starts Duckling in Docker and downloads the models. It's needed once, and it says plainly what isn't ready.
-
-In the examples below, `orbitrows` stands for `uv run --env-file .env orbitrows`. A shell alias saves typing:
+One command installs the `orbitrows` command (about 1.5 GB, with the CPU build of PyTorch):
 
 ```bash
-alias orbitrows='uv run --env-file .env orbitrows'
+uv tool install git+https://github.com/aminesayagh/orbitrows-cli
 ```
+
+Then give it your key, once, and prepare everything a message needs:
+
+```bash
+mkdir -p ~/.config/orbitrows
+echo "TYPESAFE_API_KEY=your-key" > ~/.config/orbitrows/env
+orbitrows setup
+```
+
+`setup` starts Duckling in Docker and downloads the models. It's needed once, and it says plainly what isn't ready. A `TYPESAFE_API_KEY` set in the environment wins over the file. Update with `uv tool upgrade orbitrows`.
+
+**From the source** (to develop): `git clone https://github.com/aminesayagh/orbitrows-cli.git`, then `uv sync`, `cp .env.example .env` (your key in it), and `uv run --env-file .env orbitrows …`.
 
 ## Quick start
 

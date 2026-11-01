@@ -39,9 +39,27 @@ class Refusal(Exception):
     """A request we can't do; its text is shown as is and the command exits with 1."""
 
 
+def settings() -> Path:
+    """The installed command's settings file (no .env beside it): $XDG_CONFIG_HOME/orbitrows/env, KEY=value lines."""
+    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "orbitrows" / "env"
+
+
+def configured() -> None:
+    """Variables the environment lacks, read from settings(): the environment wins; the session started from here
+    inherits them."""
+    try:
+        lines = settings().read_text().splitlines()
+    except OSError:
+        return
+    for line in lines:
+        key, sep, value = line.strip().removeprefix("export ").partition("=")
+        if sep and key and not key.startswith("#"):
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
 def need(variable: str) -> None:
     if not os.environ.get(variable):
-        raise Refusal(f"{variable} is not set. Add it to .env and run with: uv run --env-file .env orbitrows …")
+        raise Refusal(f"{variable} is not set. Put it in {settings()} as {variable}=…, or set it in the environment.")
 
 
 def need_key() -> None:
@@ -568,6 +586,7 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGTERM, signal.default_int_handler)  # a kill is a Ctrl+C: the store is never left importing
+    configured()                                              # an installed command: its key from its settings file
     args = parser().parse_args(argv)
     try:
         match args.command:
