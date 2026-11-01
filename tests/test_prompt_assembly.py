@@ -367,3 +367,20 @@ def test_a_column_with_several_written_numbers_still_gets_its_blank_condition(no
     assert got[0]["condition"]["operand"]["type"] in ("null_check", "empty_check", "any")
     assert "words" in got[0] and "at" in got[0]
     assert built("none")[0] == []
+
+
+def test_an_unclear_reference_is_asked_only_when_another_request_could_be_meant():
+    """Set G (2026-11-01): "their reorder point" in a one-request prompt was asked 3 times; it can only be its own
+    records. With two requests, "their" may mean the other one's rows: still asked."""
+    from orbitrows.pipeline.prompt.request_graph import build_graph
+    ref = {"text": "their", "start": 0, "end": 5, "request": 1, "kind": "ambiguous", "score": 0.3,
+           "question": {"type": "choice", "call": "c", "key": "m0", "options": []}}
+    linked = {"answers": [{"choice": None, "probabilities": {}}], "inputs": {}, "warnings": [], "waits_for": [None],
+              "links": "1", "call": None}
+    req = lambda t: {"text": t, "start": 0, "end": len(t), "marker": None, "joined_by": None}
+    one = build_graph([req("raise their reorder point")], linked, [ref])
+    assert [w for w in one["warnings"] if "question" in w] == []
+    two = build_graph([req("show the drafts"), req("set their status")],
+                      linked | {"answers": linked["answers"] * 2, "waits_for": [None, None], "links": "1 AND 2"},
+                      [ref | {"request": 2}])
+    assert [w for w in two["warnings"] if "question" in w]

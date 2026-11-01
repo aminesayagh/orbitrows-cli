@@ -70,8 +70,10 @@ def build_graph(requests: list[dict], linked: dict, references: list[dict]) -> d
                             if k in ("text", "start", "end", "kind", "target", "request", "target_request", "score")}
                            for x in references if x["kind"] != "ambiguous"],
             "warnings": [{"problem": "unresolved reference", "text": x["text"], "request": rid(x["request"]),
-                          "probability": x["score"]} | {k: x[k] for k in ("question",) if k in x}
-                         for x in references if x["kind"] == "ambiguous"] + warnings}
+                          "probability": x["score"]} | ({k: x[k] for k in ("question",) if k in x} if len(out) > 1
+                                                        else {})   # one request: "their cost" can only be its own
+                         for x in references if x["kind"] == "ambiguous"] + warnings}   # records, nothing to ask
+                                                                  # (2026-11-01, set G: G22 asked it 3 times)
 
 
 async def run(jev, prompt: str, mentions: list[dict], model, store: str = coref.STORE) -> dict:
