@@ -185,3 +185,15 @@ def test_the_value_changes_operations_are_found_part_by_part():
             found += ok
             missed += [] if ok else [(text, op)]
     assert found >= FOUND_FLOOR, (found, missed)
+
+
+def test_a_number_is_offered_the_operations_its_written_form_fills():
+    """Set G (2026-11-01): "by 10" was asked between decrease by 10% and subtract 10; "set the discount to 5" never
+    saw "set a value", pushed out of the 10 options by the percentage changes."""
+    from orbitrows.pipeline.expressions.steps import number_options
+    plain, percent = {"kind": "digits", "percent": False}, {"kind": "digits", "percent": True}
+    to_five = number_options("Set the discount to 5 on the completed sales of the Travel Mug.", plain)
+    assert "SET_VALUE" in to_five and not {"INCREASE_PERCENT", "DECREASE_PERCENT"} & set(to_five)
+    assert "DECREASE_PERCENT" not in number_options("Lower the price of the black variants by 10", plain)
+    by_pct = number_options("Set the price of the black variants to 15% of their cost.", percent)
+    assert "MULTIPLY_BY" in by_pct and "INCREASE_PERCENT" in number_options("Raise the price by 10%", percent)

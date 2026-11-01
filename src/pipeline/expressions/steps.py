@@ -21,13 +21,18 @@ KIND = {   # what a number does that is not one operation of the catalog: a part
 FILLED_BY_NUMBER = ("number", "percentage", "value")         # the slot types a request's number fills
 
 
-def number_options(words: str) -> dict:
+def number_options(words: str, occ: dict | None = None) -> dict:
     """The catalog's changes closest to a number's own words (use.search: changes of a number column, those with a
-    slot a number fills); then what a number does that is no operation (KIND)."""
+    slot a number fills; a plain number never fills a percentage slot (a percentage keeps every slot: "15% of their
+    cost" multiplies the cost, numbers_e2e Q07); 2026-11-01, set G: "by 10" was
+    asked between decrease by 10% (0.51) and subtract 10 (0.48), and "set the discount to 5" never saw "set a value",
+    pushed to 12th by the percentage changes); then what a number does that is no operation (KIND)."""
     from orbitrows.pipeline.operations import use
     c = use.catalog()["entries"]
+    fills = ("number", "value") if occ and not occ.get("percent") and occ.get("kind") in ("digits", "words") \
+        else FILLED_BY_NUMBER                                 # a percentage may still be a factor: "15% of their cost"
     ids = [i for i in use.search(words, "value", "number", len(c))
-           if any(x["type"] in FILLED_BY_NUMBER for x in use.slots(c[i]))][:use.K]
+           if any(x["type"] in fills for x in use.slots(c[i]))][:use.K]
     return {i: f"{c[i]['name']}: {c[i]['behavior']} (e.g. '{c[i]['examples'][0]}')" for i in ids} | KIND
 
 
@@ -259,7 +264,7 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
     for o in occs:
         clause = text[slice(*segment_of(segments(text), o["start"]))].strip()
         q[f"{o['occ']}_kind"] = choice(CONTEXT, f"What does the number {o['occ']} ('{o['text']}') do?",
-                                       number_options(clause),
+                                       number_options(clause, o),
                                        KIND_RULES + upstream.get("rules", []))
         q[f"{o['occ']}_column"] = choice(CONTEXT, f"The step with {o['occ']} ('{o['text']}', in '{clause}'): do its own "
                                                   f"words name the column it changes or starts from? Which one?",
