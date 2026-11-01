@@ -303,3 +303,15 @@ def test_a_percentage_slot_takes_a_number_written_as_one_and_more_numbers_than_n
     one = {"r1": zeros["r1"][1:]}                             # one number, one named column: nothing added
     assert "t_inventory.c_quantity" not in asked_columns(schema, [r], sources, "r1",
                                                          {"r1": {"t_inventory.c_reserved": {}}}, {}, None, one)
+
+
+def test_a_column_named_in_full_and_not_a_unit_alone():
+    """Hard set H10 ("counting each sale as its quantity times its unit price, minus its discount"): quantity and
+    discount are named in full, so a group total on the unit price alone isn't the request's computation; the "mad"
+    of cost_mad alone names nothing."""
+    from orbitrows.pipeline.prompt.conditions import in_full
+    schema = store_of(baseline())
+    assert in_full(schema, "t_sales.c_quantity", {"how": "word", "words": ["quantity"]})
+    assert in_full(schema, "t_sales.c_unit_price_mad", {"how": "word", "words": ["unit", "price", "mad"]})
+    assert not in_full(schema, "t_variants.c_cost_mad", {"how": "word", "words": ["mad"]})
+    assert not in_full(schema, "t_sales.c_quantity", {"how": "meaning", "words": ["units"]})

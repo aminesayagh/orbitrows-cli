@@ -1117,7 +1117,18 @@ def questions_2d(requests, schema, section, params) -> dict:
     return q
 
 
-def build_2d(requests, schema, section, params, answers) -> None:
+def in_full(schema, key, found) -> bool:
+    """The request writes every word of the column's name (its unit aside): "quantity", "unit price", not the "mad"
+    alone of cost_mad (the column finder's word matches)."""
+    from .columns import name_words, unit_word
+    t, c = key.split(".")
+    d = next(x["definition"] for x in schema if x["definition"]["table_id"] == t)
+    sql = next(x["sql_name"] for x in d["columns"] if x["column_id"] == c)
+    own = set(name_words(sql, set(name_words(d["sql_name"], set())))) - {unit_word(sql)}
+    return (found or {}).get("how") == "word" and bool(own) and own <= set(found.get("words") or [])
+
+
+def build_2d(requests, schema, section, params, answers, named=None) -> None:
     """Each group condition: AGG(column) OP number, kept as the read's `having` (stage 4 passes it on); below SURE a
     question; a part missing or unfit: the request is refused, never run on every group. A condition stage 2 read
     from the same comparison on each record ("total stock over 60": quantity > 60) is that one: removed."""
@@ -1155,8 +1166,13 @@ def build_2d(requests, schema, section, params, answers) -> None:
         for c in [c for c in out[rid].get("predicates", []) if not c.get("linked") and c["operator"] == op
                   and (c["condition"].get("right") or {}).get("value") == number]:
             out[rid]["predicates"].remove(c)
-        if column and out[rid].get("refused_column") == column:   # the same comparison read on each record, as a
-            out[rid].pop("refused"); out[rid].pop("refused_column")   # computation it can't build: the group's
+        others = [k for k, v in ((named or {}).get(rid) or {}).items() if k != column and k.split(".")[0] ==
+                  column.split(".")[0] and column_info(schema, k)["sql_type"] in ("INTEGER", "REAL")
+                  and in_full(schema, k, v)] if column else []
+        if column and out[rid].get("refused_column") == column and not others:   # the same comparison read on each
+            out[rid].pop("refused"); out[rid].pop("refused_column")   # record ("total stock over 60"): the group's;
+            # with another number column of that table named in full ("quantity times unit price minus discount"),
+            # the computation is over several columns, not this total: the refusal stays (hard set H10, 2026-10-31)
         agg = {"type": "aggregate", "function": "count" if f == "count_distinct" else f,
                "distinct": f == "count_distinct", **({"argument": _col(column)} if column and f != "count" else {})}
         out[rid]["having"] = {"type": "comparison", "operator": op, "left": agg,
@@ -1404,7 +1420,7 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
             a2 = {"error": repr(e)}
         section["named"] = named or {}                       # the column finder's words, for an empty test's evidence
         build_2(db, requests, schema, section["requests"], values, params, parts, a2, section)
-        section.pop("named", None)
+        named_now = section.pop("named", None)
         a2b = {}
         for r in requests:                                    # stage 2c's comparisons over linked records; a
             g = section["requests"].get(r["id"]) or {}        # computed one among them is not stage 2b's
@@ -1433,7 +1449,7 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
         build_2x(section, owned, a2b)
         build_2b(db, requests, schema, section, params, a2b, a2w)
         build_2c(db, requests, schema, section, params, a2b)
-        build_2d(requests, schema, section, params, a2b)
+        build_2d(requests, schema, section, params, a2b, named_now)
         for g in section["requests"].values():               # "of the Accessories category": its name's condition;
             ps = g.get("predicates", [])                      # a linked test no words wrote ("has a category") on the
             g["predicates"] = [p for p in ps if not (p.get("linked") and not p.get("words") and any(   # same table
