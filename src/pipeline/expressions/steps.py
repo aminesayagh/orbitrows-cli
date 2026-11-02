@@ -318,9 +318,16 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
             tok = tok.head
         return tok.idx if tok is not None and seg[0] <= tok.idx < o["start"] else o["start"]
 
+    done = {}                                                # form (percentage or not) → the last catalog change
     for o in occs:
         kind, kp = ans.get(f"{o['occ']}_kind") or (None, {})
         col, cp = ans.get(f"{o['occ']}_column", ("none", {}))
+        a0 = phrase_start(o)
+        if kind not in (None, "none") and kind not in KIND and o["percent"] in done and not any(
+                t.pos_ in ("VERB", "AUX") for t in doc if a0 <= t.idx < o["end"]):
+            kind, kp = done[o["percent"]], {done[o["percent"]]: 1.0}   # "increase by 10%, but only by 5% for the
+            # black ones": a number with no verb of its own, written like an earlier change's, repeats that change
+            # with its own value (set T TC113a, 2026-11-02: its words "5%" alone read as multiply by 0.05)
         if kind is None or kp.get(kind, 0) < MIN:
             ambiguities.append({"problem": "what this number does: uncertain", "occurrence": o["occ"], "text": o["text"],
                                 "start": o["start"], "end": o["end"], "answer": kind,
@@ -360,6 +367,8 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
                 right["other"], left = {"column": c["column"]}, {"unresolved": True}
             add(entry_role(e), f"entry:{kind}", left if use.reads_column(e) else None, right, a, b,
                 f"catalog.{kind}", [o["occ"]])
+            if entry_role(e) == "calculation":
+                done[o["percent"]] = kind
             continue
         v, p, rule = o["value"], o["percent"], f"jev.{kind}"
         pct = lambda f: {"value": round(f, 6), "source": o["text"]}

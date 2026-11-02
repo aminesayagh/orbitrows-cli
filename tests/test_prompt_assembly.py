@@ -545,3 +545,26 @@ def test_a_grouped_read_leaves_out_the_records_with_no_value_in_the_group_column
                                                "right": {"type": "literal", "value": 2}}}}, [])
     rows = db.execute(out["program"][0]["sql"][0]).fetchall()
     assert sorted(r[0] for r in rows) == ["black", "white"], (out["program"][0]["sql"], rows)
+
+
+def test_a_number_with_no_verb_of_its_own_repeats_the_earlier_change(monkeypatch):
+    """Set T TC113a (2026-11-02): "Increase every price by 10%, but only by 5% for black variants": the record of
+    "5%" had no verb, Jev chose multiply, black's price became x 0.05. A number with no verb, written like an earlier
+    change's number, repeats that change with its own value."""
+    import asyncio
+    from orbitrows.pipeline.expressions import steps
+    from orbitrows.services.model.client import Answers
+    t = "Increase every price by 10%, but only by 5% for black variants."
+
+    async def stub(jev, state, q):
+        kinds = iter(["INCREASE_PERCENT", "MULTIPLY_BY"])     # Jev's answers in TC113a, in the numbers' order
+        out = Answers({k: ((v := next(kinds)), {v: 0.9}) if k.endswith("_kind") else ("none", {"none": 0.9})
+                       for k in sorted(q, key=lambda k: (not k.endswith("_kind"), k)) if k.endswith(("_kind", "_column"))})
+        out.call = "c"
+        return out
+    monkeypatch.setattr(steps, "ask", stub)
+    up = {"target": "t_variants.c_price_mad", "target_kind": "number", "words": [], "predicates": [],
+          "table_columns": {"t_variants.c_price_mad": "price"}}
+    recs = asyncio.run(steps.extract(None, t, up))["records"]
+    changes = [(r["function"], r["right"]["value"]) for r in recs if r["role"] == "calculation"]
+    assert changes == [("entry:INCREASE_PERCENT", 10), ("entry:INCREASE_PERCENT", 5)], changes
