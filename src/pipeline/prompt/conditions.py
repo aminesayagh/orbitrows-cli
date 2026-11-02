@@ -914,11 +914,14 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                 p = probs.get(c, 1)
                 if name == "op" and proved and c in ("=", "in"):  # with SQL's values, both build the same condition
                     p = probs.get("=", 0) + probs.get("in", 0)
+                asked = {"request": rid, "problem": f"{name} of {key} uncertain", "answer": c,
+                         "probability": round(probs.get(c, 0), 2)} \
+                    | question(answers, f"{rid}|{key}|{name}", {k: x[0] for k, x in cands.items()})
                 if needed and c not in (None, "none") and p < SURE:
                     out[rid]["flagged"] = True
-                    warnings.append({"request": rid, "problem": f"{name} of {key} uncertain", "answer": c,
-                                     "probability": round(probs.get(c, 0), 2)}
-                                    | question(answers, f"{rid}|{key}|{name}", {k: x[0] for k, x in cands.items()}))
+                    warnings.append(asked)
+                elif needed and c == "none" and p < SURE and "question" in asked:   # unsure there's no value: kept
+                    out[rid].setdefault("ties", []).append(asked)   # open; asked if the ledger would refuse (H598)
                 return c
             op = pick("op")
             for c in proved:

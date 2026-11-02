@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from fixtures.orbitrow.load import baseline
-from orbitrows.pipeline.prompt import assemble
+from orbitrows.pipeline.prompt import assemble, conditions
 from orbitrows.pipeline.prompt.pipeline import store_of
 
 CASES = [Path(__file__).parent / "fixtures" / "prompt_cases" / "A01.json"]
@@ -445,3 +445,32 @@ def test_an_unclear_reference_is_asked_only_when_another_request_could_be_meant(
                       linked | {"answers": linked["answers"] * 2, "waits_for": [None, None], "links": "1 AND 2"},
                       [ref | {"request": 2}])
     assert [w for w in two["warnings"] if "question" in w]
+
+
+def test_an_unsure_none_is_kept_open_for_the_ledger_and_a_sure_none_is_not():
+    """H598 (2026-11-02): "lines with no units", the value answered 'none' at 0.47 against the 0 at 0.42: never a
+    question, so the ledger refused the unused "no". The doubt is now kept open (ties) with its question, which the
+    pipeline asks instead of refusing; a sure 'none' (an extra column with no value) stays quiet."""
+    from orbitrows.pipeline.store.profile import refresh
+    from orbitrows.services.model.client import Answers
+    db = baseline()
+    refresh(db)
+    schema = store_of(db)
+    key = "t_inventory.c_quantity"
+    text = "Delete the Casablanca inventory lines with no units."
+    r = {"id": "r1", "text": text, "statement": "delete"}
+    params = {"r1": [{"text": "no", "value": 0, "unit": None, "none": True,
+                      "start": text.find("no "), "end": text.find("no ") + 2}]}
+    stage1 = {"r1": {"columns": [key]}}
+
+    def ties(none):
+        answers = Answers({f"r1|{key}|op": ("=", {"=": 0.9}), f"r1|{key}|not": 0.05,
+                           f"r1|{key}|value": ("none", {"none": none, "n0": 1 - none})})
+        answers.call = "c1"
+        section = {"requests": {"r1": {"columns": [key], "predicates": []}}, "warnings": []}
+        conditions.build_2(db, [r], schema, stage1, [], params, {"r1": {}}, answers, section)
+        return section["requests"]["r1"].get("ties", []), section["warnings"]
+    open_, warnings = ties(0.53)
+    assert [t["question"]["key"] for t in open_] == [f"r1|{key}|value"]
+    assert not any("question" in w for w in warnings)         # not asked unless the ledger would refuse
+    assert ties(0.95)[0] == []

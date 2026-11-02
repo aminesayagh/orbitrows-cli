@@ -553,6 +553,7 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
     if incoming and (stopped := converted(*from_uploads(db, store, incoming, reqs, s5["requests"]),
                                           conditions=s6, grouping=g, formula=f5)):
         return stopped
+    tied = False
     for r in reqs:                                            # the ledger: every number, date and stored value
         rid, c = r["id"], s6["requests"].get(r["id"])         # the request writes is used by one of its parts,
         grp = g["requests"].get(rid) or {}                    # never run without it (2026-10-29)
@@ -562,12 +563,17 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
         missing = ledger.unaccounted(
             ledger.found(r, s3["values"], s6.get("parameters", {}).get(rid, []), c.get("dates", [])),
             ledger.used(c, grp, steps_of, s5["requests"].get(rid) or {}, r["text"]))
-        if missing:
+        if missing and c.get("ties"):                         # a doubt left open could use it: asked, not refused
+            s6["warnings"].extend(c["ties"])                  # ("no units": 'none' 0.47 against the 0 at 0.42)
+            tied = True
+        elif missing:
             c["refused"] = f"{', '.join(missing)} used by no part of the request (never run without it)"
             s6["warnings"].append({"request": rid, "problem": c["refused"]})
         elif twice := ledger.shared(c, r["text"]):            # one occurrence, one condition
             c["refused"] = f"{', '.join(twice)} read by two conditions (one is a misreading)"
             s6["warnings"].append({"request": rid, "problem": c["refused"]})
+    if tied:
+        pause("conditions", conditions=s6)                    # the resolution gate: the user settles the tie
     step("step 7 · assembly")
     a = assemble.assemble(db, store, reqs, s2["requests"], s4["requests"], s5["requests"], s6["requests"],
                           g["requests"], [("requests", s1["warnings"]), ("operation", s2["warnings"]),
