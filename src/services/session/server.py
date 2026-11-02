@@ -79,11 +79,9 @@ def prompt(db, text: str, calls: dict) -> dict:
     except Paused as p:
         return {"paused": {"step": p.phase, "questions": p.questions, "notices": p.notices}}
     a = out["assembly"]
-    unsure = {w.get("request") for w in out.get("conditions", {}).get("warnings", [])}
+    # a change to every row runs directly, told as a notice; undo is the way back (user, 2026-11-02)
     return {"program": a["program"], "errors": a["errors"],   # assembly's questions list its errors too: told apart
-            "notices": [q for q in a["questions"] if "question" not in q and "error" not in q],
-            # every row changed while the rows' step was unsure or failed: the user confirms first (user, 2026-10-21)
-            "confirm": [q for q in a["questions"] if q.get("scope") == "all_rows" and q.get("request") in unsure]}
+            "notices": [q for q in a["questions"] if "question" not in q and "error" not in q]}
 
 
 def handler():
@@ -230,20 +228,12 @@ class Session:
             match = questions.match(q, given)
         except questions.Invalid as e:
             return {"ok": False, "error": str(e)}
-        confirm = q["question"].get("confirm")                # a change to every row, built: yes applies it, no drops it
-        if confirm and match == "no":
-            self.pending = None
-            return {"ok": True, "ran": [], "notices": [{"step": "assembly", "request": q.get("request"),
-                                                        "problem": "not applied: you answered no"}]}
         if save := q["question"].get("save"):                 # a unit conversion: kept, the message's rerun reads it
             from orbitrows.pipeline.merge import convert
             # Kept knowledge, not a change: no savepoint c<n> of its own, so nothing to undo. It is written inside
             # the open savepoints of the changes before it, which an undo rolls back: undo() puts it back after.
             convert.save(self.db, *save, match)
         questions.record(p, q, match, QUESTION, nulls=False)
-        if confirm and not p["open"]:
-            self.pending = None
-            return self.apply(p["prompt"], p["built"].get("program") or [], [])
         if p["open"]:
             return asking(p, [])
         return self.resume([])
@@ -274,13 +264,6 @@ class Session:
             self.pending = None
             return {"ok": False, "error": "\n  ".join(["The request couldn't be built, so nothing was changed:"] + [
                 f"{e.get('request')} ({e.get('stage')}): {e.get('error')}" for e in errors])}
-        if confirm := result.get("confirm"):                  # kept built: a yes applies it without running it again
-            p["built"], p["step"] = result, "assembly"
-            p["open"] = [{"id": f"m_all_{c['request']}", "request": c["request"], "step": "assembly",
-                          "problem": f"This {c['problem']} ({c.get('rows')} rows), and the rows to change weren't "
-                                     "found for sure. Apply it?", "question": {"type": "yes_no", "confirm": True}}
-                         for c in confirm]
-            return asking(p, notices)
         self.pending = None
         return self.apply(p["prompt"], result.get("program") or [], notices)
 

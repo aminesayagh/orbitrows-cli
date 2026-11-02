@@ -349,14 +349,15 @@ def test_a_program_with_errors_changes_nothing(piped, capsys):
     assert piped.session.db.execute(SELECT).fetchall() == [(10.0,), (20.0,)] and not piped.session.changes
 
 
-def test_every_row_changed_while_unsure_is_confirmed_first(piped, capsys):
+def test_every_row_changed_while_unsure_runs_directly_and_undo_reverts_it(piped, capsys):
+    """No confirmation step (user, 2026-11-02): the change runs, the user is told it changed every record, undo
+    is the way back."""
     code, out, err = run(capsys, "message", "lower", "all")
-    [q] = json.loads(out)["questions"]
-    assert code == 3 and q["id"] == "m_all_r1" and q["type"] == "yes_no" and not piped.session.changes
-    assert run(capsys, "answer", "m_all_r1", "no")[0] == 0 and not piped.session.changes
-    run(capsys, "message", "lower", "all")
-    assert run(capsys, "answer", "m_all_r1", "yes")[0] == 0
+    assert code == 0, err
+    assert EVERY in json.loads(out)["notices"] and "questions" not in json.loads(out)
     assert piped.session.db.execute(SELECT).fetchall() == [(20.0,), (40.0,)]
+    assert run(capsys, "undo")[0] == 0
+    assert piped.session.db.execute(SELECT).fetchall() == [(10.0,), (20.0,)]
 
 
 def test_a_select_sends_back_at_most_rows_rows(piped, monkeypatch):
