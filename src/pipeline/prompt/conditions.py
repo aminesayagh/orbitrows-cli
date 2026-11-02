@@ -379,9 +379,18 @@ def asked_columns(schema, requests, sources, rid, named, dated, db, units=None) 
     written = [p for p in (units or {}).get(rid, []) if p.get("value") is not None and "start" in p
                and not any(a < p["end"] and p["start"] < b for a, b in days)]   # a date's numbers are the date's
     short = len(written) > sum(numeric(k) for k in (named.get(rid) or {}) if k in every)   # more numbers than the
+
+    def unit(k):
+        return (column_info(schema, k)["unit"] or {}).get("unit")
+    # a number column only resembled ("costing the customer": cost_mad), not named in full: its table's other number
+    # columns of the same unit too (price_mad), Jev judging with the whole sentence (H112, 2026-11-02)
+    text = next((r["text"] for r in requests if r["id"] == rid), "")
+    alike = {k2 for k, found in (named.get(rid) or {}).items() if k in every and numeric(k)
+             and not written_as_named(schema, k, text)
+             for k2 in every if k2.split(".")[0] == k.split(".")[0] and numeric(k2) and unit(k2) == unit(k)}
     return {k: v for k, v in every.items() if k in (named.get(rid) or {}) or k in own   # named number columns take:
-            or (dated.get(rid) and holds_dates(db, schema, k)) or measured(k)       # the main table's others too
-            or (short and k.split(".")[0] == main and numeric(k))}   # ("nothing in stock": 2026-10-30, Jev judges)
+            or (dated.get(rid) and holds_dates(db, schema, k)) or measured(k) or k in alike   # the main table's
+            or (short and k.split(".")[0] == main and numeric(k))}   # others too ("nothing in stock": 2026-10-30)
 
 
 def questions(requests, schema, sources, named=None, dated=None, db=None, units=None) -> dict:
@@ -1203,6 +1212,16 @@ def questions_2d(requests, schema, section, params) -> dict:
         q[f"{k}|number"] = choice(CONTEXT, f"In {said}, which number is the group's figure compared with?",
                                   nums | {"none": "None."})
     return q
+
+
+def written_as_named(schema, key, text) -> bool:
+    """The request writes the column's own name as it is (its unit aside), a plural too: "cost", "costs", "unit
+    price"; not a word of the same lemma ("costing", "priced"), which only resembles it (H112, 2026-11-02)."""
+    import re
+    from .columns import unit_word
+    sql = column_info(schema, key)["sql_name"]
+    said = set(re.findall(r"[a-z0-9]+", text.casefold()))
+    return all({w, w + "s", w + "es"} & said for w in sql.split("_") if w and w != unit_word(sql))
 
 
 def in_full(schema, key, found) -> bool:

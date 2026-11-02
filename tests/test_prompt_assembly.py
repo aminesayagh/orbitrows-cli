@@ -310,11 +310,31 @@ def test_a_percentage_slot_takes_a_number_written_as_one_and_more_numbers_than_n
                     {"text": "nothing", "value": 0, "start": t.rfind("nothing"), "end": t.rfind("nothing") + 7}]}
     r = {"id": "r1", "text": t, "statement": "delete"}
     sources = {"r1": {"target": {"type": "database_table", "reference": "t_inventory"}}}
-    asked = asked_columns(schema, [r], sources, "r1", {"r1": {"t_inventory.c_reserved": {}}}, {}, None, zeros)
+    named = {"r1": {"t_inventory.c_reserved": {"how": "word", "words": ["reserve"]}}}   # named in full (lemmas)
+    asked = asked_columns(schema, [r], sources, "r1", named, {}, None, zeros)
     assert "t_inventory.c_quantity" in asked and "t_inventory.c_warehouse" not in asked
     one = {"r1": zeros["r1"][1:]}                             # one number, one named column: nothing added
     assert "t_inventory.c_quantity" not in asked_columns(schema, [r], sources, "r1",
-                                                         {"r1": {"t_inventory.c_reserved": {}}}, {}, None, one)
+                                                         named, {}, None, one)
+
+
+def test_a_number_column_only_resembled_brings_its_table_s_columns_of_the_same_unit():
+    """H112 (2026-11-02): "variants costing the customer of at most 120": "costing" resembled cost_mad, the price was
+    never offered and the cost was used. Only resembled: the variants' other MAD columns are asked too, not the
+    grams; named in full ("whose cost"): nothing added."""
+    from orbitrows.pipeline.prompt.conditions import asked_columns
+    schema = store_of(baseline())
+    t = "Show the variants costing the customer of at most 120."
+    r = {"id": "r1", "text": t, "statement": "select"}
+    sources = {"r1": {"target": {"type": "database_table", "reference": "t_variants"}}}
+    number = {"r1": [{"text": "120", "value": 120, "start": t.find("120"), "end": t.find("120") + 3}]}
+
+    def asked(text):
+        return asked_columns(schema, [r | {"text": text}], sources, "r1",
+                             {"r1": {"t_variants.c_cost_mad": {"how": "word", "words": ["cost"]}}}, {}, None, number)
+    resembled = asked(t)                                     # the finder's lemma "cost": not as written
+    assert "t_variants.c_price_mad" in resembled and "t_variants.c_weight_g" not in resembled
+    assert "t_variants.c_price_mad" not in asked("Show the variants whose cost is at most 120.")
 
 
 def test_a_column_named_in_full_and_not_a_unit_alone():
