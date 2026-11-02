@@ -472,6 +472,17 @@ def test_store_incoming_message(env, capsys, monkeypatch):
     assert len(stores()) == 2  # incoming and message never create a store
 
 
+def test_a_file_over_the_size_limit_is_refused_before_any_import(env, capsys, monkeypatch):
+    monkeypatch.setattr(cli, "MAX_MB", 0.0001)                # 100 bytes: customers.csv is over it
+    code, out, err = run(capsys, "store", "customers.csv")
+    assert code == 1 and "over the 0.0001 MB a file can have" in err and stores() == []
+    monkeypatch.setattr(cli, "MAX_MB", 50)
+    assert run(capsys, "store", "products.csv")[0] == 0
+    monkeypatch.setattr(cli, "MAX_MB", 0.0001)
+    code, out, err = run(capsys, "incoming", "customers.csv")
+    assert code == 1 and "over the 0.0001 MB" in err
+
+
 def test_store_is_written_to_disk(env, capsys):
     code, out, err = run(capsys, "store", *SHOP, "-n", "shop")
     assert code == 0, err

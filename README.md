@@ -105,6 +105,7 @@ cp -r skills/orbitrows .agents/skills/          # Codex and other agents, in a p
 - **Write the value, and name the column when it's ambiguous.** "Quantity 0 and reserved 0" is safer than "nothing in stock and nothing reserved".
 - **Write a percentage as one:** "by 20%". A plain "by 20" is asked about.
 - Changes that add, drop or rename a column or a table aren't supported yet.
+- A file can be up to **50 MB**, for a store or an upload. A larger one is refused before anything is imported.
 - A message takes about **4 seconds**, the first one of a session about 8.
 - Known limits and planned work are tracked in the [issues](https://github.com/aminesayagh/orbitrows-cli/issues).
 

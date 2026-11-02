@@ -67,10 +67,21 @@ def need_key() -> None:
         need("TYPESAFE_API_KEY")
 
 
+MAX_MB = 50                                                   # ponytail: per file, untuned; raise once a larger store is measured
+
+
+def sized(path: Path) -> None:
+    """A refusal for a file over MAX_MB, before it is read: the whole file is held in memory and profiled."""
+    if (mb := path.stat().st_size / 1e6) > MAX_MB:
+        raise Refusal(f"Cannot read {path.name}: {mb:.0f} MB, over the {MAX_MB} MB a file can have. Nothing was "
+                      "imported; split the file, or keep only the rows you need.")
+
+
 def read(path: Path, encoding: str | None = None) -> dict:
     """The file as read_table reads it (Sniffer's header guess), or a refusal."""
     if not path.is_file():
         raise Refusal(f"File not found: {path}")
+    sized(path)
     try:
         table = read_table(path, encoding=encoding) if encoding is not None else read_table(path)
     except EncodingNeeded:
@@ -290,6 +301,7 @@ def inspect_incoming(path: Path, encoding: str | None = None) -> None:
     """Check readability and row widths before any model call, without guessing whether row 1 is a header."""
     if not path.is_file():
         raise Refusal(f"File not found: {path}")
+    sized(path)
     try:
         rows = read_table(path, has_header=False, encoding=encoding)["rows"]
     except EncodingNeeded:
