@@ -390,6 +390,14 @@ def number_column(schema, k) -> bool:
         and not any(c in fk["columns"] for fk in d.get("foreign_keys", []))
 
 
+def as_written(text, lemmas) -> list[str]:
+    """The request's own words for the column finder's lemmas ("costing" for "cost"): the choice quotes the request,
+    never the column's name, which would answer it (H112, 2026-11-02)."""
+    from orbitrows.pipeline.expressions.words import nlp
+    doc = nlp("en")(text)
+    return [next((t.text for t in doc if t.lemma_.casefold() == w.casefold()), w) for w in lemmas]
+
+
 def resembled(schema, requests, every, rid, named) -> dict:
     """{column: its group}: a number column the request only resembles ("costing the customer": cost_mad), its own name
     not written as it is, with its table's number columns of the same unit (price_mad): one choice for Jev among
@@ -419,7 +427,7 @@ def questions(requests, schema, sources, named=None, dated=None, db=None, units=
         groups = resembled(schema, requests, candidates(schema, requests, sources, rid), rid, named) \
             if named is not None else {}
         for k, group in groups.items():
-            words = "', '".join((named[rid][k] or {}).get("words") or [k.split(".c_")[1]])
+            words = "', '".join(as_written(r["text"], (named[rid][k] or {}).get("words") or [k.split(".c_")[1]]))
             q[f"{rid}_means_{k}"] = choice(CONTEXT, f"In {said}, the words close to '{words}': which column do they "
                                                     "keep or exclude records by?",
                                            {c: asked[c] for c in group if c in asked}
