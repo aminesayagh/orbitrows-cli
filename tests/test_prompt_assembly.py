@@ -527,3 +527,21 @@ def test_a_superlative_never_makes_a_resembled_column_a_condition():
     r = {"id": "r1", "text": "Show the variants costing the customer under 200."}
     named = {"r1": {"t_variants.c_cost_mad": {"how": "word", "words": ["cost"]}}}
     assert resembled(schema, [r], every, "r1", named) != {}
+
+
+def test_a_grouped_read_leaves_out_the_records_with_no_value_in_the_group_column():
+    """Set T TR013a (2026-11-02, the user's choice): "the colours shared by more than 2 variants" listed the 5 variants
+    with no colour as an empty colour; records with no value form no group."""
+    db = baseline()
+    reqs = [{"id": "r1", "text": "Which colours have more than 2 variants?", "statement": "select"}]
+    color = {"type": "column", "source": "t_variants", "reference": "c_color"}
+    out = assemble.assemble(db, store_of(db), reqs, {"r1": {"statement": "select"}},
+                            {"r1": {"from": {"type": "database_table", "reference": "t_variants"}}},
+                            {"r1": {"outputs": [{"column": "t_variants.c_color", "aggregate": "value",
+                                                  "expression": color}]}}, {"r1": {}},
+                            {"r1": {"where": None, "group_by": [color],
+                                    "having": {"type": "comparison", "operator": ">",
+                                               "left": {"type": "aggregate", "function": "count"},
+                                               "right": {"type": "literal", "value": 2}}}}, [])
+    rows = db.execute(out["program"][0]["sql"][0]).fetchall()
+    assert sorted(r[0] for r in rows) == ["black", "white"], (out["program"][0]["sql"], rows)

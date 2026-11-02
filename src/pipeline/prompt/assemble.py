@@ -362,6 +362,12 @@ def statement(r, st, main, schema, src, part, cond6, group6, built, warnings, nu
         if group6.get("group_by"):
             sel["group_by"] = [g for g in (shown(f"{x['source']}.{x['reference']}", main, a, schema, names, warnings, rid)
                                            for x in group6["group_by"]) if g is not None]
+            present = [{"type": "null_check", "expression": g, "operator": "is_not_null"} for g in sel["group_by"]
+                      if g.get("type") == "column"]           # records with no value form no group: "which colours
+            if present:                                        # have more than 2 variants" lists colours (user,
+                where = scope.get("where") if scope.get("type") == "filtered" else None   # 2026-11-02, set T TR013a)
+                sel["scope"] = {"type": "filtered", "where": {"type": "all", "children": [where, *present]}
+                                if where else (present[0] if len(present) == 1 else {"type": "all", "children": present})}
         computed = next((o["expression"] for o in (outs if isinstance(outs, list) else [])
                          if o.get("sort") and o.get("expression")), None)
         order = [{"expression": e, "direction": o["direction"]} for o in group6.get("order_by", [])
