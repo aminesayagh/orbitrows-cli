@@ -598,6 +598,50 @@ def fits(param: dict, info: dict):
         return None
 
 
+def operation_numbers(r, parts_req, params) -> set:
+    """The numbers a change's operations take, never a condition's value (2026-11-02, set T: "by 10% when they cost
+    more than 100, and by 5% otherwise" built cost <= 10% and cost <= 5%, and no operation was left): in the parse, a
+    number whose way up reaches the changed column's own words, or the word that governs them ("raise the price by
+    10%", "add 20 to the price", "lower the price by 10"), before any other verb. "cost more than 100" reaches
+    "cost", which governs no changed column: a condition's; a number with a comparative ("less than 3") never.
+    ponytail: "the variants under 50 by 10%" hangs "under 50" on the verb too: the 50 is withheld, the ledger then
+    refuses (never a wrong query); the parse can't tell it from "by 10%". Indexes into params; reads: none."""
+    changed = [a["column"] for a in parts_req.get("assignments", [])]
+    if not changed or not params:
+        return set()
+    from orbitrows.pipeline.expressions.words import nlp
+    from .columns import name_words
+    names = {w for c in changed for w in name_words(c.split(".c_")[-1], set())}
+    doc = nlp("en")(r["text"])
+    own = [t for t in doc if t.lemma_.casefold() in names or t.text.casefold() in names]
+    verbs = set()
+    for t in own:                                             # the verb that governs the changed column
+        while t.head.i != t.i and t.pos_ not in ("VERB", "AUX"):
+            t = t.head
+        if t.pos_ == "VERB":
+            verbs.add(t.lemma_)
+    governs = {t.i for t in doc if t.pos_ == "VERB" and t.lemma_ in verbs}   # "…, otherwise add 10": the same
+    out = set()                                               # operation, its column left implicit
+    for i, p in enumerate(params):
+        t = next((x for x in doc if x.idx <= p.get("start", -1) < x.idx + len(x)), None)
+        if t is not None and any("Cmp" in x.morph.get("Degree") for x in (*t.children, *t.head.children)):
+            continue                                          # "less than 3", "more than 100": a comparison's
+        if t is not None and t.dep_ == "nummod":              # its own unit ("10 %", "500 grams")
+            t = t.head
+        while t is not None and t.i not in governs:           # up through prepositions only ("by", "to"): a
+            if t.head.i == t.i or (t.pos_ not in ("ADP", "NUM", "SYM", "CCONJ") and t.dep_ not in ("pobj", "dobj",
+                                                                                                    "conj")):
+                t = None                                      # noun or another verb on the way: not the operation's
+                break
+            if t.pos_ in ("NOUN", "PROPN") and t.dep_ == "pobj" and t.head.pos_ != "ADP":
+                t = None
+                break
+            t = t.head
+        if t is not None:
+            out.add(i)
+    return out
+
+
 def written(parts_req: dict) -> set:
     """The numbers step 5 writes as new values ("set the price to 199"): not a condition's operand."""
     out = set()
@@ -638,9 +682,10 @@ def operands(db, schema, r, key, values, params, parts_req) -> dict:
         # + the text as written for a pattern: the part SQL matched ("Orbit" in "Orbit products"), else the phrase
         out[f"s{i}"] = (f"'{v['text']}' (stored as {', '.join(stored)})", stored, v.get("searched") or v["text"])
     used = written(parts_req)
+    taken = operation_numbers(r, parts_req, params)
     for i, p in enumerate(params):
         x = fits(p, info)
-        if x is not None and float(p["value"]) not in used:
+        if x is not None and float(p["value"]) not in used and i not in taken:
             unit = (info["unit"] or {}).get("unit")
             out[f"n{i}"] = (f"{p['text']}" + (f" = {x} {unit}" if unit and x != p["value"] else ""), x)
     if holds_dates(db, schema, key):

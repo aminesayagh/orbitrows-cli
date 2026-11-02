@@ -474,3 +474,42 @@ def test_an_unsure_none_is_kept_open_for_the_ledger_and_a_sure_none_is_not():
     assert [t["question"]["key"] for t in open_] == [f"r1|{key}|value"]
     assert not any("question" in w for w in warnings)         # not asked unless the ledger would refuse
     assert ties(0.95)[0] == []
+
+
+def test_a_change_s_operation_numbers_are_never_a_condition_s_value():
+    """Set T (2026-11-02): "by 10% when they cost more than 100, and by 5% otherwise" built cost <= 10% and
+    cost <= 5%, and no operation was left. A number reached from the verb that changes the column is the operation's;
+    a comparison's ("more than 100", "less than 3") stays a condition's; a read has no operation numbers."""
+    import re
+    from orbitrows.pipeline.prompt.conditions import operation_numbers
+
+    def split(text, column):
+        ps = [{"text": m.group(), "start": m.start(), "end": m.end(), "value": 1} for m in re.finditer(r"\d+%?", text)]
+        got = operation_numbers({"text": text}, {"assignments": [{"column": column}]} if column else {}, ps)
+        return [p["text"] for i, p in enumerate(ps) if i in got], [p["text"] for i, p in enumerate(ps) if i not in got]
+    assert split("Raise the price of the variants by 10% when they cost more than 100, and by 5% otherwise.",
+                 "t_variants.c_price_mad") == (["10%", "5%"], ["100"])
+    assert split("For the black variants, add 20 to the price if they cost more than 100, otherwise add 10.",
+                 "t_variants.c_price_mad") == (["20", "10"], ["100"])
+    assert split("Add 5 to the quantity of the inventory lines with less than 3 units.",
+                 "t_inventory.c_quantity") == (["5"], ["3"])
+    assert split("Delete the sales of at least 2 units.", None) == ([], ["2"])
+
+
+def test_each_condition_reaches_the_formula_at_its_own_words():
+    """Set T (2026-11-02): "for the black variants … for the white ones …": both conditions got black's place (the
+    first value of the column), the branches collided ("r6 used twice"). Each takes the words it read itself."""
+    from orbitrows.pipeline.prompt.formula import predicate_spans
+    db = baseline()
+    schema = store_of(db)
+
+    def color(v):
+        return {"type": "comparison", "operator": "=", "left": {"type": "column", "source": "t_variants",
+                                                                 "reference": "c_color"},
+                "right": {"type": "literal", "value": v}}
+    cond6 = {"predicates": [{"column": "t_variants.c_color", "condition": color("black"), "words": [[8, 13]]},
+                            {"column": "t_variants.c_color", "condition": color("white"), "words": [[55, 60]]}]}
+    values = [{"request": "r1", "column": "t_variants.c_color", "text": t, "start": a, "end": b}
+              for t, a, b in (("black", 8, 13), ("white", 55, 60))]
+    assert [(p["start"], p["end"]) for p in predicate_spans(cond6, values, [], "r1", 0, schema, "t_variants")] == [
+        (8, 13), (55, 60)]
