@@ -337,6 +337,30 @@ def test_a_number_column_only_resembled_brings_its_table_s_columns_of_the_same_u
     assert "t_variants.c_price_mad" not in asked("Show the variants whose cost is at most 120.")
 
 
+def test_resembled_columns_are_one_choice_and_the_chosen_one_alone_is_kept():
+    """H112 (2026-11-02): asked a yes/no each, Jev kept the cost for "costing the customer"; now one choice among
+    cost_mad and price_mad (and none), and only the chosen column chooses the rows; below SURE, a question."""
+    from orbitrows.pipeline.prompt.conditions import build, questions
+    schema = store_of(baseline())
+    t = "Show the variants costing the customer of at most 120."
+    r = {"id": "r1", "text": t, "statement": "select"}
+    sources = {"r1": {"target": {"type": "database_table", "reference": "t_variants"}}}
+    named = {"r1": {"t_variants.c_cost_mad": {"how": "word", "words": ["cost"]}}}
+    q = questions([r], schema, sources, named, {}, None, {"r1": [{"value": 120, "start": t.find("120"), "end": 0}]})
+    choice = q["r1_means_t_variants.c_cost_mad"]
+    assert not any(k.startswith("r1_chooses_t_variants.c_") and k.endswith(("cost_mad", "price_mad")) for k in q)
+    assert {"t_variants.c_cost_mad", "t_variants.c_price_mad", "none"} <= set(choice["criteria"])
+    assert "t_variants.c_weight_g" not in choice["criteria"]
+    answers = {"r1_means_t_variants.c_cost_mad": ("t_variants.c_price_mad",
+                                                  {"t_variants.c_price_mad": 0.9, "t_variants.c_cost_mad": 0.1})}
+    out = build([r], schema, sources, [], answers)
+    assert "t_variants.c_price_mad" in out["requests"]["r1"]["columns"]
+    assert "t_variants.c_cost_mad" not in out["requests"]["r1"]["columns"] and not out["warnings"]
+    answers["r1_means_t_variants.c_cost_mad"] = ("t_variants.c_price_mad",
+                                                 {"t_variants.c_price_mad": 0.6, "t_variants.c_cost_mad": 0.4})
+    assert any("uncertain" in w["problem"] for w in build([r], schema, sources, [], answers)["warnings"])
+
+
 def test_a_column_named_in_full_and_not_a_unit_alone():
     """Hard set H10 ("counting each sale as its quantity times its unit price, minus its discount"): quantity and
     discount are named in full, so a group total on the unit price alone isn't the request's computation; the "mad"

@@ -370,27 +370,41 @@ def asked_columns(schema, requests, sources, rid, named, dated, db, units=None) 
         info = column_info(schema, k)
         return (info["unit"] or {}).get("unit") and any((p.get("unit") or {}).get("unit") and fits(p, info) is not None
                                                         for p in (units or {}).get(rid, []))
-    def numeric(k):                                           # a number column, no key
-        t, c = k.split(".")
-        d = next(x["definition"] for x in schema if x["definition"]["table_id"] == t)
-        return column_info(schema, k)["sql_type"] in ("INTEGER", "REAL") and c not in d.get("primary_key", []) \
-            and not any(c in fk["columns"] for fk in d.get("foreign_keys", []))
+    def numeric(k):
+        return number_column(schema, k)
     days = [(d["start"], d["end"]) for d in (dated or {}).get(rid, []) if "start" in d]
     written = [p for p in (units or {}).get(rid, []) if p.get("value") is not None and "start" in p
                and not any(a < p["end"] and p["start"] < b for a, b in days)]   # a date's numbers are the date's
     short = len(written) > sum(numeric(k) for k in (named.get(rid) or {}) if k in every)   # more numbers than the
-
-    def unit(k):
-        return (column_info(schema, k)["unit"] or {}).get("unit")
-    # a number column only resembled ("costing the customer": cost_mad), not named in full: its table's other number
-    # columns of the same unit too (price_mad), Jev judging with the whole sentence (H112, 2026-11-02)
-    text = next((r["text"] for r in requests if r["id"] == rid), "")
-    alike = {k2 for k, found in (named.get(rid) or {}).items() if k in every and numeric(k)
-             and not written_as_named(schema, k, text)
-             for k2 in every if k2.split(".")[0] == k.split(".")[0] and numeric(k2) and unit(k2) == unit(k)}
+    alike = {k2 for group in resembled(schema, requests, every, rid, named).values() for k2 in group}
     return {k: v for k, v in every.items() if k in (named.get(rid) or {}) or k in own   # named number columns take:
             or (dated.get(rid) and holds_dates(db, schema, k)) or measured(k) or k in alike   # the main table's
             or (short and k.split(".")[0] == main and numeric(k))}   # others too ("nothing in stock": 2026-10-30)
+
+
+def number_column(schema, k) -> bool:
+    """A number column, no key."""
+    t, c = k.split(".")
+    d = next(x["definition"] for x in schema if x["definition"]["table_id"] == t)
+    return column_info(schema, k)["sql_type"] in ("INTEGER", "REAL") and c not in d.get("primary_key", []) \
+        and not any(c in fk["columns"] for fk in d.get("foreign_keys", []))
+
+
+def resembled(schema, requests, every, rid, named) -> dict:
+    """{column: its group}: a number column the request only resembles ("costing the customer": cost_mad), its own name
+    not written as it is, with its table's number columns of the same unit (price_mad): one choice for Jev among
+    them, the whole sentence in view, never a yes/no each (H112, 2026-11-02: asked apart, the cost was kept)."""
+    def unit(k):
+        return (column_info(schema, k)["unit"] or {}).get("unit")
+    text = next((r["text"] for r in requests if r["id"] == rid), "")
+    out = {}
+    for k in (named or {}).get(rid) or {}:
+        if k in every and number_column(schema, k) and not written_as_named(schema, k, text):
+            group = [k2 for k2 in every if k2.split(".")[0] == k.split(".")[0] and number_column(schema, k2)
+                     and unit(k2) == unit(k)]
+            if len(group) > 1:
+                out[k] = group
+    return out
 
 
 def questions(requests, schema, sources, named=None, dated=None, db=None, units=None) -> dict:
@@ -401,7 +415,18 @@ def questions(requests, schema, sources, named=None, dated=None, db=None, units=
             continue
         q[f"{rid}_all"] = yes_no(CONTEXT, f"Does {said} act on every record of its table, with no condition?",
                                  ALL_RULES)
-        for key, text in asked_columns(schema, requests, sources, rid, named, dated or {}, db, units).items():
+        asked = asked_columns(schema, requests, sources, rid, named, dated or {}, db, units)
+        groups = resembled(schema, requests, candidates(schema, requests, sources, rid), rid, named) \
+            if named is not None else {}
+        for k, group in groups.items():
+            words = "', '".join((named[rid][k] or {}).get("words") or [k.split(".c_")[1]])
+            q[f"{rid}_means_{k}"] = choice(CONTEXT, f"In {said}, the words close to '{words}': which column do they "
+                                                    "keep or exclude records by?",
+                                           {c: asked[c] for c in group if c in asked}
+                                           | {"none": "None of these: no condition on them."})
+        for key, text in asked.items():
+            if any(key in g for g in groups.values()):
+                continue
             q[f"{rid}_chooses_{key}"] = yes_no(CONTEXT, f"Does {said} keep or exclude records by what this column "
                                                         f"holds, or by its being empty: {text}", CHOOSE_RULES)
         names = {t["definition"]["table_id"]: t["definition"]["sql_name"] for t in schema}
@@ -450,10 +475,21 @@ def build(requests, schema, sources, values, answers) -> dict:
         for key in columns_of(schema, tables_of(requests, sources, rid)):
             if key not in found and key not in candidates(schema, requests, sources, rid):
                 continue
+            means = [(mk, *answers[mk]) for mk in answers if mk.startswith(f"{rid}_means_")
+                     and isinstance(answers[mk], (list, tuple)) and key in answers[mk][1]]
             if key in found:                                  # SQLite found the request's value there
                 cols.append(key)
+            elif means:                                       # one choice among the resembled ones (resembled())
+                if any(c == key for _, c, _ in means):
+                    cols.append(key)
             elif yes(rid, f"{rid}_chooses_{key}", f"chooses by {key}"):
                 cols.append(key)
+        for mk in [mk for mk in answers if mk.startswith(f"{rid}_means_")]:
+            c, probs = answers[mk] if isinstance(answers[mk], (list, tuple)) else (None, {})
+            if c is not None and probs.get(c, 1) < SURE:
+                out[rid]["flagged"] = True
+                warnings.append({"request": rid, "problem": f"column meant by {mk.split('_means_')[1]} uncertain",
+                                 "answer": c, "probability": round(probs.get(c, 0), 2)} | question(answers, mk))
         has, main = [], main_table(requests, sources, rid)
         for rel in relationships(schema, main) + paths(schema, main, tables_of(requests, sources, rid)):
             other, key = rel["other"], f"{rid}_has_{rel['key']}"   # a matching record there, none, how many / much
