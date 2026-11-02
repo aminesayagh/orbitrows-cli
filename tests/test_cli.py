@@ -18,6 +18,7 @@ from orbitrows.pipeline.prompt import pipeline as prompt_pipeline
 from orbitrows.services.cli import main as cli
 from orbitrows.services.csv.reader import read_table
 from orbitrows.services.model.client import Model, call_id
+from orbitrows.services.storage import export as exporting
 from orbitrows.services.storage import registry
 from orbitrows.services.storage import store as storage
 
@@ -835,6 +836,27 @@ def test_export_writes_each_file_like_its_upload(env, capsys):
     code, out, err = run(capsys, "export", "-o", "out")
     assert code == 1 and out == "" and "Already there" in err and "--force" in err
     assert run(capsys, "export", "-o", "out", "--force")[0] == 0
+
+
+def test_an_export_failing_on_one_file_writes_none(env, capsys, monkeypatch):
+    """All or nothing: a failure on a later file leaves every earlier file as it was, and no temporary file."""
+    assert run(capsys, "store", *SHOP, "-n", "shop")[0] == 0
+    assert run(capsys, "export", "-o", "out")[0] == 0
+    for f in SHOP:
+        (env / "out" / f).write_text("before")
+    real, calls = exporting.rebuild, []
+
+    def failing(*args):
+        calls.append(args)
+        if len(calls) == len(SHOP):
+            raise OSError("disk full")
+        return real(*args)
+    monkeypatch.setattr(exporting, "rebuild", failing)
+    [(store_id, _, _)] = stores()
+    with closing(sqlite3.connect(storage.folder(store_id) / "session.db")) as db, pytest.raises(OSError):
+        exporting.export(db, storage.folder(store_id), env / "out", force=True)
+    assert sorted(p.name for p in (env / "out").iterdir()) == sorted(SHOP)
+    assert all((env / "out" / f).read_text() == "before" for f in SHOP)
 
 
 def test_a_table_split_out_of_a_file_is_named_or_skipped(env, capsys, monkeypatch):

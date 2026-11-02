@@ -27,29 +27,33 @@ def export(db, store: Path, out: Path, force: bool = False) -> list[dict]:
     if not force and (taken := [str(out / f) for f, *_ in files if (out / f).exists()]):
         raise FileExistsError(f"Already there: {', '.join(taken)}. Nothing was written; add --force to replace.")
     out.mkdir(parents=True, exist_ok=True)
-    written = []
+    written, ready = [], []                                   # all or nothing: every file to a temporary one first
     progress = store / "import.json"
     encodings = json.loads(progress.read_text()).get("encodings", {}) if progress.exists() else {}
-    for file, has_header, root, spec in files:
-        spec = json.loads(spec)
-        rows = rebuild(db, tables[root], [([columns[k] for k in c["via"]], columns[c["column_id"]]) for c in spec])
-        upload = store / "files" / file
-        read = read_table(upload, bool(has_header), encoding=encodings.get(file))
-        ending = "\r\n" if "\r\n" in upload.read_bytes().decode(read["encoding"]) else "\n"
-        fd, tmp = tempfile.mkstemp(dir=out, prefix=f".{file}.", suffix=".tmp")
-        try:
-            with open(fd, "w", encoding=read["encoding"], newline="") as f:
-                w = csv.writer(f, delimiter=read["delimiter"], lineterminator=ending)
-                if has_header:
-                    w.writerow(c["header"] for c in spec)
-                w.writerows([_text(v) for v in row] for row in rows)
-            os.replace(tmp, out / file)                       # never a half-written file under the final name
-        except BaseException as e:
+    try:
+        for file, has_header, root, spec in files:
+            spec = json.loads(spec)
+            rows = rebuild(db, tables[root], [([columns[k] for k in c["via"]], columns[c["column_id"]]) for c in spec])
+            upload = store / "files" / file
+            read = read_table(upload, bool(has_header), encoding=encodings.get(file))
+            ending = "\r\n" if "\r\n" in upload.read_bytes().decode(read["encoding"]) else "\n"
+            fd, tmp = tempfile.mkstemp(dir=out, prefix=f".{file}.", suffix=".tmp")
+            ready.append((tmp, out / file))
+            try:
+                with open(fd, "w", encoding=read["encoding"], newline="") as f:
+                    w = csv.writer(f, delimiter=read["delimiter"], lineterminator=ending)
+                    if has_header:
+                        w.writerow(c["header"] for c in spec)
+                    w.writerows([_text(v) for v in row] for row in rows)
+            except UnicodeEncodeError as e:
+                raise Unwritable(f"{file} is {read['encoding']}, which can't hold {e.object[e.start:e.end]!r}. "
+                                 "Nothing was written.") from None
+            written.append({"file": file, "path": str(out / file), "rows": len(rows)})
+    except BaseException:
+        for tmp, _ in ready:
             Path(tmp).unlink(missing_ok=True)
-            if not isinstance(e, UnicodeEncodeError):
-                raise
-            before = f" (written before it: {', '.join(x['file'] for x in written)})" if written else ""
-            raise Unwritable(f"{file} is {read['encoding']}, which can't hold {e.object[e.start:e.end]!r}: it wasn't "
-                             f"written{before}.") from None
-        written.append({"file": file, "path": str(out / file), "rows": len(rows)})
+        raise
+    # ponytail: the renames last, each atomic; a rename failing midway (disk gone) can still leave a mix
+    for tmp, final in ready:
+        os.replace(tmp, final)
     return written
