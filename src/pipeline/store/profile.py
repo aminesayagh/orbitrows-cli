@@ -114,9 +114,12 @@ def refresh(db, tables=None) -> None:
                                            "'\\_%' ESCAPE '\\' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'")]
     for t in tables:
         db.execute("DELETE FROM _profile WHERE table_name = ?", (t,))
-        for _, c, typ, *_ in db.execute(f'PRAGMA table_info("{t}")').fetchall():
-            db.execute("INSERT INTO _profile VALUES (?, ?, ?)", (t, c, json.dumps(counted(db, t, c, t in uploads),
-                                                                                  ensure_ascii=False)))
+        cols = db.execute(f'PRAGMA table_info("{t}")').fetchall()
+        numbers = [c for _, c, typ, *_ in cols                  # SQLite's numeric affinities (NUMERIC prices too)
+                   if any(a in typ.upper() for a in ("INT", "REAL", "FLOA", "DOUB", "NUM", "DEC"))]
+        for _, c, typ, *_ in cols:
+            out = counted(db, t, c, t in uploads) | (compared(db, t, c, numbers) if c in numbers else {})
+            db.execute("INSERT INTO _profile VALUES (?, ?, ?)", (t, c, json.dumps(out, ensure_ascii=False)))
 
 
 def counted(db, t: str, c: str, upload: bool) -> dict:
@@ -143,6 +146,21 @@ def counted(db, t: str, c: str, upload: bool) -> dict:
         out["not_number"] = [v for v in cells if not NUMBER.fullmatch(v)][:3]
         out["samples"] = [v for (v,) in db.execute(f'SELECT "{c}" FROM "{t}" WHERE {filled} LIMIT {SAMPLES}')]
     return out
+
+
+def compared(db, t: str, c: str, numbers: list[str]) -> dict:
+    """A number column's range, and on how many records it is above each other number column of its table (of those
+    both fill): {"min", "max", "above": {other: [above, both]}}. Shown beside its name when a request's words could
+    mean it or another ("costing the customer": price_mad, above cost_mad on 16 of 16 records), Jev then unsure
+    rather than silently wrong (2026-11-02 experiment: names alone 4 sure and wrong of 17, names and facts none)."""
+    others = [o for o in numbers if o != c]
+    parts = [f'MIN("{c}")', f'MAX("{c}")'] + [x for o in others for x in (
+        f'SUM("{c}" > "{o}")', f'SUM("{c}" IS NOT NULL AND "{o}" IS NOT NULL)')]
+    row = db.execute(f'SELECT {", ".join(parts)} FROM "{t}"').fetchone()
+    if row[0] is None:
+        return {}
+    return {"min": row[0], "max": row[1],
+            "above": {o: [row[2 + 2 * i] or 0, row[3 + 2 * i] or 0] for i, o in enumerate(others)}}
 
 
 def facts(db, table: str, column: str) -> dict:

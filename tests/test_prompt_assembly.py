@@ -346,12 +346,16 @@ def test_resembled_columns_are_one_choice_and_the_chosen_one_alone_is_kept():
     r = {"id": "r1", "text": t, "statement": "select"}
     sources = {"r1": {"target": {"type": "database_table", "reference": "t_variants"}}}
     named = {"r1": {"t_variants.c_cost_mad": {"how": "word", "words": ["cost"]}}}
-    q = questions([r], schema, sources, named, {}, None, {"r1": [{"value": 120, "start": t.find("120"), "end": 0}]})
+    from orbitrows.pipeline.store.profile import refresh
+    db = baseline()
+    refresh(db)
+    q = questions([r], schema, sources, named, {}, db, {"r1": [{"value": 120, "start": t.find("120"), "end": 0}]})
     choice = q["r1_means_t_variants.c_cost_mad"]
     assert not any(k.startswith("r1_chooses_t_variants.c_") and k.endswith(("cost_mad", "price_mad")) for k in q)
     assert {"t_variants.c_cost_mad", "t_variants.c_price_mad", "none"} <= set(choice["criteria"])
     assert "t_variants.c_weight_g" not in choice["criteria"]
     assert "'costing'" in choice["instructions"]["task"]      # the request's word, never the column's lemma
+    assert "above cost_mad on 16 of 16 records" in choice["criteria"]["t_variants.c_price_mad"]   # the profile's facts
     answers = {"r1_means_t_variants.c_cost_mad": ("t_variants.c_price_mad",
                                                   {"t_variants.c_price_mad": 0.9, "t_variants.c_cost_mad": 0.1})}
     out = build([r], schema, sources, [], answers)

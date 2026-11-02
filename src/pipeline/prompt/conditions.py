@@ -390,6 +390,25 @@ def number_column(schema, k) -> bool:
         and not any(c in fk["columns"] for fk in d.get("foreign_keys", []))
 
 
+def shown_facts(db, schema, key, group) -> str:
+    """" A number in MAD, from 30 to 400; above cost_mad on 16 of 16 records.": the import profile's facts beside a
+    resembled column's name (names alone: Jev sure and wrong; facts alone: a coin flip; both: unsure, a question)."""
+    t, c = key.split(".")
+    table = next(d["definition"]["sql_name"] for d in schema if d["definition"]["table_id"] == t)
+    name = column_info(schema, key)["sql_name"]
+    f = facts(db, table, name) if db is not None else {}
+    if "min" not in f:
+        return ""
+    unit = (column_info(schema, key)["unit"] or {}).get("unit")
+    text = f" A number{' in ' + unit if unit else ''}, from {f['min']:g} to {f['max']:g}"
+    for o in group:
+        other = column_info(schema, o)["sql_name"]
+        if o != key and other in f.get("above", {}):
+            above, both = f["above"][other]
+            text += f"; above {other} on {above} of {both} records"
+    return text + "."
+
+
 def as_written(text, lemmas) -> list[str]:
     """The request's own words for the column finder's lemmas ("costing" for "cost"): the choice quotes the request,
     never the column's name, which would answer it (H112, 2026-11-02)."""
@@ -430,7 +449,8 @@ def questions(requests, schema, sources, named=None, dated=None, db=None, units=
             words = "', '".join(as_written(r["text"], (named[rid][k] or {}).get("words") or [k.split(".c_")[1]]))
             q[f"{rid}_means_{k}"] = choice(CONTEXT, f"In {said}, the words close to '{words}': which column do they "
                                                     "keep or exclude records by?",
-                                           {c: asked[c] for c in group if c in asked}
+                                           {c: asked[c] + shown_facts(db, schema, c, group) for c in group
+                                            if c in asked}
                                            | {"none": "None of these: no condition on them."})
         for key, text in asked.items():
             if any(key in g for g in groups.values()):
