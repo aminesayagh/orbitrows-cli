@@ -119,41 +119,71 @@ def apart(text, a, b) -> bool | None:
     return False if outside else None
 
 
-def meets(shape, i, j) -> str | None:
-    """The kind ("all" | "any") of the node where conditions i and j meet in the shape."""
-    kind, kids = shape
-    holding = [k for k in kids if (k == i or k == j) or (isinstance(k, tuple) and {i, j} & leaves(k))]
-    if len(holding) == 1 and isinstance(holding[0], tuple):
-        return meets(holding[0], i, j)
-    return kind
+def bracket(text, ps):
+    """The conditions' tree shape from the sentence's grammar, built by merges (2026-11-02, replacing the pair
+    questions): the conditions in their written order; each coordination of the parse ("completed or refunded"),
+    innermost first, merges the neighbouring conditions it covers into one node; what is left is one last node.
+    → nested ("?", [children]) with the condition indexes as leaves, its joins (AND / OR) for Jev, one question per
+    node, n - 1 at most, never contradicting each other; None when a condition has no place in the request or a
+    coordination covers conditions that aren't neighbours (the pair questions then)."""
+    from orbitrows.pipeline.expressions.words import nlp
+    spans = [p.get("words") or p.get("at") or [] for p in ps]
+    if any(not x for x in spans):
+        return None
+    doc = nlp("en")(text)
+    toks = [{t.i for t in doc for a, b in x if a <= t.idx < b} for x in spans]
+    if any(not t for t in toks):
+        return None
+    items = [(i, {i}) for i in sorted(range(len(ps)), key=lambda i: min(a for a, _ in spans[i]))]
+    coords = []
+    for cc in (t for t in doc if t.dep_ == "cc"):            # each "and" / "or" joins its two neighbours only:
+        head = cc.head                                        # the member before it and the one after it
+        conj = sorted((c for c in head.children if c.dep_ == "conj"), key=lambda c: c.i)
+        right = next((c for c in conj if c.i > cc.i), None)
+        if right is None:
+            continue
+        members = [head] + [c for c in conj if c.i < cc.i]    # a list "black, navy or white": the commas before
+        joins = sorted(c.i for c in head.children if c.dep_ == "cc")   # the "or" belong to it, back to an
+        k = len(members) - 1                                  # earlier "and" / "or"
+        while k > 0 and not any(members[k - 1].i < j < members[k].i for j in joins):
+            k -= 1
+        later = {x.i for c in conj for x in c.subtree}
+        covered = {x.i for m in members[k:] for x in m.subtree if m is not head or x.i not in later}
+        m = head                                              # the same list parsed as a chain (navy a conj of
+        while k == 0 and m.dep_ == "conj" and not any(        # black, joined by a comma): up the chain
+                c.dep_ == "cc" and m.head.i < c.i < m.i for c in m.head.children):
+            m = m.head
+            covered |= {x.i for x in m.subtree} - {x.i for c in m.children if c.dep_ == "conj" for x in c.subtree}
+        covered |= {x.i for x in right.subtree}
+        hit = {i for i, t in enumerate(toks) if t & covered}
+        if len(hit) > 1:
+            coords.append(hit)
+    for hit in sorted(coords, key=len):                       # innermost first
+        at = [k for k, (_, c) in enumerate(items) if c & hit]
+        if len(at) < 2:
+            continue
+        if at != list(range(at[0], at[-1] + 1)):
+            return None
+        merged_ = ("?", [items[k][0] for k in at])
+        items[at[0]:at[-1] + 1] = [(merged_, set().union(*(items[k][1] for k in at)))]
+    # what no "and" / "or" joins (the October of "October sales that were completed or refunded", the two conditions
+    # of "active products not from Casa") meets at an AND: the grammar's, never asked (2026-11-02: asked, Jev
+    # answered OR to the October with the "or" in view, 11 right answers broken)
+    return items[0][0] if len(items) == 1 else ("&", [x for x, _ in items])
 
 
-def leaves(shape) -> set:
-    return {c for k in shape[1] for c in (leaves(k) if isinstance(k, tuple) else {k})}
-
-
-def trees(r, ps) -> list:
-    """Three conditions: every tree they can form (8), less those the sentence's grammar rules out: two conditions one
-    of which is written wholly outside the other's "or" meet at an AND (apart False). One choice for Jev among whole
-    trees, not three pair answers that can contradict each other (H361, 2026-11-02: "October sales that were
-    completed or refunded" built as (October AND refunded) OR completed).
-    ponytail: three conditions only; two are one pair already, four and more keep the pair questions (15 trees)."""
-    if len(ps) != 3:
+def nodes(shape) -> list:
+    """The shape's merge nodes, outermost first (depth first): their order names their questions (join|k)."""
+    if not isinstance(shape, tuple):
         return []
-    shapes = [("all", [0, 1, 2]), ("any", [0, 1, 2])]
-    for k in range(3):
-        rest = [i for i in range(3) if i != k]
-        shapes += [("all", [k, ("any", rest)]), ("any", [k, ("all", rest)])]
-    fixed = [(i, j) for i, j in pairs(3) if apart(r["text"], ps[i].get("words") or ps[i].get("at") or [],
-                                                     ps[j].get("words") or ps[j].get("at") or []) is False]
-    return [s for s in shapes if all(meets(s, i, j) == "all" for i, j in fixed)] or shapes
+    return ([shape] if shape[0] == "?" else []) + [n for c in shape[1] for n in nodes(c)]
 
 
-def spoken(shape, texts, top=True) -> str:
-    kind, kids = shape
-    s = (" AND " if kind == "all" else " OR ").join(spoken(k, texts, False) if isinstance(k, tuple) else texts[k]
-                                                     for k in kids)
-    return s if top else f"({s})"
+def joined(shape, kinds: dict):
+    """The bracketed shape with each node's answered kind: ("all" | "any", children)."""
+    if not isinstance(shape, tuple):
+        return shape
+    return ("all" if shape[0] == "&" else kinds[id(shape)], [joined(c, kinds) for c in shape[1]])
 
 
 def build_tree(shape, conds):
@@ -226,12 +256,19 @@ def questions(requests, schema, sources, section, params, parts=None) -> dict:
         if not g:
             continue
         ps = merged(g.get("predicates", []))
-        texts = [readable(schema, p["column"].split(".")[0], p["condition"]) for p in ps]
-        if shapes := trees(r, ps):                            # three conditions: one choice among whole trees
-            q[f"{rid}|tree"] = choice(CONTEXT, f"In {said}, how do its conditions combine? Which reading keeps exactly "
-                                               "the records the request asks for?",
-                                      {f"t{k}": spoken(s, texts) for k, s in enumerate(shapes)}, TREE_RULES)
-        elif len(ps) > 1:
+        shape = bracket(r["text"], ps) if len(ps) > 1 else None
+        if shape is not None:                                 # one question per merge, from the grammar's bracketing
+            texts = [readable(schema, p["column"].split(".")[0], p["condition"]) for p in ps]
+
+            def shown(c):
+                return texts[c] if not isinstance(c, tuple) else "(" + " · ".join(shown(x) for x in c[1]) + ")"
+            for k, node in enumerate(nodes(shape)):
+                q[f"{rid}|join|{k}"] = choice(
+                    CONTEXT, f"In {said}, these conditions are written together: {' · '.join(shown(c) for c in node[1])}"
+                             ". Does every record the request keeps meet all of them, or is one of them enough?",
+                    {"and": "Every record kept meets all of them: joined by AND.",
+                     "or": "One of them is enough: alternatives joined by OR."}, TREE_RULES)
+        elif len(ps) > 1:                                     # no bracketing: one question per pair
             for i, j in pairs(len(ps)):                       # one local question per pair: the tree follows
                 q[f"{rid}|{i}|{j}"] = choice(
                     CONTEXT, f"In {said}, take two of its conditions: {texts[i]} · {texts[j]}. Does every record "
@@ -306,17 +343,17 @@ def build(requests, section, params, answers, parts=None, schema=None) -> dict:
         conds = [p["condition"] for p in ps]
         if len(conds) <= 1:
             out[rid]["where"] = conds[0] if conds else None
-        elif shapes := trees(r, ps):                          # three conditions: the whole tree chosen
-            names = [p["column"].split(".c_")[-1] for p in ps]
-            texts = [readable(schema, x["column"].split(".")[0], x["condition"]) for x in ps] if schema else names
-            t = pick(rid, "tree", {f"t{k}": spoken(s, texts) for k, s in enumerate(shapes)},
-                     what=f"how {', '.join(names)} combine")
-            shape = shapes[int(t[1:])] if t and t[1:].isdigit() and int(t[1:]) < len(shapes) else None
-            if shape is None:
-                out[rid]["flagged"] = True
-                warnings.append({"request": rid, "problem": "how the conditions combine: no answer, AND kept"})
-                shape = ("all", [0, 1, 2])
-            out[rid]["where"] = build_tree(shape, conds)
+        elif (shape := bracket(r["text"], ps)) is not None:   # the grammar's merges, each join answered
+            kinds = {}
+            for k, node in enumerate(nodes(shape)):
+                names = [p["column"].split(".c_")[-1] for p in ps]
+                a = pick(rid, f"join|{k}", what="how " + " · ".join(
+                    names[c] if not isinstance(c, tuple) else "(…)" for c in node[1]) + " combine")
+                if a not in ("and", "or"):
+                    out[rid]["flagged"] = True
+                    warnings.append({"request": rid, "problem": "how the conditions combine: no answer, AND kept"})
+                kinds[id(node)] = "any" if a == "or" else "all"
+            out[rid]["where"] = build_tree(joined(shape, kinds), conds)
         else:
             names = [p["column"].split(".c_")[-1] for p in ps]
             said = {(i, j): pick(rid, f"{i}|{j}", what=f"how {names[i]} and {names[j]} combine")
