@@ -627,11 +627,18 @@ def operation_numbers(r, parts_req, params) -> set:
         if t.pos_ == "VERB":
             verbs.add(t.lemma_)
     governs = {t.i for t in doc if t.pos_ == "VERB" and t.lemma_ in verbs}   # "…, otherwise add 10": the same
-    out = set()                                               # operation, its column left implicit
+    for t in doc:                                             # operation, its column left implicit; "get 20 added to
+        if t.like_num and any(doc[g].head.i == t.i for g in governs) and t.head.pos_ == "VERB":   # the price": the
+            verbs.add(t.head.lemma_)                          # changing verb hangs off the number, whose own verb
+    governs = {t.i for t in doc if t.pos_ == "VERB" and t.lemma_ in verbs}   # (get) is the operation's too
+    out = set()
     for i, p in enumerate(params):
         t = next((x for x in doc if x.idx <= p.get("start", -1) < x.idx + len(x)), None)
-        if t is not None and any("Cmp" in x.morph.get("Degree") for x in (*t.children, *t.head.children)):
-            continue                                          # "less than 3", "more than 100": a comparison's
+        if t is not None and any(x.dep_ == "quantmod" and x.pos_ in ("ADP", "SCONJ") for x in t.children):
+            continue                                          # "less than 3", "over 100": a comparison's; "30 more"
+        if t is not None and any(doc[g].head.i == t.i for g in governs):   # (no than) may be an amount
+            out.add(i)                                        # "20 added to the price": the verb hangs off it
+            continue
         if t is not None and t.dep_ == "nummod":              # its own unit ("10 %", "500 grams")
             t = t.head
         while t is not None and t.i not in governs:           # up through prepositions only ("by", "to"): a

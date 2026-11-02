@@ -494,6 +494,8 @@ def test_a_change_s_operation_numbers_are_never_a_condition_s_value():
     assert split("Add 5 to the quantity of the inventory lines with less than 3 units.",
                  "t_inventory.c_quantity") == (["5"], ["3"])
     assert split("Delete the sales of at least 2 units.", None) == ([], ["2"])
+    assert split("Among the black variants, those costing over 100 get 20 added to the price and the rest get 10.",
+                 "t_variants.c_price_mad") == (["20", "10"], ["100"])   # TC042a: the verb hangs off the number
 
 
 def test_each_condition_reaches_the_formula_at_its_own_words():
