@@ -132,6 +132,45 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 - [ ] **One round of questions instead of several.** A request pauses at the first step with questions, then reruns and may pause again at a later step (2–3 interruptions). Ask a later step's questions in the same round when they don't depend on the earlier answers. Fewer interruptions, not fewer questions; more complex: last.
 - Rejected, not to do again: trying every answer in extra pipeline runs and asking only when the SQL differs (questions 32 → 10, but 146 s on some prompts).
 
+**Which column a request's words mean (2026-11-02, the 700-case benchmark), to think through:**
+
+*The case.* "Show the variants **costing the customer** under 200" means the price (what the customer pays). The pipeline used the cost column in all 6 such cases (H079, H112, H664, H686, H690, H698), 3 of them with no question: a silent wrong answer. Codex, which sees every column at once, chose the price.
+
+*The chain of causes, in order, and what each fix did:*
+1. **The column finder works on lemmas.** "costing" becomes "cost", which is cost_mad's name word, so the finder reported cost_mad as **named in full**. Fixed (d5a6474): `written_as_named()` compares the request's words as written (a plural counts: "costs", "prices"); "costing" or "priced" is only a resemblance.
+2. **The price was never offered.** Stage 1 only asked about the columns the finder named. Fixed (d5a6474): a column only resembled brings its table's number columns of the same unit.
+3. **One yes/no per column.** Jev judged "chooses by cost?" and "chooses by price?" separately, and said yes to cost each time. Fixed (262c9bd): one choice among those columns, with "none"; below SURE, a question with the same options. The choice quotes the request's own word, not the lemma, which named one option (c7f8a5d).
+4. **The options carry only names.** Jev sees "the cost_mad column" and "the price_mad column": nothing says who pays. Added (8d568e0): the import profile keeps each number column's range and how often it is above each other number column of its table; the options show them ("price_mad: a number, from 30 to 400; above cost_mad on 16 of 16 records").
+5. **Still open: in the pipeline, Jev stays sure** (0.94–0.99 for cost on H112, H686, H698).
+
+*Measured:*
+- Jev alone (17 requests: the 6 plus 11 controls on price, cost, quantity, reserved, reorder point; `.bench/names_vs_facts.py`, minimal state: the request and its table):
+
+  | Options show | Right | Wrong and sure (silent) |
+  |---|---|---|
+  | names only | 11/17 | 4 |
+  | facts only (names hidden) | 7/17 | 0 (a coin flip everywhere) |
+  | names and facts | 11/17 | **0** (the 6 at 0.50–0.64: questions) |
+
+- In the pipeline (live, 246 price, cost and stock cases): 233 → 237 right, questions 53 → 44; the 6 "costing" cases: 2 right, 1 asked, **3 still silent** (cost at 0.98).
+
+*Limitations met, each one a thing to decide on:*
+- **L1. Jev judges, it doesn't write.** It picks among options with probabilities; it can't produce "the price is what the customer pays". Whatever meaning a column has must reach Jev as text someone else wrote: its name, the profile's facts, or a description.
+- **L2. Jev's sureness depends on the context it's given.** The same choice, the same options: 0.64 with only the request, 0.98 inside the pipeline's full state (every table, every column, the other requests). An experiment made outside the pipeline's real state didn't predict the pipeline. Experiments on Jev must reuse the pipeline's state as it is sent.
+- **L3. Facts can't carry meaning.** A range or "above the other on every record" says how a column behaves, not what it is; without names Jev is near a coin flip (34–73%) even on easy controls ("units reserved"). Facts help only next to names.
+- **L4. Turning facts into meaning needs a domain habit.** "The customer pays the higher amount" is true of a shop, not of every table (any table, not only merchants). Jev may apply such a habit; the pipeline can't encode it (no word lists, no domain rules).
+- **L5. The written-name check is a surface check.** Exact word or a plural with "s"/"es". Irregular plurals, abbreviations in headers ("qty"), or a header in another language than the request fall outside it and count as a resemblance: more questions, never a silent choice.
+- **L6. Units from names are partial.** "price_mad" gives no unit to the header reader (MAD isn't read from a "_mad" suffix), so look-alike groups are formed on "no unit" too: price and cost are grouped (right), but so are all unitless number columns of a table (quantity, reserved, reorder point).
+- **L7. A refusal can pre-empt a question.** H598 ("lines with no units"): stage 2's value was a near tie (0.47 none, 0.42 the 0); the ledger refused the request before a question could settle it. A near tie should become the question first.
+- **L8. Benchmark noise near 0.5.** Cases whose questions sit at 0.5–0.55 flip between runs (H573, H580, H589: "never below their cost", four such questions each), and the benchmark takes the likeliest option. One run per case can't separate a fix's effect from this; repeated runs or settled answers would.
+- **L9. The profile's cost grows with number columns.** Each number column is compared with every other of its table, after every change (one query per column, 2 sums per other column). Fine for store tables of a few number columns; a wide table would make each refresh slower.
+
+*Directions, none started:*
+- **Column descriptions** written by the agent or the user at import, for look-alike groups only (a `text` question, kept on the column, shown in the options; `orbitrows describe` to correct it). Answers L1 and L4 without a domain rule.
+- **A smaller state for this choice:** send Jev only the request and the look-alike columns, not the whole store (L2). Changes what Jev sees for one question kind only.
+- **Always ask the user** when a request only resembles a column that has same-unit look-alikes, whatever Jev's sureness: no silent choice by construction, more questions.
+- **Near ties ask before the ledger refuses** (L7).
+
 **The 21 regression sets: 15 old failures out of 174:** dates (T11, T16, T17), formulas (F03, Y03, E05), linked records (L04, L06, M06), same-column cases (S05, S06), text changes (T03), new operations (N01, N06, N10).
 
 **Not started:** the unified grouping decision; date parts ("per month"); statistics (median, percentiles).
