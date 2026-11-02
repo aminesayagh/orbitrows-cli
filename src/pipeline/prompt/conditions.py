@@ -926,7 +926,9 @@ def build_2(db, requests, schema, stage1, values, params, parts, answers, sectio
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": f"matching record in {h['table']} refused", "error": err})
             out[rid].setdefault("predicates", []).append({"column": key, "operator": "in" if h["has"] else "not_in",
-                                                          "negated": False, "condition": cond, "linked": h["table"]})
+                                                          "negated": False, "condition": cond, "linked": h["table"],
+                                                          "count_words": count_words(r, h, params.get(rid, []),
+                                                                                     out[rid])})
         g = out.get(rid, {})
         if g and g.get("dropped") and not g["columns"] and not g.get("all_rows") and not rows_from(r):
             g["flagged"] = True                              # never widen to every record silently
@@ -972,6 +974,41 @@ def named_at(r, key, named) -> list[list[int]]:
     own = {w.casefold() for p in (((named or {}).get(r["id"]) or {}).get(key) or {}).get("words") or []
            for w in str(p).split()}
     return [[t.idx, t.idx + len(t)] for t in nlp("en")(r["text"]) if t.text.casefold() in own] if own else []
+
+
+def fold_linked(g: dict) -> None:
+    """A linked test no words wrote ("has a category") beside a condition on that same table ("of the Accessories
+    category") is dropped: it widened an OR (2026-10-29). Its count stays claimed when the condition means it ("at
+    least one white variant"); a "has no" test's doesn't ("no stock line in Casablanca": the condition alone inverts
+    it), so the ledger refuses the request, never runs it inverted (2026-11-02)."""
+    ps = g.get("predicates", [])
+    gone = [p for p in ps if p.get("linked") and not p.get("words") and any(
+        q is not p and q["column"].split(".")[0] == p["linked"] for q in ps)]
+    g["predicates"] = [p for p in ps if p not in gone]
+    for p in gone:
+        if p["operator"] == "in":
+            g.setdefault("count_words", []).extend(p.get("count_words", []))
+
+
+def count_words(r, h, params, req) -> list[list[int]]:
+    """The count an existence test writes ("at least one white variant": 1; "no sales": 0), for the ledger: a number of
+    that value the parse attaches to the test's own noun, the linked table's name ("sales") or the noun its conditions
+    on that table hang from ("no stock line in Casablanca"). One attached elsewhere ("no reviews and zero stock": the
+    zero is the stock's) is not this test's: the ledger refuses it if nothing else uses it (expert review, 2026-10-29)."""
+    from orbitrows.pipeline.expressions.words import nlp
+    want = 1 if h["has"] else 0
+    doc = nlp("en")(r["text"])
+    name = {t.lemma_.casefold() for t in nlp("en")(h["table"].removeprefix("t_").replace("_", " "))}
+    inner = [t for p in req.get("predicates", []) if p["column"].startswith(h["table"] + ".")
+             for a, b in p.get("words", []) for t in doc if a <= t.idx < b]
+    out = []
+    for p in params:
+        t = next((t for t in doc if t.idx == p.get("start")), None)
+        if t is None or p.get("value") != want:
+            continue
+        if t.head.lemma_.casefold() in name or any(t.head == i or t.head in i.ancestors for i in inner):
+            out.append([p["start"], p["end"]])
+    return out
 
 
 def none_words(r, key, params, named) -> list[list[int]]:
@@ -1501,10 +1538,8 @@ async def run(jev, prompt, requests, schema, sources: dict, values: list[dict], 
         build_2b(db, requests, schema, section, params, a2b, a2w)
         build_2c(db, requests, schema, section, params, a2b)
         build_2d(requests, schema, section, params, a2b, named_now)
-        for g in section["requests"].values():               # "of the Accessories category": its name's condition;
-            ps = g.get("predicates", [])                      # a linked test no words wrote ("has a category") on the
-            g["predicates"] = [p for p in ps if not (p.get("linked") and not p.get("words") and any(   # same table
-                q is not p and q["column"].split(".")[0] == p["linked"] for q in ps))]   # widened an OR (2026-10-29)
+        for g in section["requests"].values():
+            fold_linked(g)
         section["parameters"] = params
         section["jev"] = {"stage_1": answers, "stage_2": a2, "stage_2b": a2b} | ({"stage_2w": a2w} if a2w else {})
         return section

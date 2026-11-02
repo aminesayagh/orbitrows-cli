@@ -10,8 +10,9 @@ weight). Evidence is an occurrence in the request, never a value: two "0"s are t
     unaccounted(found, used)         the labels of the evidence no consumed words overlap (a duration around its
                                      number, the number inside a date: one occurrence read two ways, accounted for)
 Positions are the request's own (step 3's are the prompt's: shifted by the request's start). An existence test's
-implied count ("at least one black variant") covers no written 1 or 0: it would cover the 0 of another, dropped
-condition (expert review, 2026-10-29); such a request is refused until the existence test's own words are tracked."""
+implied count covers no written 1 or 0 by value: it would cover the 0 of another, dropped condition (expert review,
+2026-10-29). It covers only its own words ("count_words": "at least one white variant", "no sales"), the count the
+parse attaches to the test's own noun (conditions.count_words, 2026-11-02)."""
 
 
 def found(r: dict, values: list[dict], params: list[dict], dates: list[dict]) -> list[tuple[str, int, int]]:
@@ -24,8 +25,8 @@ def found(r: dict, values: list[dict], params: list[dict], dates: list[dict]) ->
 
 
 def used(cond: dict, group: dict, formula: list[dict], part: dict, text: str) -> list[tuple[int, int]]:
-    out = [tuple(w) for p in cond.get("predicates", []) for w in p.get("words", [])]
-    out += [tuple(w) for w in cond.get("having_words", []) + group.get("limit_words", [])]
+    out = [tuple(w) for p in cond.get("predicates", []) for w in p.get("words", []) + p.get("count_words", [])]
+    out += [tuple(w) for w in cond.get("having_words", []) + cond.get("count_words", []) + group.get("limit_words", [])]
     out += [(x["start"], x["end"]) for x in formula if x.get("role") != "where"]   # a "where" step is a condition's
     for a in part.get("assignments", []):                     # a change's written value, as written
         v = (a.get("value") or {}).get("value") if isinstance(a.get("value"), dict) else None

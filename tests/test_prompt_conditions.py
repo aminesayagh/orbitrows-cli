@@ -277,3 +277,42 @@ def test_the_value_search_follows_a_change_after_its_refresh():
     db.execute("UPDATE products SET brand = 'Orbix' WHERE brand = 'Orbit'")
     refresh(db, ["products"])
     assert brand("Orbix") == [["Orbix"]] and brand("Orbit") == []
+
+
+def test_an_existence_test_claims_only_the_count_the_parse_attaches_to_its_own_noun():
+    """The ledger's evidence for "at least one white variant" (1) and "no sales" / "no stock line in Casablanca" (0);
+    "no reviews and zero stock": the zero is the stock's, never the reviews test's (expert review, 2026-10-29)."""
+    from orbitrows.pipeline.prompt.conditions import count_words
+
+    def claimed(text, table, has, numbers, inner=()):
+        params = [{"start": text.index(w), "end": text.index(w) + len(w), "value": v} for w, v in numbers]
+        req = {"predicates": [{"column": f"{table}.c_x", "words": [[text.index(w), text.index(w) + len(w)]]}
+                              for w in inner]}
+        return [text[a:b] for a, b in count_words({"text": text}, {"table": table, "has": has}, params, req)]
+    assert claimed("Show the products that have at least one white variant.", "t_variants", True,
+                   [("one", 1)], ["white"]) == ["one"]
+    assert claimed("Which products have no sales at all?", "t_sales", False, [("no", 0)]) == ["no"]
+    assert claimed("Which variants have no stock line in Casablanca?", "t_inventory", False, [("no", 0)],
+                   ["Casablanca"]) == ["no"]
+    assert claimed("Which products have no reviews and zero stock?", "t_reviews", False,
+                   [("no", 0), ("zero", 0)]) == ["no"]
+    assert claimed("Show the products with at least one variant and stock of 1.", "t_variants", True,
+                   [("one", 1), ("1", 1)]) == ["one"]
+
+
+def test_a_folded_has_test_keeps_its_count_and_a_folded_has_no_test_leaves_it_to_the_ledger():
+    """"at least one white variant": the colour's condition means the test, its "one" stays claimed; "no stock line in
+    Casablanca": the warehouse condition alone inverts the test, so its "no" is left unclaimed and the request refused
+    (H392, 2026-11-02), never run as "has a line in Casablanca"."""
+    from orbitrows.pipeline.prompt import ledger
+    from orbitrows.pipeline.prompt.conditions import fold_linked
+
+    def folded(operator, count):
+        g = {"predicates": [{"column": "t_variants.c_variant_id", "operator": operator, "linked": "t_inventory",
+                             "count_words": [count]},
+                            {"column": "t_inventory.c_warehouse", "words": [[37, 47]]}]}
+        fold_linked(g)
+        assert [p["column"] for p in g["predicates"]] == ["t_inventory.c_warehouse"]
+        return ledger.unaccounted([("the count", *count)], ledger.used(g, {}, [], {}, ""))
+    assert folded("in", [20, 23]) == []
+    assert folded("not_in", [20, 22]) == ["the count"]
