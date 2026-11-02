@@ -568,3 +568,15 @@ def test_a_number_with_no_verb_of_its_own_repeats_the_earlier_change(monkeypatch
     recs = asyncio.run(steps.extract(None, t, up))["records"]
     changes = [(r["function"], r["right"]["value"]) for r in recs if r["role"] == "calculation"]
     assert changes == [("entry:INCREASE_PERCENT", 10), ("entry:INCREASE_PERCENT", 5)], changes
+
+
+def test_a_lookup_nothing_matched_that_names_a_table_is_records_not_a_value():
+    """Set T TC071a (2026-11-02): "… the other variants get 5 added": "other variants" kept as a value nothing matched,
+    the ledger refused the request; a lookup naming a table refers to records. "Kora", matched by nothing, stays."""
+    from orbitrows.pipeline.prompt.values import records_of
+    schema = store_of(baseline())
+    values = [{"text": "other variants", "role": "lookup", "column": None, "match": "none"},
+              {"text": "Kora", "role": "lookup", "column": None, "match": "none"},
+              {"text": "black", "role": "lookup", "column": "t_variants.c_color", "match": "exact"}]
+    records_of(values, schema)
+    assert [v["role"] for v in values] == ["not_value", "lookup", "lookup"]

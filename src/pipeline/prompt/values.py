@@ -458,4 +458,19 @@ async def run(jev, db, prompt: str, requests: list[dict], schema: list[dict], mo
         a1 = a1 or {"error": repr(e)}
     section = build(ps, a1, candidates, a2, schema)
     section["jev"] = {"call_1": a1, "candidates": candidates, "call_2": a2}
+    records_of(section["values"], schema)
     return section
+
+
+def records_of(values: list[dict], schema: list[dict]) -> None:
+    """A lookup nothing matched whose head noun is a table's own name ("the other variants", "the rest of the
+    products") names records, not a stored value: not_value (set T TC071a, 2026-11-02: kept as a value, the ledger
+    refused the request for it). A lookup nothing matched otherwise stays one ("from Kora": never run without it)."""
+    from orbitrows.pipeline.expressions.words import nlp
+    names = {t.lemma_.casefold() for d in schema for t in nlp("en")(d["definition"]["sql_name"].replace("_", " "))}
+    for v in values:
+        if v.get("role") == "lookup" and not v.get("column") and v.get("match") in (None, "none"):
+            doc = nlp("en")(v["text"])
+            head = next((t for t in doc if t.head.i == t.i), None)
+            if head is not None and head.lemma_.casefold() in names:
+                v["role"] = "not_value"

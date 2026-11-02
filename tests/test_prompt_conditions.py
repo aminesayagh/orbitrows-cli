@@ -412,3 +412,20 @@ def test_the_skeleton_reads_except_which_and_keeps_unchanged_rows_out():
     p = skeleton.plan(t, recs, "t_variants.c_price_mad")
     skeleton.finish(p, {})
     assert p["keep_rows"] == ["r1", "r3"]                     # the other colours: never touched
+
+
+def test_a_section_with_one_condition_holds_its_comma_separated_steps():
+    """Set T TC072a (2026-11-02): "Black variants: price up 10%, then minus 5; every other variant: price plus 5":
+    the comma made "then minus 5" a clause of its own, the others'. ";" separates the groups."""
+    from orbitrows.pipeline.expressions import skeleton
+    t = "Black variants: price up 10%, then minus 5; every other variant: price plus 5."
+
+    def rec(i, role, text, pred=None):
+        a = t.find(text)
+        return {"id": f"r{i}", "role": role, "text": text, "start": a, "end": a + len(text),
+                "function": "case" if role == "branch" else "entry:ADD_AMOUNT",
+                "left": {"pred": pred} if pred else {"unresolved": True}, "right": None}
+    recs = [rec(1, "branch", "Black", "p1"), rec(2, "calculation", "price up 10%"), rec(3, "calculation", "minus 5"),
+            rec(4, "calculation", "price plus 5")]
+    got = skeleton.finish(skeleton.plan(t, recs, "t_variants.c_price_mad"), {})
+    assert (got[("r1", "then")], got[("r3", "left")], got[("r1", "else")]) == ("r3", "r2", "r4")

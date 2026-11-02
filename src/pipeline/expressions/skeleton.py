@@ -67,6 +67,11 @@ def plan(text: str, recs: list[dict], target: str, negated=()) -> dict | None:
         c = clause(next(x["start"] for x in branches if x["id"] == b))
         group |= {o["id"]: f"others:{parent.get(b)}" for o in ops   # the other operation of its clause: the others'
                   if clause(at(o)) == c and o["id"] not in mine_ and o["id"] not in group}
+    if len(sections) > 1:                                     # ";" separates the groups: a section with one condition
+        for o in ops:                                         # holds its steps, the commas inside are steps ("Black
+            mine_ = [b for b in branches if section(b["start"]) == section(at(o))]   # variants: price up 10%, then
+            if o["id"] not in group and len(mine_) == 1:     # minus 5; every other variant: price plus 5", TC072a)
+                group[o["id"]] = mine_[0]["id"]
     for o in ops:
         if o["id"] in group:
             continue
