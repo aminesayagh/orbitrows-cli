@@ -113,6 +113,18 @@ def test_a_condition_that_cannot_be_placed_stops_its_request_never_widens_it():
     assert out["program"] == [] and any("could not be placed" in q["problem"] for q in out["questions"]), out
 
 
+def test_a_request_whose_only_condition_could_not_be_built_is_refused_never_run_on_every_row():
+    """H185 (2026-11-02): "sales sold before October 5", its date unread: sold_on chosen, no predicate built, and
+    the read ran on every sale."""
+    db = baseline()
+    reqs = [{"id": "r1", "text": "Which sales were sold before October 5?", "statement": "select"}]
+    out = assemble.assemble(db, store_of(db), reqs, {"r1": {"statement": "select"}},
+                            {"r1": {"from": {"type": "database_table", "reference": "t_sales"}}}, {"r1": {}},
+                            {"r1": {"all_rows": False, "columns": ["t_sales.c_sold_on"], "flagged": True,
+                                    "predicates": []}}, {"r1": {}}, [])
+    assert out["program"] == [] and any("couldn't be read" in q["problem"] for q in out["questions"]), out
+
+
 def test_a_window_condition_deletes_the_records_its_ranking_leaves_out():
     """"Delete every sale but the most recent of each variant": the window, computed in a subquery, in the WHERE."""
     from orbitrows.pipeline.operations import builders

@@ -483,6 +483,12 @@ def assemble(db, schema, requests, operation, sources, parts, conditions, groupi
         if c6.get("refused") or g6.get("refused"):          # a condition it cannot build: never run without it
             warnings.append({"request": rid, "problem": f"not built: {c6.get('refused') or g6['refused']}"})
             continue
+        if c6.get("columns") and c6.get("flagged") and not any(c6.get(k) for k in (
+                "all_rows", "predicates", "linked", "computed", "rows_from")) and not g6.get("having") \
+                and not g6.get("rows_from"):                  # it chose its rows' columns, and none was built
+            warnings.append({"request": rid, "problem": "not built: its condition on "
+                             f"{', '.join(c6['columns'])} couldn't be read, and nothing else chooses its rows"})
+            continue                                          # never run on every row instead (H185, 2026-11-02)
         if g6.get("having") and not g6.get("group_by"):       # a condition on groups, and no group column
             warnings.append({"request": rid, "problem": "not built: the condition on groups has no group column"})
             continue
