@@ -300,19 +300,37 @@ def test_an_existence_test_claims_only_the_count_the_parse_attaches_to_its_own_n
                    [("one", 1), ("1", 1)]) == ["one"]
 
 
-def test_a_folded_has_test_keeps_its_count_and_a_folded_has_no_test_leaves_it_to_the_ledger():
-    """"at least one white variant": the colour's condition means the test, its "one" stays claimed; "no stock line in
-    Casablanca": the warehouse condition alone inverts the test, so its "no" is left unclaimed and the request refused
-    (H392, 2026-11-02), never run as "has a line in Casablanca"."""
+def test_a_folded_has_check_is_dropped_and_a_has_no_check_takes_its_conditions_inside():
+    """"at least one white variant": the colour's condition means the "has" check, which is dropped, its "one" claimed.
+    "no stock line in Casablanca" (H392, 2026-11-02): the "has no" check is the meaning, never dropped (the warehouse
+    alone meant the opposite): the warehouse goes inside it, NOT IN (… WHERE warehouse = 'Casablanca')."""
     from orbitrows.pipeline.prompt import ledger
-    from orbitrows.pipeline.prompt.conditions import fold_linked
+    from orbitrows.pipeline.prompt.conditions import fold_linked, known_in
+    warehouse = {"type": "comparison", "operator": "=", "left": {"type": "column", "source": "t_inventory",
+                                                                 "reference": "c_warehouse"},
+                 "right": {"type": "literal", "value": "Casablanca"}}
 
     def folded(operator, count):
+        check = known_in([("t_variants", "c_variant_id", "t_inventory", "c_variant_id")], operator == "in")
         g = {"predicates": [{"column": "t_variants.c_variant_id", "operator": operator, "linked": "t_inventory",
-                             "count_words": [count]},
-                            {"column": "t_inventory.c_warehouse", "words": [[37, 47]]}]}
+                             "condition": check, "count_words": [count]},
+                            {"column": "t_inventory.c_warehouse", "operator": "=", "condition": warehouse,
+                             "words": [[37, 47]]}]}
         fold_linked(g)
-        assert [p["column"] for p in g["predicates"]] == ["t_inventory.c_warehouse"]
-        return ledger.unaccounted([("the count", *count)], ledger.used(g, {}, [], {}, ""))
-    assert folded("in", [20, 23]) == []
-    assert folded("not_in", [20, 22]) == ["the count"]
+        return g, ledger.unaccounted([("the count", *count), ("Casablanca", 37, 47)], ledger.used(g, {}, [], {}, ""))
+    g, missing = folded("in", [20, 23])
+    assert [p["column"] for p in g["predicates"]] == ["t_inventory.c_warehouse"] and missing == []
+    g, missing = folded("not_in", [20, 22])
+    [p] = g["predicates"]
+    assert p["operator"] == "not_in" and missing == []
+    text = str(p["condition"])
+    assert "Casablanca" in text and "'source': 't_inventory_has'" in text and "'source': 't_inventory'," not in text
+    negated = {"type": "any", "children": [{"type": "null_check", "operator": "is_null"},
+                                            {"type": "not", "operand": warehouse}]}
+    check = known_in([("t_variants", "c_variant_id", "t_inventory", "c_variant_id")], False)
+    g = {"predicates": [{"column": "t_variants.c_variant_id", "operator": "not_in", "linked": "t_inventory",
+                         "condition": check},
+                        {"column": "t_inventory.c_warehouse", "operator": "=", "negated": True, "condition": negated,
+                         "words": [[37, 47]]}]}
+    fold_linked(g)                                            # "not stored in Casablanca": one not, the check's
+    assert "'type': 'not'" not in str(g["predicates"][0]["condition"]["query"]["scope"])

@@ -253,11 +253,16 @@ COMPARES = ("Only those whose records of {0} compare with a number: how many the
 
 
 def has_options(other: str) -> dict:
-    return {"has": f"Only those with a matching record in {other} ('already in {other}', 'that exist in {other}').",
-            "has_not": f"Only those with no matching record in {other} ('not in {other} yet', 'missing from "
-                       f"{other}', 'without any {other}').",
-            "neither": "Neither: it does not choose by that (a value of that table, 'the Kora ones', is a condition "
-                       "on its column)."}
+    """The existence check's options: about a related record existing at all, never about a value it holds (2026-11-02:
+    "of the Accessories category" answered 'has', a useless check beside the name's condition)."""
+    return {"has": f"Only those for which a record of {other} exists at all ('that have {other}', 'already in "
+                   f"{other}', 'with at least one of {other}').",
+            "has_not": f"Only those for which no record of {other} exists ('with no {other}', 'not in {other} yet', "
+                       f"'missing from {other}', 'never in {other}'), possibly no record with some value ('no "
+                       f"{other} in Rabat', 'not stored in Rabat', 'never sold in October').",
+            "neither": f"Neither: it does not ask whether a record of {other} exists. Naming a value stored in "
+                       f"{other} ('of the Accessories category', 'from PaperHub', 'the Kora ones') is a condition "
+                       "on that value, not this."}
 
 
 def keyed_to(schema, table) -> dict:
@@ -1053,17 +1058,63 @@ def named_at(r, key, named) -> list[list[int]]:
 
 
 def fold_linked(g: dict) -> None:
-    """A linked test no words wrote ("has a category") beside a condition on that same table ("of the Accessories
-    category") is dropped: it widened an OR (2026-10-29). Its count stays claimed when the condition means it ("at
-    least one white variant"); a "has no" test's doesn't ("no stock line in Casablanca": the condition alone inverts
-    it), so the ledger refuses the request, never runs it inverted (2026-11-02)."""
+    """An existence check no words wrote beside a condition on that same table. A "has" check ("has a category" beside
+    "of the Accessories category") is a repeat of the condition: dropped, it widened an OR (2026-10-29); its count
+    stays claimed ("at least one white variant"). A "has no" check is the request's meaning ("no stock line in
+    Casablanca"): kept, the conditions on its table placed inside it, the records that must be missing (2026-11-02:
+    dropped, the condition alone meant the opposite)."""
     ps = g.get("predicates", [])
-    gone = [p for p in ps if p.get("linked") and not p.get("words") and any(
-        q is not p and q["column"].split(".")[0] == p["linked"] for q in ps)]
-    g["predicates"] = [p for p in ps if p not in gone]
-    for p in gone:
-        if p["operator"] == "in":
+    beside = {id(p): [q for q in ps if q is not p and not q.get("linked") and q["column"].split(".")[0] == p["linked"]]
+              for p in ps if p.get("linked") and not p.get("words")}
+    out = []
+    for p in ps:
+        inner = beside.get(id(p))
+        if not inner:
+            out.append(p)
+        elif p["operator"] == "in":                           # a repeat: dropped, its count claimed
             g.setdefault("count_words", []).extend(p.get("count_words", []))
+        else:                                                 # has no: the conditions go inside
+            out.append(p | {"condition": nested(p["condition"], p["linked"], [affirmed(q) for q in inner]),
+                            "words": [w for q in inner for w in q.get("words", [])]})
+    inside = {id(q) for p in ps if p.get("operator") != "in" and beside.get(id(p)) for q in beside[id(p)]}
+    g["predicates"] = [p for p in out if id(p) not in inside]
+
+
+def affirmed(q: dict) -> dict:
+    """A condition placed inside a "has no" check, its negation removed: the request's one "not" is the check's ("not
+    stored in Rabat": no line in Rabat; negated again, no line outside Rabat, H391, 2026-11-02).
+    ponytail: two real negations ("no stock line outside Rabat") lose one; track the negation's words if one appears."""
+    c = q["condition"]
+    if not q.get("negated"):
+        return c
+    if c.get("type") == "any":                                # NOT (x = v) OR x IS NULL: the not's operand
+        c = next(x for x in c["children"] if x.get("type") == "not")
+    return c["operand"] if c.get("type") == "not" else c
+
+
+def nested(cond: dict, table: str, inner: list[dict]) -> dict:
+    """The existence check's subquery on `table` with `inner` (conditions on that table's columns) added to its WHERE,
+    their columns renamed to the subquery's alias."""
+    def rename(node, alias):
+        if isinstance(node, dict):
+            if node.get("type") == "column" and node.get("source") == table:
+                return node | {"source": alias}
+            return {k: rename(v, alias) for k, v in node.items()}
+        return [rename(v, alias) for v in node] if isinstance(node, list) else node
+
+    def walk(node):
+        if isinstance(node, list):
+            return [walk(v) for v in node]
+        if not isinstance(node, dict):
+            return node
+        frm = node.get("from") or {}
+        if node.get("type") == "select" and frm.get("reference") == table:
+            scope = node.get("scope") or {}
+            where = [scope["where"]] if scope.get("where") else []
+            return node | {"scope": {"type": "filtered", "where": {"type": "all", "children": where + [
+                rename(c, frm.get("alias") or table) for c in inner]}}}
+        return {k: walk(v) for k, v in node.items()}
+    return walk(cond)
 
 
 def count_words(r, h, params, req) -> list[list[int]]:
