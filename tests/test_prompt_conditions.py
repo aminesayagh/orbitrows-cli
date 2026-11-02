@@ -334,3 +334,27 @@ def test_a_folded_has_check_is_dropped_and_a_has_no_check_takes_its_conditions_i
                          "words": [[37, 47]]}]}
     fold_linked(g)                                            # "not stored in Casablanca": one not, the check's
     assert "'type': 'not'" not in str(g["predicates"][0]["condition"]["query"]["scope"])
+
+
+def test_three_conditions_are_one_choice_among_whole_trees():
+    """H361 (2026-11-02): "October sales that were completed or refunded": three pair answers built (October AND
+    refunded) OR completed. Now one choice among the trees the grammar allows (October is written outside the "or":
+    it meets both statuses at an AND), and the chosen tree is the WHERE."""
+    t = "Show the October sales that were completed or refunded."
+    r = {"id": "r1", "text": t, "statement": "select"}
+
+    def cond(col, value):
+        return {"type": "comparison", "operator": "=", "left": {"type": "column", "source": "t_sales", "reference": col},
+                "right": {"type": "literal", "value": value}}
+    span = lambda w: [[t.find(w), t.find(w) + len(w)]]
+    ps = [{"column": "t_sales.c_sold_on", "condition": cond("c_sold_on", "2026-10"), "words": span("October")},
+          {"column": "t_sales.c_status", "condition": cond("c_status", "completed"), "words": span("completed")},
+          {"column": "t_sales.c_status", "condition": cond("c_status", "refunded"), "words": span("refunded")}]
+    shapes = grouping.trees(r, ps)
+    right = ("all", [0, ("any", [1, 2])])
+    assert right in shapes and ("any", [2, ("all", [0, 1])]) not in shapes   # H361's tree is ruled out
+    assert grouping.spoken(right, ["A", "B", "C"]) == "A AND (B OR C)"
+    section = {"requests": {"r1": {"predicates": ps}}, "warnings": []}
+    answers = {"r1|tree": (f"t{shapes.index(right)}", {f"t{shapes.index(right)}": 0.9})}
+    where = grouping.build([r], section, {}, answers)["requests"]["r1"]["where"]
+    assert where["type"] == "all" and where["children"][1]["type"] == "any"

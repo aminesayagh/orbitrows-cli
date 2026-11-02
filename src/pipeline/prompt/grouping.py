@@ -119,6 +119,43 @@ def apart(text, a, b) -> bool | None:
     return False if outside else None
 
 
+def meets(shape, i, j) -> str | None:
+    """The kind ("all" | "any") of the node where conditions i and j meet in the shape."""
+    kind, kids = shape
+    holding = [k for k in kids if (k == i or k == j) or (isinstance(k, tuple) and {i, j} & leaves(k))]
+    if len(holding) == 1 and isinstance(holding[0], tuple):
+        return meets(holding[0], i, j)
+    return kind
+
+
+def leaves(shape) -> set:
+    return {c for k in shape[1] for c in (leaves(k) if isinstance(k, tuple) else {k})}
+
+
+def trees(r, ps) -> list:
+    """Three conditions: every tree they can form (8), less those the sentence's grammar rules out: two conditions one
+    of which is written wholly outside the other's "or" meet at an AND (apart False). One choice for Jev among whole
+    trees, not three pair answers that can contradict each other (H361, 2026-11-02: "October sales that were
+    completed or refunded" built as (October AND refunded) OR completed).
+    ponytail: three conditions only; two are one pair already, four and more keep the pair questions (15 trees)."""
+    if len(ps) != 3:
+        return []
+    shapes = [("all", [0, 1, 2]), ("any", [0, 1, 2])]
+    for k in range(3):
+        rest = [i for i in range(3) if i != k]
+        shapes += [("all", [k, ("any", rest)]), ("any", [k, ("all", rest)])]
+    fixed = [(i, j) for i, j in pairs(3) if apart(r["text"], ps[i].get("words") or ps[i].get("at") or [],
+                                                     ps[j].get("words") or ps[j].get("at") or []) is False]
+    return [s for s in shapes if all(meets(s, i, j) == "all" for i, j in fixed)] or shapes
+
+
+def spoken(shape, texts, top=True) -> str:
+    kind, kids = shape
+    s = (" AND " if kind == "all" else " OR ").join(spoken(k, texts, False) if isinstance(k, tuple) else texts[k]
+                                                     for k in kids)
+    return s if top else f"({s})"
+
+
 def build_tree(shape, conds):
     kind, children = shape
     return {"type": kind, "children": [build_tree(c, conds) if isinstance(c, tuple) else conds[c] for c in children]}
@@ -189,8 +226,12 @@ def questions(requests, schema, sources, section, params, parts=None) -> dict:
         if not g:
             continue
         ps = merged(g.get("predicates", []))
-        if len(ps) > 1:
-            texts = [readable(schema, p["column"].split(".")[0], p["condition"]) for p in ps]
+        texts = [readable(schema, p["column"].split(".")[0], p["condition"]) for p in ps]
+        if shapes := trees(r, ps):                            # three conditions: one choice among whole trees
+            q[f"{rid}|tree"] = choice(CONTEXT, f"In {said}, how do its conditions combine? Which reading keeps exactly "
+                                               "the records the request asks for?",
+                                      {f"t{k}": spoken(s, texts) for k, s in enumerate(shapes)}, TREE_RULES)
+        elif len(ps) > 1:
             for i, j in pairs(len(ps)):                       # one local question per pair: the tree follows
                 q[f"{rid}|{i}|{j}"] = choice(
                     CONTEXT, f"In {said}, take two of its conditions: {texts[i]} · {texts[j]}. Does every record "
@@ -265,6 +306,17 @@ def build(requests, section, params, answers, parts=None, schema=None) -> dict:
         conds = [p["condition"] for p in ps]
         if len(conds) <= 1:
             out[rid]["where"] = conds[0] if conds else None
+        elif shapes := trees(r, ps):                          # three conditions: the whole tree chosen
+            names = [p["column"].split(".c_")[-1] for p in ps]
+            texts = [readable(schema, x["column"].split(".")[0], x["condition"]) for x in ps] if schema else names
+            t = pick(rid, "tree", {f"t{k}": spoken(s, texts) for k, s in enumerate(shapes)},
+                     what=f"how {', '.join(names)} combine")
+            shape = shapes[int(t[1:])] if t and t[1:].isdigit() and int(t[1:]) < len(shapes) else None
+            if shape is None:
+                out[rid]["flagged"] = True
+                warnings.append({"request": rid, "problem": "how the conditions combine: no answer, AND kept"})
+                shape = ("all", [0, 1, 2])
+            out[rid]["where"] = build_tree(shape, conds)
         else:
             names = [p["column"].split(".c_")[-1] for p in ps]
             said = {(i, j): pick(rid, f"{i}|{j}", what=f"how {names[i]} and {names[j]} combine")
