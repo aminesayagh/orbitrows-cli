@@ -444,6 +444,19 @@ def test_an_update_from_an_upload_takes_its_values_through_the_key_converted(sup
         ("A1", 15.0), ("B2", 20.0), ("C3", 30.0)]                # C3 is not in the file: unchanged
 
 
+def test_an_update_from_an_upload_without_a_key_link_is_refused_and_changes_nothing(supplied):
+    """The upload's refs matched no store key at upload: a message using its values is refused with the reason,
+    never a crash nor a guessed match."""
+    from orbitrows.pipeline.merge import convert
+    convert.save(supplied.db, 2, "EUR", "MAD", "x * 10")
+    supplied.db.execute("UPDATE _incoming_columns SET references_column_id = NULL")
+    refresh(supplied.db)
+    reply = supplied.message("update the prices from supplier.csv")
+    assert not reply["ok"] and "no key linked to the store" in reply["error"], reply
+    assert supplied.db.execute("SELECT price FROM products ORDER BY sku").fetchall() == [(10.0,), (20.0,), (30.0,)]
+    assert not supplied.changes
+
+
 def test_a_repeating_reference_beside_a_unique_key_still_updates(supplied):
     from orbitrows.pipeline.merge import convert
     convert.save(supplied.db, 2, "EUR", "MAD", "x * 10")

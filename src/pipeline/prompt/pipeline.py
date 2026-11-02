@@ -145,7 +145,10 @@ def reader(db, store: list[dict], incoming: list[dict], asked: list, errors: lis
         plan = convert.plan(db, upload, (i, s))              # its pair's units, linked or not
         if upload not in checked:                             # one key on a row each is enough to match the rows
             why = [repeated(db, names[upload], k) for k in dict.fromkeys(k for k, *_ in keys[upload])]
-            checked[upload] = None if not all(why) else why[0]  # a repeating reference (a product per variant) too
+            checked[upload] = None if not all(why) else why[0] if why else (   # a repeating reference too
+                f"{names[upload]} has no key linked to the store's records (none of its key columns holds enough of "
+                "a store key's values), so its rows can't be matched to them: nothing is guessed. Check that the "
+                "file has the store's key column (a SKU, an id), then upload it again.")
             if checked[upload]:
                 errors.append({"request": rid, "stage": "key", "error": checked[upload]})
         if checked[upload]:
