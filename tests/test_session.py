@@ -324,18 +324,22 @@ def test_a_message_waiting_for_answers_is_kept_when_the_session_ends(piped, serv
     s.db.execute("BEGIN IMMEDIATE")                           # for the fixture's own end
 
 
-def test_a_message_waits_for_its_answers_then_is_applied(piped, served, capsys):
+def test_a_message_waits_for_its_answers_then_is_applied(piped, served, capsys, monkeypatch):
+    monkeypatch.setenv("ORBITROWS_ANSWERS", "user")
     code, out, err = run(capsys, "message", "double", "the prices")
     assert code == 3, err
-    assert json.loads(out) == {"store": served.id, "name": "shop", "step": "operation", "notices": [NOTICE],
+    asked = json.loads(out)
+    assert asked.pop("to_answer")["who"].startswith("the user")    # the user's setting: every question relayed
+    assert asked == {"store": served.id, "name": "shop", "step": "operation", "notices": [NOTICE],
                                "questions": [{"id": "m_1a2b3c4d", "request": "r1", "step": "operation",
                                               "problem": "double them?", "type": "yes_no"}]}
     code, out, err = run(capsys, "answer", "m_1a2b3c4d", "maybe")
     assert code == 1 and "Answers: yes, no" in err
-    code, out, err = run(capsys, "answer", "m_1a2b3c4d", "YES")   # the store: the latest with a session
+    code, out, err = run(capsys, "answer", "m_1a2b3c4d", "YES", "--by", "agent")   # the latest store with a session
     assert code == 0, err
     assert json.loads(out) == {"store": served.id, "name": "shop", "notices": [EVERY],   # NOTICE was told already
-                               "applied": [{"request": "r1", "sql": DOUBLE, "changed": 2}]}
+                               "applied": [{"request": "r1", "sql": DOUBLE, "changed": 2}],
+                               "answered_by_agent": [{"problem": "double them?", "answer": "yes"}]}
     db = piped.session.db
     assert db.execute(SELECT).fetchall() == [(20.0,), (40.0,)] and prices(served) == [10.0, 20.0]
     assert db.execute("SELECT prompt, sql FROM _history").fetchall() == [("double the prices", json.dumps([DOUBLE]))]

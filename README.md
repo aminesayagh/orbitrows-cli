@@ -79,6 +79,8 @@ orbitrows answer m_1a2b3c4d yes
 
 When the last question is answered, the request runs. Exit codes: **0** done, **1** refused (nothing changed, the reason is on stderr), **3** waiting for your answers.
 
+When an AI agent runs OrbitRows for you, the questions come with a short guide for it. By default the agent answers a question itself when you've already settled it (you said "percent" earlier), marks it `--by agent`, and tells you what it answered; anything else it asks you. To have every question come to you, add `ORBITROWS_ANSWERS=user` to `~/.config/orbitrows/env`.
+
 ## Saving and undoing
 
 Your changes run inside a **session**, a background process per store:
@@ -91,7 +93,7 @@ Your changes run inside a **session**, a background process per store:
 
 ## Use it from an AI agent
 
-OrbitRows is built to be driven by an agent such as Claude Code or Codex: results are JSON, exit codes say what happened (0 done, 1 refused, 3 waiting for answers), and questions come with ids and options. The skill in [`skills/orbitrows/SKILL.md`](skills/orbitrows/SKILL.md) (the open Agent Skills format) teaches the agent the rules: check `status` after a resume, pass your words as they are, relay every question to you, and save only when you say so.
+OrbitRows is built to be driven by an agent such as Claude Code or Codex: results are JSON, exit codes say what happened (0 done, 1 refused, 3 waiting for answers), and questions come with ids and options. The skill in [`skills/orbitrows/SKILL.md`](skills/orbitrows/SKILL.md) (the open Agent Skills format) teaches the agent the rules: check `status` after a resume, pass your words as they are, answer only the questions you've already settled (and say so), ask you the rest, and save only when you say so.
 
 Install it by copying the folder into the agent's skills folder:
 

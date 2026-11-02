@@ -151,11 +151,28 @@ def unseen(progress: dict, warnings: list[dict]) -> list[dict]:
     return new
 
 
+FORMATS = {"choice": "one of its options' answer values", "yes_no": "yes or no",
+           "formula": "an expression in x, e.g. x * 10", "name": "a table name, or skip"}
+
+
+def guide() -> dict:
+    """How the questions are answered, for a program reading stdout (an AI agent); nothing for a person at a terminal.
+    ORBITROWS_ANSWERS (settings file or environment): agent (default), the agent answers what the user's own words or
+    the store settle and asks the user the rest; user, every question goes to the user."""
+    if sys.stdout.isatty():
+        return {}
+    who = ("the user: relay each question as asked, then answer with the user's choice"
+           if os.environ.get("ORBITROWS_ANSWERS", "agent") == "user" else
+           "you, when the user's own words or the store's data settle it (add --by agent); otherwise ask the user. "
+           "Never guess: these are the questions the tool couldn't decide. Tell the user what you answered and why")
+    return {"to_answer": {"who": who, "command": "orbitrows answer <id> <answer>", "formats": FORMATS}}
+
+
 def paused(store: tuple[str, str | None], progress: dict, notices: list[dict]) -> int:
     """The open questions and the new notices as one JSON object on stdout, for the LLM driving this CLI."""
     notices = [{k: n[k] for k in NOTICE if n.get(k) is not None} for n in notices]
-    print(json.dumps({"store": store[0], "name": store[1]} | questions.asking(progress, notices, QUESTION, nulls=True),
-                     ensure_ascii=False))
+    print(json.dumps({"store": store[0], "name": store[1]} | questions.asking(progress, notices, QUESTION, nulls=True)
+                     | guide(), ensure_ascii=False))
     return PAUSED
 
 
@@ -246,19 +263,19 @@ def store(paths: list[Path], name: str | None, encoding: str | None = None) -> i
     return importing((store_id, name), progress)
 
 
-def answer(question: str | None, given: str | None, ref: str | None) -> int:
+def answer(question: str | None, given: str | None, ref: str | None, by: str = "user") -> int:
     """Records the user's answer to an open question; once none is open, the import runs again (a retry too). A
     message's question (m_…) is its session's."""
     if question and question.startswith("m_"):
-        return answered(question, given, ref)
+        return answered(question, given, ref, by)
     if question and question.startswith("i_"):
-        return answer_incoming(question, given, ref)
+        return answer_incoming(question, given, ref, by)
     store_id = resolve(ref, registry.WAITING)[0]
     with storage.locked(store_id):                            # to the end: a parallel answer waits, so none is lost
-        return record(resolve(store_id, registry.WAITING), question, given)   # again: the one it waited for may be done
+        return record(resolve(store_id, registry.WAITING), question, given, by)   # again: the one it waited for may be done
 
 
-def record(target: tuple[str, str | None], question: str | None, given: str | None) -> int:
+def record(target: tuple[str, str | None], question: str | None, given: str | None, by: str = "user") -> int:
     progress = storage.load_import(target[0])
     if question is not None:
         try:
@@ -281,7 +298,7 @@ def record(target: tuple[str, str | None], question: str | None, given: str | No
             file = q["file"]
             table = read(storage.folder(target[0]) / "files" / file, match)
             progress.setdefault("encodings", {})[file] = table["encoding"]
-        questions.record(progress, q, match, QUESTION, nulls=True)
+        questions.record(progress, q, match, QUESTION, nulls=True, by=by)
         storage.save_import(target[0], progress)
     if progress["open"]:
         registry.set_status(target[0], registry.WAITING)      # a killed resume's store was left importing
@@ -293,7 +310,7 @@ def record(target: tuple[str, str | None], question: str | None, given: str | No
 def incoming_paused(target: tuple[str, str | None], upload_id: str, progress: dict, notices: list) -> int:
     notices = [{k: n[k] for k in NOTICE if n.get(k) is not None} for n in notices]   # as paused() shows them
     print(json.dumps({"store": target[0], "name": target[1], "upload": upload_id}
-                     | questions.asking(progress, notices, QUESTION, nulls=True), ensure_ascii=False))
+                     | questions.asking(progress, notices, QUESTION, nulls=True) | guide(), ensure_ascii=False))
     return PAUSED
 
 
@@ -370,7 +387,7 @@ def classify_incoming(target: tuple[str, str | None], upload_id: str, progress: 
     return 0
 
 
-def answer_incoming(question: str, given: str | None, ref: str | None) -> int:
+def answer_incoming(question: str, given: str | None, ref: str | None, by: str = "user") -> int:
     parts = question.split("_", 2)
     if len(parts) != 3 or not parts[1]:
         raise Refusal(f"Invalid incoming question: {question}")
@@ -396,7 +413,7 @@ def answer_incoming(question: str, given: str | None, ref: str | None) -> int:
                 shutil.rmtree(incoming_storage.pending_dir(target[0], upload_id), ignore_errors=True)
                 raise
             progress["encoding"] = matched
-        questions.record(progress, asked, matched, QUESTION, nulls=True)
+        questions.record(progress, asked, matched, QUESTION, nulls=True, by=by)
         incoming_storage.save_pending(target[0], upload_id, progress)
         if progress["open"]:
             return incoming_paused(target, upload_id, progress, [])
@@ -499,7 +516,7 @@ def message(text: str, ref: str | None) -> int:
     return replied(target, reply)
 
 
-def answered(question: str, given: str | None, ref: str | None) -> int:
+def answered(question: str, given: str | None, ref: str | None, by: str = "user") -> int:
     """answer for a message's question: sent to the session of --store, else of the latest ready store that has one."""
     if ref:
         target = resolve(ref)
@@ -509,7 +526,7 @@ def answered(question: str, given: str | None, ref: str | None) -> int:
     waiting = (storage.folder(target[0]) / "pending.json").is_file()   # an ended session's: restarted for it
     if waiting:
         need_key()
-    if not (reply := ask(target, {"op": "answer", "id": question, "answer": given}, launch=waiting)):
+    if not (reply := ask(target, {"op": "answer", "id": question, "answer": given, "by": by}, launch=waiting)):
         raise Refusal(f"Store {label(target)} has no open session, so no message is waiting for answers.")
     return replied(target, reply)
 
@@ -519,9 +536,10 @@ def replied(target: tuple[str, str | None], reply: dict) -> int:
     what was applied (a query's rows, a change's row count)."""
     head = {"store": target[0], "name": target[1]}
     if "questions" in reply:
-        print(json.dumps(head | {k: reply[k] for k in ("step", "questions", "notices")}, ensure_ascii=False))
+        print(json.dumps(head | {k: reply[k] for k in ("step", "questions", "notices")} | guide(), ensure_ascii=False))
         return PAUSED
-    print(json.dumps(head | {"applied": reply["ran"], "notices": reply["notices"]}, ensure_ascii=False, default=str))
+    print(json.dumps(head | {"applied": reply["ran"], "notices": reply["notices"]}
+                     | {k: reply[k] for k in ("answered_by_agent",) if reply.get(k)}, ensure_ascii=False, default=str))
     if "n" in reply:
         print(f"Change {reply['n']} made in store {label(target)}: saved by orbitrows exit, reverted by orbitrows "
               "undo.", file=sys.stderr)
@@ -575,6 +593,8 @@ def parser() -> argparse.ArgumentParser:
     a.add_argument("question", nargs="?", help="the question's id, from the questions JSON")
     a.add_argument("answer", nargs="?", help="one of its options' answers, or yes/no; for a table's name, "
                                                      "any name, or skip")
+    a.add_argument("--by", choices=("user", "agent"), default="user",
+                   help="who chose the answer: agent when an AI agent answered without asking the user")
     a.add_argument("-s", "--store", help="store id or name (default: the latest store waiting for answers; for a "
                                          "message's question, m_…, the latest ready store with an open session)")
     i = commands.add_parser("incoming", help="add a supplier file to a store")
@@ -605,7 +625,7 @@ def main(argv: list[str] | None = None) -> int:
             case "store":
                 return store(args.files, args.name, args.encoding)
             case "answer":
-                return answer(args.question, args.answer, args.store)
+                return answer(args.question, args.answer, args.store, args.by)
             case "incoming":
                 return incoming(args.file, args.store, args.encoding)
             case "message":

@@ -10,7 +10,7 @@ metadata:
 
 # OrbitRows: a store's data in plain English
 
-The `orbitrows` CLI turns the user's request into SQL and runs it on their store. **You never write SQL and never touch the database files yourself**: you pass the user's words to the CLI, relay its questions to the user, and report what it did. Its safety (it asks instead of guessing, refuses what it can't build, lets every change be undone) only holds if you follow the rules below.
+The `orbitrows` CLI turns the user's request into SQL and runs it on their store. **You never write SQL and never touch the database files yourself**: you pass the user's words to the CLI, answer its questions when the user has already settled them (else ask the user), and report what it did. Its safety (it asks instead of guessing, refuses what it can't build, lets every change be undone) only holds if you follow the rules below.
 
 If `orbitrows` isn't installed, tell the user: `uv tool install git+https://github.com/aminesayagh/orbitrows-cli`, their key in `~/.config/orbitrows/env` (`TYPESAFE_API_KEY=…`), then `orbitrows setup`.
 
@@ -46,32 +46,39 @@ The exit code tells you what happened:
 | Exit | Meaning | What you do |
 |---|---|---|
 | **0** | Done | Report the result (below). |
-| **3** | Waiting for the user's answers | Rule 3. |
+| **3** | Waiting for answers | Rule 3. |
 | **1** | Refused; the reason is on stderr | Rule 4. |
 
 On exit 0, stdout is `{"store", "name", "applied": [...], "notices": [...]}`. Each `applied` entry is a read (`"columns"`, `"rows"`; `"more": true` when there were over 1000 rows) or a change (`"changed"`: the number of rows). Show reads as a short table. For a change, say how many rows changed, and that it is **not saved yet**: `undo` reverts it, `exit` saves it. Pass on each `notices` entry that matters to the user (for example "changes every record").
 
-## Rule 3: questions belong to the user
+## Rule 3: answer what the user has settled, ask the user the rest
 
-On exit 3, stdout lists the open questions:
+On exit 3, stdout lists the open questions, with a `to_answer` guide:
 
 ```json
 {"store": "st_7f3a91c2", "name": "My shop", "step": "operation",
  "questions": [{"id": "m_1a2b3c4d", "request": "r1", "step": "formula",
                 "problem": "'20' is not written as a percentage: 20% or an amount of 20?",
                 "type": "choice", "options": [{"answer": "20%", "probability": 0.55}, {"answer": "an amount of 20", "probability": 0.45}]}],
- "notices": []}
+ "notices": [],
+ "to_answer": {"who": "you, when the user's own words or the store's data settle it (add --by agent); otherwise ask the user. …",
+               "command": "orbitrows answer <id> <answer>",
+               "formats": {"choice": "one of its options' answer values", "yes_no": "yes or no",
+                           "formula": "an expression in x, e.g. x * 10", "name": "a table name, or skip"}}}
 ```
 
-- Show every question to the user, with its options, and **wait for their answer**. Never pick an option yourself, even the likeliest one: the question exists because the tool wasn't sure.
-- Answer with the option's `answer` text, or `yes` / `no` for a yes/no question:
+**`to_answer.who` says who answers**, from the user's setting (`ORBITROWS_ANSWERS` in `~/.config/orbitrows/env`):
+
+- **`agent` (the default):** answer a question yourself **only when it is already settled**: the user said it in this conversation ("raise by 20 percent", "the prices are in euros"), or the store's data shows it. Add `--by agent`, then **tell the user what you answered and why**, so they can correct it (`undo` reverts the change):
 
 ```bash
-orbitrows answer m_1a2b3c4d "an amount of 20"
+orbitrows answer m_1a2b3c4d "20%" --by agent
 ```
 
-- A wrong id or answer is refused with the valid ones listed. When the last question is answered, the request runs, and you are back at Rule 2's exit codes.
-- A new `message` replaces a message still waiting for answers.
+  When nothing settles it, ask the user, with the options, and wait. **Never guess**, and never take the likeliest option because it is likeliest: the question exists because the tool couldn't decide.
+- **`user`:** show every question to the user, with its options, and answer with their choice (no `--by`).
+
+The answer is the option's `answer` value for a choice, `yes` / `no` for a yes/no, an expression in `x` for a formula (a unit conversion: `x * 10`), a name or `skip` for a table's name. A wrong id or answer is refused with the valid ones listed. When the last question is answered, the request runs, and you are back at Rule 2's exit codes. When the reply has `answered_by_agent`, those are the answers you gave: they must already be known to the user. A new `message` replaces a message still waiting for answers.
 
 ## Rule 4: a refusal is an answer, not an obstacle
 
@@ -105,6 +112,6 @@ orbitrows exit     # saves every unsaved change and ends the session
 ## Things to avoid
 
 - Writing or running SQL yourself, or opening `session.db`: the CLI's checks and undo would be bypassed.
-- Answering a question for the user, or running `exit` without being asked.
+- Answering a question the user hasn't settled, or without telling them; running `exit` without being asked.
 - Sending the same refused request again in other words without the user.
 - Hiding a notice or a refusal: the user must know what ran, what didn't, and why.

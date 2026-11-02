@@ -64,7 +64,7 @@ def match(q: dict, given: str) -> str:
     return found
 
 
-def record(state: dict, q: dict, answer: str, keys: tuple, nulls: bool) -> None:
+def record(state: dict, q: dict, answer: str, keys: tuple, nulls: bool, by: str = "user") -> None:
     """The answer, matched, moves q from open to answered; a model's question (with a call) has it settled in the
     state's calls, as certain. Other questions (a name, a confirmation) are the caller's to act on."""
     ask = q["question"]
@@ -72,4 +72,4 @@ def record(state: dict, q: dict, answer: str, keys: tuple, nulls: bool) -> None:
         from orbitrows.services.model.client import settle   # here: the model's SDK, loaded only once answering
         settle(state["calls"], ask["call"], ask["key"], answers(ask)[answer])
     state["open"].remove(q)
-    state["answered"].append(fields(q, keys, nulls) | {"answer": answer})
+    state["answered"].append(fields(q, keys, nulls) | {"answer": answer} | ({"by": by} if by == "agent" else {}))

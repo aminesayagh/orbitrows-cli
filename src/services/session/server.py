@@ -218,7 +218,7 @@ class Session:
         self.pending = {"prompt": text, "calls": {}, "open": [], "answered": [], "step": None, "shown": []}
         return self.resume(notices)
 
-    def answer(self, question: str, given: str | None) -> dict:
+    def answer(self, question: str, given: str | None, by: str = "user") -> dict:
         """The user's answer to an open question of the pending message, recorded as the model's certain answer;
         once none is open, the message runs again (its recorded calls replayed, not asked again)."""
         p = self.pending or {"open": []}
@@ -233,7 +233,7 @@ class Session:
             # Kept knowledge, not a change: no savepoint c<n> of its own, so nothing to undo. It is written inside
             # the open savepoints of the changes before it, which an undo rolls back: undo() puts it back after.
             convert.save(self.db, *save, match)
-        questions.record(p, q, match, QUESTION, nulls=False)
+        questions.record(p, q, match, QUESTION, nulls=False, by=by)
         if p["open"]:
             return asking(p, [])
         return self.resume([])
@@ -265,7 +265,9 @@ class Session:
             return {"ok": False, "error": "\n  ".join(["The request couldn't be built, so nothing was changed:"] + [
                 f"{e.get('request')} ({e.get('stage')}): {e.get('error')}" for e in errors])}
         self.pending = None
-        return self.apply(p["prompt"], result.get("program") or [], notices)
+        agent = [{k: a.get(k) for k in ("problem", "answer")} for a in p["answered"] if a.get("by") == "agent"]
+        return self.apply(p["prompt"], result.get("program") or [], notices) | (   # told to the user by the agent
+            {"answered_by_agent": agent} if agent else {})
 
     def apply(self, text: str, program: list, notices: list) -> dict:
         """The program run in savepoint c<n>, its _history row and its journal line. A program that changes no row
@@ -420,7 +422,7 @@ class Session:
                 case "message":
                     reply = self.message(str(request["text"]))
                 case "answer":
-                    reply = self.answer(str(request["id"]), request.get("answer"))
+                    reply = self.answer(str(request["id"]), request.get("answer"), request.get("by", "user"))
                 case "incoming":
                     reply = self.incoming(Path(request["folder"]))
                 case "undo":
@@ -430,7 +432,10 @@ class Session:
                              "unsaved": [{"n": n, "prompt": t, "changed": self.changed.get(n, 0)}
                                          for n, t in self.changes]} | (
                         {"waiting": {"prompt": self.pending["prompt"], "questions": [
-                            {k: q.get(k) for k in QUESTION} for q in self.pending.get("open", [])]}}
+                            {k: q.get(k) for k in QUESTION} for q in self.pending.get("open", [])]} | (
+                            {"answered_by_agent": [{k: a.get(k) for k in ("problem", "answer")}
+                                                   for a in self.pending["answered"] if a.get("by") == "agent"]}
+                            if any(a.get("by") == "agent" for a in self.pending.get("answered", [])) else {})}
                         if self.pending else {})
                 case "export":                                # on the open transaction: unsaved changes included
                     from orbitrows.services.storage.export import export

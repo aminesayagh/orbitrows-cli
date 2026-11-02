@@ -636,7 +636,9 @@ def test_questions_pause_the_import_until_the_user_answers(env, capsys, monkeypa
     code, out, err = run(capsys, "store", "orders.csv", "customers.csv", "-n", "shop")
     assert code == 3 and "role uncertain" not in err
     [(store_id, _, status)] = stores()
-    assert status == registry.WAITING and json.loads(out) == {  # stdout is the JSON and nothing else
+    asked = json.loads(out)
+    assert asked.pop("to_answer")["who"].startswith("you, when the user's own words")   # read by a program: the guide
+    assert status == registry.WAITING and asked == {  # stdout is the JSON and nothing else
         "store": store_id, "name": "shop", "step": "roles",
         "questions": [{"id": "q_choice01", "file": "orders.csv", "step": "roles", "column": "total",
                        "problem": "role uncertain", "type": "choice",
@@ -657,7 +659,7 @@ def test_questions_pause_the_import_until_the_user_answers(env, capsys, monkeypa
 
     SAVED["orders.csv"]["roles"]["warnings"].append(SHOWN_NOTICE)
     try:
-        code, out, err = run(capsys, "answer", "q_choice01", "quantity", "-s", "shop")
+        code, out, err = run(capsys, "answer", "q_choice01", "quantity", "-s", "shop", "--by", "agent")
     finally:
         SAVED["orders.csv"]["roles"]["warnings"].pop()
     assert code == 0, err
@@ -665,7 +667,8 @@ def test_questions_pause_the_import_until_the_user_answers(env, capsys, monkeypa
     assert "role uncertain" not in out                        # shown once, with the questions
     progress = storage.load_import(store_id)                  # kept: every model answer, and the user's
     assert progress["calls"]["c" * 16]["k4_role"] == ["quantity", {"quantity": 1.0}] and progress["open"] == []
-    assert [(a["id"], a["answer"]) for a in progress["answered"]] == [("q_header01", "yes"), ("q_choice01", "Quantity")]
+    assert [(a["id"], a["answer"], a.get("by")) for a in progress["answered"]] == [
+        ("q_header01", "yes", None), ("q_choice01", "Quantity", "agent")]           # who answered, when the agent
     assert run(capsys, "answer")[2] == "No store is waiting for answers.\n"
 
 
