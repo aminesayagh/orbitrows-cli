@@ -358,3 +358,57 @@ def test_conditions_are_bracketed_by_the_grammar_and_each_merge_answered_once():
     where = grouping.build([r], section, {}, answers)["requests"]["r1"]["where"]
     assert where["type"] == "all" and where["children"][0]["right"]["value"] == "2026-10"
     assert where["children"][1]["type"] == "any" and len(where["children"][1]["children"]) == 2
+
+
+def test_the_skeleton_links_a_change_from_the_sentence_s_clauses():
+    """Set T (2026-11-02): pass 2's one-by-one link answers collided ("the result of r6 is used twice"). The skeleton
+    builds the links from the clauses: an operation to its clause's condition, the others' operations to the else,
+    as many operations as conditions paired in order, a rounding after every branch."""
+    from orbitrows.pipeline.expressions import links, skeleton
+
+    def rec(i, role, text, sentence, pred=None, function="entry:INCREASE_PERCENT"):
+        a = sentence.find(text)
+        return {"id": f"r{i}", "role": role, "text": text, "start": a, "end": a + len(text),
+                "function": "case" if role == "branch" else function,
+                "left": {"pred": pred} if pred else {"unresolved": True}, "right": None}
+
+    def shape(sentence, recs):
+        p = skeleton.plan(sentence, recs, "t_variants.c_price_mad")
+        got = skeleton.finish(p, {})
+        assert not links.check(recs, got) and not p["joints"]
+        return got
+    t = "Raise the price of the variants by 10% when they cost more than 100, and by 5% otherwise."
+    got = shape(t, [rec(1, "calculation", "by 10%", t), rec(2, "branch", "more than 100", t, "p1"),
+                    rec(3, "calculation", "by 5%", t)])
+    assert got[("r2", "then")] == "r1" and got[("r2", "else")] == "r3" and got[("r1", "left")] == "current"
+    t = "Raise the black variants by 10% and the white ones by 20%, then round every new price to the nearest 5."
+    got = shape(t, [rec(1, "branch", "black", t, "p1"), rec(2, "calculation", "by 10%", t),
+                    rec(3, "branch", "white", t, "p2"), rec(4, "calculation", "by 20%", t),
+                    rec(5, "rounding", "to the nearest 5", t, function="entry:ROUND_TO_NEAREST")])
+    assert (got[("r1", "then")], got[("r1", "else")], got[("r3", "then")], got[("r3", "else")]) == (
+        "r2", "r3", "r4", "current")
+    assert got[("r5", "left")] == "r1"                       # the rounding: on every branch's result
+
+
+def test_the_skeleton_reads_except_which_and_keeps_unchanged_rows_out():
+    """Set T (2026-11-02): "all get 10% except the black ones, which get 5%" gave black the 10%; "black 20% and white
+    10%, capped at twice their cost" capped the other colours too. The excepted clause's operation is the others',
+    the next clause's the excepted ones'; when the others keep their value, the branches choose the rows."""
+    from orbitrows.pipeline.expressions import skeleton
+
+    def rec(i, role, text, sentence, pred=None):
+        a = sentence.find(text)
+        return {"id": f"r{i}", "role": role, "text": text, "start": a, "end": a + len(text),
+                "function": "case" if role == "branch" else "entry:INCREASE_PERCENT",
+                "left": {"pred": pred} if pred else {"unresolved": True}, "right": None}
+    t = "All variants get a 10% price increase except the black ones, which get 5%."
+    recs = [rec(1, "calculation", "10%", t), rec(2, "branch", "black", t, "p1"), rec(3, "calculation", "5%", t)]
+    p = skeleton.plan(t, recs, "t_variants.c_price_mad", negated={"p1"})
+    got = skeleton.finish(p, {})
+    assert got[("r2", "then")] == "r3" and got[("r2", "else")] == "r1" and p["keep_rows"] == []
+    t = "Black variants get 20% more and white variants 10% more on the price."
+    recs = [rec(1, "branch", "Black", t, "p1"), rec(2, "calculation", "20%", t), rec(3, "branch", "white", t, "p2"),
+            rec(4, "calculation", "10%", t)]
+    p = skeleton.plan(t, recs, "t_variants.c_price_mad")
+    skeleton.finish(p, {})
+    assert p["keep_rows"] == ["r1", "r3"]                     # the other colours: never touched

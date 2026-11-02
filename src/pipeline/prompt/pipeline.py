@@ -544,6 +544,10 @@ async def run(prompt: str, model, db, step=lambda text: None) -> dict:
             tree_of["requests"].setdefault(rid, {})["computed_sort"] = True                      # offers it
     g = await grouping.run(model, prompt, reqs, store, s4["requests"], tree_of, s6.get("parameters", {}),
                            s5["requests"])
+    for rid, kept in f5.get("kept", {}).items():              # the branches choose the rows when the others keep
+        gr = g["requests"].setdefault(rid, {})                # their value (a filter is a branch, its else
+        rows = {"type": "any", "children": kept} if len(kept) > 1 else kept[0]   # unchanged): OR of them, ANDed in
+        gr["where"] = {"type": "all", "children": [gr["where"], rows]} if gr.get("where") else rows
     pause("grouping", grouping=g)
     if open_:
         matching = []

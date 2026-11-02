@@ -92,7 +92,8 @@ MODIFIERS = {
     "sorted": "Are the records put in an order ('the cheapest', 'newest first', 'by price', 'the top 3')?",
     "limited": "Is the answer limited to a number of records ('the five cheapest', 'the top 3', 'only one')?",
     "grouped": "Are the records grouped to give one answer per group ('per brand', 'for each warehouse', 'by "
-               "status')?",
+               "status'), also when only some groups are kept by what their records add up to ('which colours have more "
+               "than 2 variants', 'the colours whose average price is above 150': one answer per colour)?",
 }
 ROWS = ("select", "update", "delete")
 OPERATORS = {
@@ -429,6 +430,11 @@ def resembled(schema, requests, every, rid, named) -> dict:
     def unit(k):
         return (column_info(schema, k)["unit"] or {}).get("unit")
     text = next((r["text"] for r in requests if r["id"] == rid), "")
+    from orbitrows.pipeline.expressions.words import nlp
+    # a superlative sorts ("the 3 most expensive", "the highest price"), never a condition: stage 1's yes/no (set T
+    # TR04, 2026-11-02: the choice made it a filter); "at most 120" is a comparison with its number
+    if any("Sup" in t.morph.get("Degree") and t.head.pos_ != "NUM" for t in nlp("en")(text)):
+        return {}
     out = {}
     for k in (named or {}).get(rid) or {}:
         if k in every and number_column(schema, k) and not written_as_named(schema, k, text):
@@ -1361,8 +1367,9 @@ def questions_2d(requests, schema, section, params) -> dict:
     q = {}
     for r in requests:
         rid, said = r["id"], f"request {r['id']} ('{r['text']}')"
-        if not (main := section.get(rid, {}).get("group_of")):
-            continue
+        if not (main := section.get(rid, {}).get("group_of")) or not any(
+                p["value"] is not None for p in params.get(rid, [])):   # no number: no condition on the groups
+            continue                                          # ("for each product, its highest-priced variant")
         k = f"{rid}|having"
         q[f"{k}|aggregate"] = choice(CONTEXT, f"{said} gives one answer per group. Does it keep only the groups whose "
                                               f"records, taken together, compare with a number? If so, what of them?",
@@ -1405,7 +1412,8 @@ def build_2d(requests, schema, section, params, answers, named=None) -> None:
     out, warnings = section["requests"], section["warnings"]
     for r in requests:
         rid = r["id"]
-        if not (main := out.get(rid, {}).pop("group_of", None)):
+        if not (main := out.get(rid, {}).pop("group_of", None)) or not any(
+                p["value"] is not None for p in params.get(rid, [])):   # no number: no condition on the groups
             continue
         k = f"{rid}|having"
 

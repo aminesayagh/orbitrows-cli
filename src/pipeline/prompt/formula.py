@@ -102,7 +102,7 @@ def without(where, conds):
 async def run(jev, prompt, requests, schema, sources, values, parts, conditions, grouping, db=None) -> dict:
     """… → {"requests", "warnings", "branches": {request: the conditions that became a CASE's branches}}: the CLI's
     pipeline runs this before grouping, which then leaves them out of the WHERE's tree (grouping: {"requests": {}})."""
-    out, warnings, found = {}, [], {}
+    out, warnings, found, rows_kept = {}, [], {}, {}
     for r in requests:
         rid, part = r["id"], parts.get(r["id"]) or {}
         reads = r.get("statement") == "select"
@@ -124,7 +124,7 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
         words = [{"text": v["text"], "start": v["start"] - off, "end": v["end"] - off} for v in values
                  if v["request"] == rid and v["role"] in ("not_value", "written") and v.get("start") is not None]
         # "written" too: step 3 may keep "half of the quantity" as one written phrase; Jev says if it names a column
-        branches = []
+        branches, kept = [], []
         for a in assigns:
             target = a["column"]
             units = [{"start": x["start"] - off, "end": x["end"] - off, "value": fits(x, column_info(schema, target))}
@@ -168,14 +168,19 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
                 continue
             warnings += mine
             branches += my_branches
+            if p2["status"] == "ok":                        # the skeleton's: the others keep their value
+                from orbitrows.pipeline.expressions import positive
+                kept += [positive(p["node"]) for p in preds if p["id"] in p2.get("keep_rows", [])]
             if p2["status"] != "ok":
                 warnings += [{"request": rid, "problem": f"formula of {target}: {q['problem']}"}
                              | {k: q[k] for k in ("question",) if k in q} for q in p2["questions"]]
                 if a.get("pending"):                        # no template value behind it: not built, asked
                     part["outputs" if reads else "assignments"].remove(a)
                     what = f"the value computed from {target}" if reads else f"the change of {target}"
+                    asked_ = any("question" in q for q in p2["questions"])
                     warnings.append({"request": rid, "problem": f"{what} is not built until the questions above are "
-                                                                f"answered"})
+                                                                f"answered" if asked_ else
+                                     f"{what} is not built: its steps couldn't be linked into one formula"})
                 continue                                    # (an old template value, if any, stays, asked)
             value = to_dml(p2["set"])
             if reads:                                       # shown, not stored: as computed
@@ -191,8 +196,10 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
         if branches and grouping["requests"].get(rid):     # a branch lives in the CASE, not in the WHERE
             g = grouping["requests"][rid]
             g["where"] = without(g.get("where"), branches)
+        if kept:                                            # the others keep their value: the branches choose the rows
+            rows_kept[rid] = kept                           # (OR of them, added to the WHERE after grouping)
         if branches:                                        # step 6's doubts about a branch condition no longer apply:
             cols = {p["column"] for p in cond6.get("predicates", []) if p["condition"] in branches}   # positive by
             conditions["warnings"][:] = [w for w in conditions["warnings"] if not (w.get("request") == rid and (
                 any(w["problem"] == f"negation of {c} uncertain" for c in cols) or w["problem"] == "all rows uncertain"))]
-    return {"requests": out, "warnings": warnings, "branches": found}
+    return {"requests": out, "warnings": warnings, "branches": found, "kept": rows_kept}

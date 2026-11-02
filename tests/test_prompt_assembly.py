@@ -513,3 +513,17 @@ def test_each_condition_reaches_the_formula_at_its_own_words():
               for t, a, b in (("black", 8, 13), ("white", 55, 60))]
     assert [(p["start"], p["end"]) for p in predicate_spans(cond6, values, [], "r1", 0, schema, "t_variants")] == [
         (8, 13), (55, 60)]
+
+
+def test_a_superlative_never_makes_a_resembled_column_a_condition():
+    """Set T TR04 (2026-11-02): "the 3 most expensive variants": "expensive" resembled the price, the look-alike
+    choice made it a condition and the read was refused; a superlative sorts: no look-alike group."""
+    from orbitrows.pipeline.prompt.conditions import resembled
+    schema = store_of(baseline())
+    every = {"t_variants.c_price_mad": "", "t_variants.c_cost_mad": ""}
+    named = {"r1": {"t_variants.c_price_mad": {"how": "meaning", "words": ["expensive"]}}}
+    r = {"id": "r1", "text": "Show the 3 most expensive variants."}
+    assert resembled(schema, [r], every, "r1", named) == {}
+    r = {"id": "r1", "text": "Show the variants costing the customer under 200."}
+    named = {"r1": {"t_variants.c_cost_mad": {"how": "word", "words": ["cost"]}}}
+    assert resembled(schema, [r], every, "r1", named) != {}

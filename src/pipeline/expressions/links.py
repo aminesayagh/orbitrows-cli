@@ -10,6 +10,7 @@ Output: {"status": "ok" | "ask", "map": {record: {slot: source}}, "set": tree, "
 The formula tree uses the step-5 nodes (column / literal / arithmetic / function / case); "sql" is the same formula as
 SQLite text over `t_table.c_column` ids, for tests.
 """
+from . import skeleton
 from orbitrows.services.model.client import ask, choice
 from orbitrows.pipeline.operations.builders import BUILDERS
 from orbitrows.pipeline.prompt import SURE
@@ -315,6 +316,13 @@ def sql(n) -> str:
 async def resolve(jev, text: str, upstream: dict, records: list[dict]) -> dict:
     recs = [dict(r) | {"id": f"r{i + 1}"} for i, r in enumerate(records)]
     preds = {p["id"]: p["sql"] for p in upstream.get("predicates", [])}
+    negated = {p["id"] for p in upstream.get("predicates", []) if (p.get("node") or {}).get("type") in ("not", "any")
+               and p.get("node") != p.get("sql")}            # step 6 read "except the black ones" as a negation
+    sk = skeleton.plan(text, recs, upstream["target"], negated)   # the structure from the sentence first (typed)
+    if sk is not None:
+        done = await by_skeleton(jev, text, upstream, recs, preds, sk)
+        if done is not None:
+            return done
     todo = unknowns(recs, upstream["target"])
     preset = {}
     shares = [x for x in recs if x["role"] == "calculation" and x["function"] == "*"
@@ -357,6 +365,10 @@ async def resolve(jev, text: str, upstream: dict, records: list[dict]) -> dict:
     for r in recs:                                          # a condition the step did not resolve is a question
         if r["role"] == "unresolved_condition":
             out_q.append({"problem": f"does '{r['text']}' choose the records or a different formula?"})
+    return conclude(text, upstream, recs, links, preds, ans, flagged, repaired, out_q)
+
+def conclude(text, upstream, recs, links, preds, ans, flagged, repaired, out_q) -> dict:
+    """The map checked and, with no question left, built: pass 2's end, by its link answers or the skeleton's."""
     where = [f"COALESCE(({preds[r['left']['pred']]}), 0)" for r in recs if r["role"] == "where"] + \
             [f"NOT COALESCE(({preds[r['left']['pred']]}), 0)" for r in recs if r["role"] == "where_not"]
     problems = check(recs, links) if not out_q else []
@@ -368,3 +380,36 @@ async def resolve(jev, text: str, upstream: dict, records: list[dict]) -> dict:
         return out | {"status": "ask"}
     tree = build(recs, links, upstream["target"], preds)
     return out | {"status": "ok", "set": tree, "sql": {"set": sql(tree), "where": " AND ".join(where) or None}}
+
+
+async def by_skeleton(jev, text, upstream, recs, preds, sk) -> dict | None:
+    """The links from the sentence's structure (skeleton.py); Jev only says, per unclear operation, which records it
+    applies to. None when the built map fails its checks: pass 2's link questions then."""
+    ids = {r["id"]: r for r in recs}
+
+    def who(g):
+        if g.startswith("others:"):
+            inside = g.split(":", 1)[1]
+            return "The other records" + (f" (among those of '{ids[inside]['text']}')" if inside != "None" else "")
+        return f"The records of '{ids[g]['text']}'"
+    q = {f"{o}_group": choice(CONTEXT, f"Which records does step {label(ids[o])} apply to?",
+                              {g: who(g) for g in opts}, RULES) for o, opts in sk["joints"].items()}
+    ans = await ask(jev, {"request": text, "steps": [label(r) for r in recs if r["role"] in VALUE]}, q) if q else {}
+    picks, out_q, flagged = {}, [], []
+    for o in sk["joints"]:
+        pick, probs = ans.get(f"{o}_group", (None, {}))
+        if pick is None or probs.get(pick, 0) < SURE:
+            out_q.append({"problem": f"which records '{ids[o]['text']}' applies to", "answer": pick,
+                          "probability": round(probs.get(pick, 0), 2)}
+                         | question(ans, f"{o}_group", {g: who(g) for g in sk["joints"][o]}))
+        else:
+            picks[o] = pick
+    if out_q:
+        return {"map": {}, "answers": ans, "flagged": flagged, "repaired": [], "questions": out_q, "where": [],
+                "status": "ask"}
+    links = skeleton.finish(sk, picks)
+    if check(recs, links):
+        return None
+    done = conclude(text, upstream, recs, links, preds, ans, flagged, ["links from the sentence's structure"], [])
+    keep = [ids[b]["left"]["pred"] for b in sk.get("keep_rows", [])]
+    return done | ({"keep_rows": keep} if keep else {})

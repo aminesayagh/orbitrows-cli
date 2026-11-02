@@ -126,7 +126,10 @@ REPLACED = {"pipeline/prompt/coref.py": CORPIPE,
                                       # "=" also says a period ("in August")
                                       "\\b\\d{4}-\\d{2}-\\d{2}\\b",
                                       "Equal to a value ('the black ones', 'in Rabat', 'priced at 250', also 'not "
-                                      "black': the negation is asked apart)."},
+                                      "black': the negation is asked apart).",
+                                      # 2026-11-02: "which colours have more than 2 variants" is grouped too (set T)
+                                      "Are the records grouped to give one answer per group ('per brand', 'for each "
+                                      "warehouse', 'by status')?"},
     # 2026-10-25: step 5's templates and their limits are the operations catalog's changes now (a number's change
     # is the formula's)
     "pipeline/prompt/parts.py": {"SQLite, on all rows", *PARTS_TEMPLATES,
