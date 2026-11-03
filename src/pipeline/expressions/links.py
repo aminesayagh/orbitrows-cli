@@ -412,4 +412,26 @@ async def by_skeleton(jev, text, upstream, recs, preds, sk) -> dict | None:
         return None
     done = conclude(text, upstream, recs, links, preds, ans, flagged, ["links from the sentence's structure"], [])
     keep = [ids[b]["left"]["pred"] for b in sk.get("keep_rows", [])]
-    return done | ({"keep_rows": keep} if keep else {})
+    return done | ({"keep_rows": keep} if keep else {}) | ({"notices": n} if (n := overlaps(sk, ids, upstream)) else {})
+
+
+def overlaps(sk, ids, upstream) -> list[str]:
+    """Branches side by side whose conditions test different columns ("+10 for the expensive variants and +5 for the
+    black ones") may both hold for a record, which then gets only the first one's change (CASE's first match): said,
+    never decided from the data (no row is read; user, 2026-11-02). Values of one column (black, white) exclude each
+    other: nothing said."""
+    import json
+    cols = {}
+    for p in upstream.get("predicates", []):
+        m = __import__("re").search(r'"type": "column", "source": "(\w+)", "reference": "(\w+)"',
+                                    json.dumps(p.get("node") or {}, sort_keys=False))
+        cols[p["id"]] = m and f"{m.group(1)}.{m.group(2)}"
+    out = []
+    for scope in {sk["parent"].get(b) for b in sk["branches"]}:
+        sib = [b for b in sk["branches"] if sk["parent"].get(b) == scope]
+        for a, b in zip(sib, sib[1:]):
+            ca, cb = cols.get(ids[a]["left"]["pred"]), cols.get(ids[b]["left"]["pred"])
+            if ca and cb and ca != cb:
+                out.append(f"'{ids[a]['text']}' and '{ids[b]['text']}' can both hold for a record: it gets only the "
+                           f"change of '{ids[a]['text']}', the first written")
+    return out

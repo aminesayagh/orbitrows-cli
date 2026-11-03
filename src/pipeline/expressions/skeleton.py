@@ -51,6 +51,9 @@ def plan(text: str, recs: list[dict], target: str, negated=()) -> dict | None:
             if o is not b and clause(o["start"]) not in op_clauses and section(o["start"]) == section(b["start"]) \
                     and clause(o["start"]) < clause(b["start"]):
                 parent[b["id"]] = o["id"]                    # the nearest opener before it wins (later in the loop)
+    for inner, outer in nesting(text, branches).items():     # "Variants costing over 100 get 30 more if black and 20
+        parent[inner] = outer                                 # more if not": black inside the cost's scope
+
     def at(o):                                                # an operation's place: its number, at the end of its
         return o["end"] - 1                                   # words (pass 1's spans may start a clause earlier)
     group, joints = {}, {}
@@ -76,7 +79,8 @@ def plan(text: str, recs: list[dict], target: str, negated=()) -> dict | None:
         if o["id"] in group:
             continue
         c = clause(at(o))
-        here = [b for b in branches if clause(b["start"]) == c]
+        here = [b for b in branches if clause(b["start"]) == c and not any(   # an outer condition of the clause
+            parent.get(x["id"]) == b["id"] and clause(x["start"]) == c for x in branches)]   # scopes, never pairs
         mine = [x for x in ops if clause(at(x)) == c]
         scope = parent.get(here[0]["id"]) if here else next(
             (b["id"] for b in reversed(branches) if clause(b["start"]) not in op_clauses
@@ -92,6 +96,34 @@ def plan(text: str, recs: list[dict], target: str, negated=()) -> dict | None:
             "ops": [o["id"] for o in ops], "after": [a["id"] for a in after], "bounds": [b["id"] for b in bounds],
             "guards": [a["id"] for a in after if a["role"] == "guard"],
             "target": target}
+
+
+def nesting(text, branches) -> dict:
+    """{inner branch id: outer branch id}: in one clause, a condition attached to the clause's verb as a conditional
+    clause ("if black": advcl) nests inside another condition of that clause reaching the verb otherwise (its
+    subject "Variants costing over 100", or "For variants costing over 100"); parallel conditions ("Black variants get
+    10 more, and white variants get 5 more") have no such clause and are paired. Evidence from spaCy's parse, not a
+    proof: an operation of the inner condition is then asked (a joint) when its clause leaves it unclear."""
+    from .words import nlp
+    doc = nlp("en")(text)
+
+    def way(b):                                               # (the verb the condition reaches, through an advcl?)
+        t = next((x for x in doc if x.idx <= b["start"] < x.idx + len(x)), None)
+        through = False
+        while t is not None and t.head.i != t.i and (t.pos_ not in ("VERB", "AUX") or t.dep_ in ("acl", "relcl")):
+            through |= t.dep_ == "advcl"                      # past a participle ("variants costing over 100")
+            t = t.head
+        if t is not None and t.dep_ == "advcl" and any(c.dep_ == "mark" for c in t.children):
+            through, t = True, t.head
+        return (t.i if t is not None else None), through
+    ways = {b["id"]: way(b) for b in branches}
+    out = {}
+    for b in branches:
+        verb, inner = ways[b["id"]]
+        outer = [x["id"] for x in branches if x is not b and ways[x["id"]] == (verb, False)]
+        if inner and verb is not None and len(outer) == 1:
+            out[b["id"]] = outer[0]
+    return out
 
 
 def attached(text, branches, ops, at) -> dict:

@@ -168,6 +168,8 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
                 continue
             warnings += mine
             branches += my_branches
+            if p2["status"] == "ok":                        # the skeleton's notices: overlapping branches
+                warnings += [{"request": rid, "problem": f"formula of {target}: {n}"} for n in p2.get("notices", [])]
             if p2["status"] == "ok":                        # the skeleton's: the others keep their value
                 from orbitrows.pipeline.expressions import positive
                 kept += [positive(p["node"]) for p in preds if p["id"] in p2.get("keep_rows", [])]

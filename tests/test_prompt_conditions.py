@@ -429,3 +429,37 @@ def test_a_section_with_one_condition_holds_its_comma_separated_steps():
             rec(4, "calculation", "price plus 5")]
     got = skeleton.finish(skeleton.plan(t, recs, "t_variants.c_price_mad"), {})
     assert (got[("r1", "then")], got[("r3", "left")], got[("r1", "else")]) == ("r3", "r2", "r4")
+
+
+def test_a_conditional_clause_nests_inside_the_clause_s_other_condition_and_parallel_ones_pair():
+    """Set T TC052a (2026-11-02): "Variants costing over 100 get 30 more on the price if black and 20 more if not"
+    paired 100 with +30 and black with +20 by position. "if black" (a conditional clause of the verb) nests inside the
+    cost's scope; "Black variants get 10 more, and white variants get 5 more" stays parallel."""
+    from orbitrows.pipeline.expressions import skeleton
+
+    def br(i, w, t):
+        a = t.find(w)
+        return {"id": f"r{i}", "role": "branch", "text": w, "start": a, "end": a + len(w), "left": {"pred": f"p{i}"}}
+    t = "Variants costing over 100 get 30 more on the price if black and 20 more if not."
+    assert skeleton.nesting(t, [br(1, "100", t), br(2, "black", t)]) == {"r2": "r1"}
+    t = "For variants costing over 100, increase the price by 30 if black and 20 otherwise."
+    assert skeleton.nesting(t, [br(1, "100", t), br(2, "black", t)]) == {"r2": "r1"}
+    t = "Black variants get 10 more, and white variants get 5 more."
+    assert skeleton.nesting(t, [br(1, "Black", t), br(2, "white", t)]) == {}
+
+
+def test_branches_side_by_side_on_different_columns_are_told_they_may_overlap():
+    """The user (2026-11-02): "+10 for the expensive variants and +5 for the black ones" may both hold for a record,
+    which CASE gives the first change only; nothing is read from the data, it is said. Values of one column exclude
+    each other: nothing said."""
+    from orbitrows.pipeline.expressions.links import overlaps
+    sk = {"branches": ["r1", "r2"], "parent": {}}
+    ids = {"r1": {"text": "expensive", "left": {"pred": "p1"}}, "r2": {"text": "black", "left": {"pred": "p2"}}}
+
+    def col(c):
+        return {"type": "comparison", "left": {"type": "column", "source": "t_variants", "reference": c},
+                "right": {"type": "literal", "value": 1}}
+    assert overlaps(sk, ids, {"predicates": [{"id": "p1", "node": col("c_price_mad")},
+                                             {"id": "p2", "node": col("c_color")}]})
+    assert not overlaps(sk, ids, {"predicates": [{"id": "p1", "node": col("c_color")},
+                                                 {"id": "p2", "node": col("c_color")}]})

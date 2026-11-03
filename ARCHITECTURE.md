@@ -71,6 +71,13 @@ A change such as *"raise by 15%, then take 5 off, but for the black ones apply t
 3. **Parameters.** Each operation declares what it needs, and the sentence fills it. A percentage slot only takes a number written as one: "by 20" is asked about.
 4. **Graph.** Pass 2 (`links.py`) decides which result feeds which piece, then the graph becomes one SQL expression: `CASE`, `ROUND`, `MIN`, `MAX`, `WHERE`.
 
+How the branches are read (2026-11-02):
+
+- **The structure comes from the sentence** (`expressions/skeleton.py`): its clauses (cut at ";" and ","), the condition each operation's clause holds, a conditional clause ("**if** black") nested inside the clause's other condition ("variants costing over 100 get 30 more if black and 20 more if not"), conditions side by side paired with their operations. Jev only says, for an operation the sentence leaves unclear, which records it applies to; the old link questions are the fallback.
+- **"Otherwise" includes the records with no value:** in "+30 if black, +20 otherwise", a variant with no colour gets +20 (`CASE WHEN … ELSE`), the usual meaning of "otherwise" (user, 2026-11-02).
+- **When the others keep their value**, the branches choose the rows (`WHERE black OR white`): nothing else is touched, roundings and limits included.
+- **Branches side by side on different columns** ("+10 for the expensive variants and +5 for the black ones") may both hold for a record: it gets the first one's change only (`CASE`'s first match), and the user is told so in a notice. Nothing is read from the data to decide it.
+
 ### Grouping
 
 Jev answers, for each pair of conditions, "both" (AND) or "either" (OR); the tree that fits every answer is built (`tree_of`). An OR is checked against the sentence's grammar: a condition written wholly outside an "X or Y" is joined by AND ("the **September** sales with a discount above 5 or a quantity of at least 2").
