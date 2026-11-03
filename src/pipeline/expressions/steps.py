@@ -330,13 +330,14 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
         if upstream.get("inherited") and o["percent"] in done and kind in (None, "none") and not any(
                 p["start"] <= o["start"] < p["end"] for p in preds):   # its number: the borrowed change's
             kind, kp = done[o["percent"]], {done[o["percent"]]: 1.0}
-        if kind not in (None, "none") and kind not in KIND and o["percent"] in done and entry_role(
-                __import__("orbitrows.pipeline.operations.use", fromlist=["catalog"]).catalog()["entries"][kind]
-        ) == "calculation" and not any(
+        cat = __import__("orbitrows.pipeline.operations.use", fromlist=["catalog"]).catalog()["entries"]
+        if kind not in (None, "none") and kind not in KIND and o["percent"] and True in done and \
+                cat[kind]["builder_key"] in ("multiply", "divide") and not any(
                 t.pos_ in ("VERB", "AUX") for t in doc if a0 <= t.idx < o["end"]):
-            kind, kp = done[o["percent"]], {done[o["percent"]]: 1.0}   # "increase by 10%, but only by 5% for the
-            # black ones": a number with no verb of its own, written like an earlier change's, repeats that change
-            # with its own value (set T TC113a, 2026-11-02: its words "5%" alone read as multiply by 0.05)
+            kind, kp = done[True], {done[True]: 1.0}       # "increase by 10%, but only by 5% for the black ones":
+            # a percentage read as a factor (x 0.05), with no verb of its own, after a percentage change, is that
+            # change with its own value (set T TC113a, 2026-11-02). Only that: "the others get 5 added" keeps its add
+            # (B07, 2026-11-03: the rule then took any verbless number, and made it a second "take 5 off")
         if kind is None or kp.get(kind, 0) < MIN:
             ambiguities.append({"problem": "what this number does: uncertain", "occurrence": o["occ"], "text": o["text"],
                                 "start": o["start"], "end": o["end"], "answer": kind,

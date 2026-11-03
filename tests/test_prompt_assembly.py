@@ -694,3 +694,26 @@ def test_a_limit_read_again_as_a_row_condition_leaves_the_where():
                 "right": {"column": "t_variants.c_cost_mad"}}]
     assert limits(records, cond6, "t_variants.c_price_mad") == [twice]
     assert limits([], cond6, "t_variants.c_price_mad") == []         # no limit: the condition stays
+
+
+def test_another_operation_is_never_replaced_by_the_earlier_change(monkeypatch):
+    """B07 (2026-11-03, a regression of 766a8c5): "For the black variants, raise the price by 10% then take 5 off; the
+    other variants get 5 added": the others' 5, no verb in its own short words, became a second "take 5 off". Only a
+    percentage read as a factor after a percentage change is replaced; Jev's add stays."""
+    import asyncio
+    from orbitrows.pipeline.expressions import steps
+    from orbitrows.services.model.client import Answers
+    t = "For the black variants, raise the price by 10% then take 5 off; the other variants get 5 added."
+
+    async def stub(jev, state, q):
+        kinds = iter(["INCREASE_PERCENT", "SUBTRACT_AMOUNT", "ADD_AMOUNT"])
+        out = Answers({k: ((v := next(kinds)), {v: 0.9}) if k.endswith("_kind") else ("none", {"none": 0.9})
+                       for k in sorted(q, key=lambda k: (not k.endswith("_kind"), k)) if k.endswith(("_kind", "_column"))})
+        out.call = "c"
+        return out
+    monkeypatch.setattr(steps, "ask", stub)
+    up = {"target": "t_variants.c_price_mad", "target_kind": "number", "words": [], "predicates": [],
+          "table_columns": {"t_variants.c_price_mad": "price"}}
+    recs = asyncio.run(steps.extract(None, t, up))["records"]
+    assert [r["function"] for r in recs if r["role"] == "calculation"] == [
+        "entry:INCREASE_PERCENT", "entry:SUBTRACT_AMOUNT", "entry:ADD_AMOUNT"], recs
