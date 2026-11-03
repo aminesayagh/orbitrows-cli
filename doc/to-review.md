@@ -171,6 +171,12 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 - **Always ask the user** when a request only resembles a column that has same-unit look-alikes, whatever Jev's sureness: no silent choice by construction, more questions.
 - **Near ties ask before the ledger refuses** (L7).
 
+**Remembering the user's column choices across messages (2026-11-03, not started: to think about more):**
+- *Today:* two look-alike columns competing for the same words ("costs more than 100", "costing the customer": price or cost) are always the user's choice (faa4e4c), remembered only within the message (its rerun); the next message asks again, even with the same words.
+- *The idea:* keep each answer in the store (the phrase, the two columns, the choice), like the unit conversions (`convert.save`); a later message with the same phrase reuses it, with a notice; a new phrase gets the earlier answers as examples in Jev's choice question ("'costing the customer' meant the price, 'costs more than 100' meant the cost"), asked to the user only when Jev isn't sure. A word alone can't be the key: "costing over 100" (cost) and "costing the customer" (price) share it.
+- *Why not now (user):* a wrong answer would be reused silently in every later message, and changing it later is a design problem of its own: how the user sees what was remembered, corrects one answer, and what happens to the changes already made with it. Too risky at this stage.
+- *Open questions:* where the remembered answers are shown (`orbitrows status`? a command of their own?); how one is corrected or forgotten; whether a reused answer is still confirmed the first few times; whether Jev's answers with the examples are really better (its sureness depends on its context: 0.64 alone, 0.98 inside the pipeline); how it meets the column descriptions planned for a later version (the table's business at import, a standard column vocabulary).
+
 **The 21 regression sets: 15 old failures out of 174:** dates (T11, T16, T17), formulas (F03, Y03, E05), linked records (L04, L06, M06), same-column cases (S05, S06), text changes (T03), new operations (N01, N06, N10).
 
 **Not started:** the unified grouping decision; date parts ("per month"); statistics (median, percentiles).
