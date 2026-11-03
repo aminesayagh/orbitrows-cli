@@ -360,7 +360,10 @@ def test_resembled_columns_are_one_choice_and_the_chosen_one_alone_is_kept():
                                                   {"t_variants.c_price_mad": 0.9, "t_variants.c_cost_mad": 0.1})}
     out = build([r], schema, sources, [], answers)
     assert "t_variants.c_price_mad" in out["requests"]["r1"]["columns"]
-    assert "t_variants.c_cost_mad" not in out["requests"]["r1"]["columns"] and not out["warnings"]
+    assert "t_variants.c_cost_mad" not in out["requests"]["r1"]["columns"]
+    assert out["warnings"]                                    # sure, still the user's (2026-11-03: TC051, H112)
+    answers["r1_means_t_variants.c_cost_mad"] = ("t_variants.c_price_mad", {"t_variants.c_price_mad": 1.0})
+    assert not build([r], schema, sources, [], answers)["warnings"]   # the user's answer: not asked again
     answers["r1_means_t_variants.c_cost_mad"] = ("t_variants.c_price_mad",
                                                  {"t_variants.c_price_mad": 0.6, "t_variants.c_cost_mad": 0.4})
     assert any("uncertain" in w["problem"] for w in build([r], schema, sources, [], answers)["warnings"])
@@ -658,3 +661,18 @@ def test_a_rounding_is_never_replaced_by_the_earlier_change(monkeypatch):
     recs = asyncio.run(steps.extract(None, t, up))["records"]
     assert [r["function"] for r in recs if r["role"] in ("calculation", "rounding")] == [
         "entry:INCREASE_PERCENT", "entry:SUBTRACT_AMOUNT", "entry:ROUND_TO_NEAREST"], recs
+
+
+
+def test_two_look_alike_columns_both_written_are_one_choice():
+    """TC051 (2026-11-03): "If a variant costs more than 100, add 30 to its price …": cost written as named, the price
+    too; Jev kept the price for the comparison (0.77) and left the cost out (0.45), silently. Two look-alike columns
+    both written: one choice, the user's."""
+    from orbitrows.pipeline.prompt.conditions import resembled
+    schema = store_of(baseline())
+    every = {"t_variants.c_price_mad": "", "t_variants.c_cost_mad": "", "t_variants.c_weight_g": ""}
+    r = {"id": "r1", "text": "If a variant costs more than 100, add 30 to its price when it is black."}
+    named = {"r1": {"t_variants.c_cost_mad": {"how": "word", "words": ["cost"]},
+                    "t_variants.c_price_mad": {"how": "word", "words": ["price"]}}}
+    groups = resembled(schema, [r], every, "r1", named)
+    assert len(groups) == 1 and set(next(iter(groups.values()))) == {"t_variants.c_price_mad", "t_variants.c_cost_mad"}

@@ -435,13 +435,16 @@ def resembled(schema, requests, every, rid, named) -> dict:
     # TR04, 2026-11-02: the choice made it a filter); "at most 120" is a comparison with its number
     if any("Sup" in t.morph.get("Degree") and t.head.pos_ != "NUM" for t in nlp("en")(text)):
         return {}
-    out = {}
-    for k in (named or {}).get(rid) or {}:
-        if k in every and number_column(schema, k) and not written_as_named(schema, k, text):
-            group = [k2 for k2 in every if k2.split(".")[0] == k.split(".")[0] and number_column(schema, k2)
-                     and unit(k2) == unit(k)]
-            if len(group) > 1:
-                out[k] = group
+    out, cols = {}, (named or {}).get(rid) or {}
+    for k in cols:
+        if k not in every or not number_column(schema, k):
+            continue
+        group = [k2 for k2 in every if k2.split(".")[0] == k.split(".")[0] and number_column(schema, k2)
+                 and unit(k2) == unit(k)]
+        both = [k2 for k2 in group if k2 != k and k2 in cols]   # "if a variant costs more than 100, add 30 to its
+        if len(group) > 1 and (not written_as_named(schema, k, text) or both) and not any(   # price" (TC051): two
+                k in g for g in out.values()):                # look-alikes written: one choice, never two yes/no
+            out[k] = group
     return out
 
 
@@ -525,7 +528,10 @@ def build(requests, schema, sources, values, answers) -> dict:
                 cols.append(key)
         for mk in [mk for mk in answers if mk.startswith(f"{rid}_means_")]:
             c, probs = answers[mk] if isinstance(answers[mk], (list, tuple)) else (None, {})
-            if c is not None and probs.get(c, 1) < SURE:
+            # always the user's: "costs more than 100" (TC051: price, Jev 0.77) and "costing the customer" (H112:
+            # cost, Jev 0.98) were chosen surely and wrongly; the everyday word and the store's column differ
+            # (user, 2026-11-03); an answer the user gave (settled, 1.0) is not asked again
+            if c is not None and probs.get(c, 1) < 1.0:
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": f"column meant by {mk.split('_means_')[1]} uncertain",
                                  "answer": c, "probability": round(probs.get(c, 0), 2)} | question(answers, mk))
