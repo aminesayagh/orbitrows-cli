@@ -676,3 +676,21 @@ def test_two_look_alike_columns_both_written_are_one_choice():
                     "t_variants.c_price_mad": {"how": "word", "words": ["price"]}}}
     groups = resembled(schema, [r], every, "r1", named)
     assert len(groups) == 1 and set(next(iter(groups.values()))) == {"t_variants.c_price_mad", "t_variants.c_cost_mad"}
+
+
+def test_a_limit_read_again_as_a_row_condition_leaves_the_where():
+    """H580 (2026-11-02): "Lower the price of the white variants by 20, but never below their cost": the cap MAX(price -
+    20, cost) was built, and cost >= price kept too as a row condition (stage 1 asked, answered yes), leaving out every
+    variant priced above its cost. A condition on a limit's column comparing it with the changed column is the limit."""
+    from orbitrows.pipeline.prompt.formula import limits
+
+    def col(c):
+        return {"type": "column", "source": "t_variants", "reference": c}
+    white = {"type": "comparison", "operator": "=", "left": col("c_color"), "right": {"type": "literal", "value": "w"}}
+    twice = {"type": "comparison", "operator": ">=", "left": col("c_cost_mad"), "right": col("c_price_mad")}
+    cond6 = {"predicates": [{"column": "t_variants.c_color", "condition": white, "words": [[23, 28]]},
+                            {"column": "t_variants.c_cost_mad", "condition": twice, "words": []}]}
+    records = [{"role": "guard", "function": "clamp_min", "left": {"unresolved": True},
+                "right": {"column": "t_variants.c_cost_mad"}}]
+    assert limits(records, cond6, "t_variants.c_price_mad") == [twice]
+    assert limits([], cond6, "t_variants.c_price_mad") == []         # no limit: the condition stays

@@ -74,6 +74,22 @@ def predicate_spans(cond6, values, params, rid, off, schema, main):
     return out
 
 
+def limits(records, cond6, target) -> list:
+    """The conditions that are the formula's limits read a second time ("but never below their cost": H580, the cap
+    MAX(price - 20, cost) built, and cost >= price also kept as a row condition, which left out every variant priced
+    above its cost): a condition on a column a limit reads, comparing it with the changed column or written by no
+    words of its own. A limit of the new value is an operation, never a row condition (the typed model)."""
+    cols = {o["column"] for r in records if r["role"] in ("guard", "bound")
+            for o in (r.get("left") or {}, r.get("right") or {}) if isinstance(o, dict) and o.get("column")}
+    out = []
+    for p in cond6.get("predicates", []):
+        right = (p.get("condition") or {}).get("right") or {}
+        other = f"{right.get('source')}.{right.get('reference')}" if right.get("type") == "column" else None
+        if p["column"] in cols and (other == target or not p.get("words")):
+            out.append(p["condition"])
+    return out
+
+
 def verbless(text: str) -> bool:
     """A request with no verb of its own ("5 to the black ones"): its operation is the request before's."""
     from orbitrows.pipeline.expressions.words import nlp
@@ -185,6 +201,8 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
                 continue
             warnings += mine
             branches += my_branches
+            if p2["status"] == "ok":                        # a limit's own column, also read as a row condition
+                found.setdefault(rid, []).extend(limits(p1["records"], cond6, target))   # ("never below their cost"
             if p2["status"] == "ok":                        # the skeleton's notices: overlapping branches
                 warnings += [{"request": rid, "problem": f"formula of {target}: {n}"} for n in p2.get("notices", [])]
             if p2["status"] == "ok":                        # the skeleton's: the others keep their value
