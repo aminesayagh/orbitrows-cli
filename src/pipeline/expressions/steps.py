@@ -319,10 +319,17 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
         return tok.idx if tok is not None and seg[0] <= tok.idx < o["start"] else o["start"]
 
     done = {}                                                # form (percentage or not) → the last catalog change
+    from orbitrows.pipeline.operations import use as _use
+    for eid in upstream.get("inherited", []):               # a request with no verb: the request before's changes
+        types = {x["type"] for x in _use.slots(_use.catalog()["entries"][eid])}
+        done["percentage" in types] = eid
     for o in occs:
         kind, kp = ans.get(f"{o['occ']}_kind") or (None, {})
         col, cp = ans.get(f"{o['occ']}_column", ("none", {}))
         a0 = phrase_start(o)
+        if upstream.get("inherited") and o["percent"] in done and kind in (None, "none") and not any(
+                p["start"] <= o["start"] < p["end"] for p in preds):   # its number: the borrowed change's
+            kind, kp = done[o["percent"]], {done[o["percent"]]: 1.0}
         if kind not in (None, "none") and kind not in KIND and o["percent"] in done and not any(
                 t.pos_ in ("VERB", "AUX") for t in doc if a0 <= t.idx < o["end"]):
             kind, kp = done[o["percent"]], {done[o["percent"]]: 1.0}   # "increase by 10%, but only by 5% for the

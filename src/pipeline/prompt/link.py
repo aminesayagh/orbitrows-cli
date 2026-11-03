@@ -107,6 +107,10 @@ def jev_request(prompt: str, requests: list[dict], references: list[dict] | None
         elif ref.get("request") and ref["kind"] == "created":
             state["requests"][f"r{ref['request']}"].setdefault("refers_to", []).append(
                 f"'{ref['text']}' points to new rows that another request creates")
+        elif ref.get("request") and ref["kind"] == "kind":  # "… and 5 to the black ones": not r1's rows (A07)
+            state["requests"][f"r{ref['request']}"].setdefault("refers_to", []).append(
+                f"'{ref['text']}' names other records of a kind the prompt names, chosen by its own words: not the "
+                f"rows another request returns")
     questions = {}
     for rid, r in zip(ids, requests):
         criteria = {other: f"Request {other} ('{req['text']}') must be done before request {rid}."

@@ -74,6 +74,12 @@ def predicate_spans(cond6, values, params, rid, off, schema, main):
     return out
 
 
+def verbless(text: str) -> bool:
+    """A request with no verb of its own ("5 to the black ones"): its operation is the request before's."""
+    from orbitrows.pipeline.expressions.words import nlp
+    return not any(t.pos_ in ("VERB", "AUX") for t in nlp("en")(text))
+
+
 def asked(doubt) -> bool:
     """A weak answer of pass 1 or 2 is a question for the user; a doubt flagged at any probability ("the change starts
     from …: to confirm", "not one of the existing values") is a notice: the user's answer would not lift it."""
@@ -103,6 +109,7 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
     """… → {"requests", "warnings", "branches": {request: the conditions that became a CASE's branches}}: the CLI's
     pipeline runs this before grouping, which then leaves them out of the WHERE's tree (grouping: {"requests": {}})."""
     out, warnings, found, rows_kept = {}, [], {}, {}
+    changes = []                                            # the catalog changes of the requests before (in order)
     for r in requests:
         rid, part = r["id"], parts.get(r["id"]) or {}
         reads = r.get("statement") == "select"
@@ -141,8 +148,12 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
                                     "the cost', 'the prices with 20% tax': the price).")
                 up["rules"] = ["A number of records the read keeps or shows ('the 3 variants', 'the top 5', 'the 2 "
                                "sales') is none: it is not part of the computed value."]
+            if changes and not reads and verbless(text):      # "… and 5 to the black ones": the verb of the request
+                up["inherited"] = changes                     # before, left out (A07, 2026-11-03)
             done = await compose(jev, text, up)               # the expressions module (pipeline/expressions)
             p1, p2 = done["pass_1"], done["pass_2"]
+            changes = [x["function"][6:] for x in p1["records"] if x["role"] == "calculation"
+                       and (x["function"] or "").startswith("entry:")] or changes
             key = f"{rid}.{target}"
             out[key] = {"records": p1["records"], "pass1_ambiguities": p1["ambiguities"], "map": p2.get("map"),
                         "status": p2["status"], "questions": p2.get("questions", []), "flagged": p2.get("flagged", [])}

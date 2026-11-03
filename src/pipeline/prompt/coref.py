@@ -88,6 +88,9 @@ def jev_request(prompt: str, ms: list[dict], ctx: str = CONTEXT):
                     if j != i and not (o["start"] <= m["start"] and m["end"] <= o["end"])}
         criteria["created"] = (f"`{m['text']}` points to new rows or columns that an action of the prompt creates, "
                                "and that are not named in the prompt (copies, duplicates).")
+        criteria["kind"] = (f"`{m['text']}` names OTHER records of a kind the prompt names, chosen by its own words "
+                            "('… the variants costing over 100 and 5 to the black ones': other variants, the black "
+                            "ones), not the same records.")    # A07, 2026-11-03: only "created" fitted, and linked
         criteria["ambiguous"] = f"`{m['text']}` could point to several words: the user must be asked."
         questions[f"m{i}_target"] = {"type": "choice", "criteria": criteria, "instructions": {
             "context": ctx, "task": f"If `{m['text']}` is a reference, what does it point to?", "rules": RULES}}
@@ -108,7 +111,8 @@ def decide(ms: list[dict], answers: dict) -> list[dict]:
     a warning); confident → a link. Noun-phrase references ("the speakers") get a weak role but a sure target. Answers saved before the role question (one question per mention) still work.
     An unresolved reference carries the question on its target for the user (asking.py), labelled with the mentions."""
     asked, labels = answers, {f"m{j}": o["text"] for j, o in enumerate(ms)} | {
-        "created": "new rows or columns the prompt creates"}
+        "created": "new rows or columns the prompt creates",
+        "kind": "other records of a kind the prompt names"}
     roles = any(q.endswith("_role") for q in answers)
     if roles:
         merged = {}
@@ -134,6 +138,8 @@ def decide(ms: list[dict], answers: dict) -> list[dict]:
                         | question(asked, f"{q}_target" if roles else q, labels, skip=["ambiguous"]))
         elif choice == "created":
             refs.append({**base, "kind": "created", "target": ""})
+        elif choice == "kind":                              # other records of the same kind: no rows taken
+            refs.append({**base, "kind": "kind", "target": ""})
         elif choice != "self":
             t = ms[int(choice[1:])]
             refs.append({**base, "kind": "forward" if t["start"] > m["start"] else "existing", "target": t["text"],

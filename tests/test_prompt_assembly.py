@@ -601,3 +601,37 @@ def test_a_message_runs_nothing_when_one_of_its_requests_is_not_built():
                             {"r1": {"where": cancelled}, "r2": {}}, [])
     assert out["program"] == [] and [e["request"] for e in out["errors"]] == ["r2"], out
     assert "the number '5'" in out["errors"][0]["error"] and "nothing of the message runs" in out["errors"][0]["error"]
+
+
+def test_a_verbless_request_borrows_the_change_of_the_request_before(monkeypatch):
+    """A07 (2026-11-03): "Add 10 to the price … and 5 to the black ones": the second request has no verb, pass 1
+    found no change in it ("no change was found"), the ledger refused its 5. Its number takes the change of the
+    request before (add an amount), its own value."""
+    import asyncio
+    from orbitrows.pipeline.expressions import steps
+    from orbitrows.pipeline.prompt.formula import verbless
+    from orbitrows.services.model.client import Answers
+    t = "5 to the black ones."
+    assert verbless(t) and not verbless("Add 10 to the price.")
+
+    async def stub(jev, state, q):                            # A07's answer: the 5 does nothing
+        out = Answers({k: ("none", {"none": 0.9}) for k in q if k.endswith(("_kind", "_column"))})
+        out.call = "c"
+        return out
+    monkeypatch.setattr(steps, "ask", stub)
+    up = {"target": "t_variants.c_price_mad", "target_kind": "number", "words": [], "predicates": [],
+          "table_columns": {"t_variants.c_price_mad": "price"}, "inherited": ["ADD_AMOUNT"]}
+    recs = asyncio.run(steps.extract(None, t, up))["records"]
+    assert [(r["function"], r["right"]["value"]) for r in recs if r["role"] == "calculation"] == [
+        ("entry:ADD_AMOUNT", 5)]
+
+
+def test_other_records_of_the_same_kind_are_a_reference_that_takes_no_rows():
+    """A07 (2026-11-03): "the black ones" (other variants) could only be called "created", which made the second
+    request act on the rows of the first. A reference of kind "kind" takes no rows."""
+    from orbitrows.pipeline.prompt.coref import decide, jev_request
+    ms = [{"start": 0, "end": 12, "text": "the variants"}, {"start": 30, "end": 44, "text": "the black ones"}]
+    assert "kind" in jev_request("…", ms)[1]["m1_target"]["criteria"]
+    refs = decide(ms, {"m1_role": ("reference", {"reference": 0.8}), "m1_target": ("kind", {"kind": 0.9}),
+                       "m0_role": ("not_reference", {"not_reference": 0.9}), "m0_target": ("m1", {"m1": 0.5})})
+    assert [(r["text"], r["kind"]) for r in refs] == [("the black ones", "kind")]
