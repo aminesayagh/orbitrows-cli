@@ -125,7 +125,8 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
         if not assigns or not main:
             continue
         off, text = r["start"], prompt[r["start"]:r["end"]]
-        if not reads and not changes and verbless(text):   # "Delete the cancelled sales, and 5 to the black
+        later = any(x["start"] < r["start"] for x in requests)   # only a request after another can lack its verb:
+        if later and not reads and not changes and verbless(text):   # "Delete the cancelled sales, and 5 to the black
             warnings.append({"request": rid, "problem": f"not built: '{text.strip()}' has no operation of its own (no "
                              "verb, and no change before it to take one from)"})   # variants" (A11): never an
             part["assignments"] = []                        # operation made up for its 5; the message is refused
@@ -153,7 +154,7 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
                                     "the cost', 'the prices with 20% tax': the price).")
                 up["rules"] = ["A number of records the read keeps or shows ('the 3 variants', 'the top 5', 'the 2 "
                                "sales') is none: it is not part of the computed value."]
-            if changes and not reads and verbless(text):      # "… and 5 to the black ones": the verb of the request
+            if later and changes and not reads and verbless(text):   # "… and 5 to the black ones": the verb of the
                 up["inherited"] = changes                     # before, left out (A07, 2026-11-03)
             done = await compose(jev, text, up)               # the expressions module (pipeline/expressions)
             p1, p2 = done["pass_1"], done["pass_2"]

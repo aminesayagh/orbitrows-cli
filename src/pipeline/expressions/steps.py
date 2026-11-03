@@ -330,7 +330,9 @@ async def extract_number(jev, text: str, upstream: dict, lang: str = "en") -> di
         if upstream.get("inherited") and o["percent"] in done and kind in (None, "none") and not any(
                 p["start"] <= o["start"] < p["end"] for p in preds):   # its number: the borrowed change's
             kind, kp = done[o["percent"]], {done[o["percent"]]: 1.0}
-        if kind not in (None, "none") and kind not in KIND and o["percent"] in done and not any(
+        if kind not in (None, "none") and kind not in KIND and o["percent"] in done and entry_role(
+                __import__("orbitrows.pipeline.operations.use", fromlist=["catalog"]).catalog()["entries"][kind]
+        ) == "calculation" and not any(
                 t.pos_ in ("VERB", "AUX") for t in doc if a0 <= t.idx < o["end"]):
             kind, kp = done[o["percent"]], {done[o["percent"]]: 1.0}   # "increase by 10%, but only by 5% for the
             # black ones": a number with no verb of its own, written like an earlier change's, repeats that change

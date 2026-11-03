@@ -635,3 +635,26 @@ def test_other_records_of_the_same_kind_are_a_reference_that_takes_no_rows():
     refs = decide(ms, {"m1_role": ("reference", {"reference": 0.8}), "m1_target": ("kind", {"kind": 0.9}),
                        "m0_role": ("not_reference", {"not_reference": 0.9}), "m0_target": ("m1", {"m1": 0.5})})
     assert [(r["text"], r["kind"]) for r in refs] == [("the black ones", "kind")]
+
+
+def test_a_rounding_is_never_replaced_by_the_earlier_change(monkeypatch):
+    """H576 (2026-11-03, a regression of 766a8c5): "Increase … by 10%, then take 5 off, and round to the nearest 5":
+    the rounding's 5, with no verb in its own words, was made a second "take 5 off". Only a calculation Jev gives
+    is replaced by the earlier one ("only by 5%": multiply → increase), never a rounding or a limit."""
+    import asyncio
+    from orbitrows.pipeline.expressions import steps
+    from orbitrows.services.model.client import Answers
+    t = "Increase the price of the black variants by 10%, then take 5 off, and round to the nearest 5."
+
+    async def stub(jev, state, q):
+        kinds = iter(["INCREASE_PERCENT", "SUBTRACT_AMOUNT", "ROUND_TO_NEAREST"])
+        out = Answers({k: ((v := next(kinds)), {v: 0.9}) if k.endswith("_kind") else ("none", {"none": 0.9})
+                       for k in sorted(q, key=lambda k: (not k.endswith("_kind"), k)) if k.endswith(("_kind", "_column"))})
+        out.call = "c"
+        return out
+    monkeypatch.setattr(steps, "ask", stub)
+    up = {"target": "t_variants.c_price_mad", "target_kind": "number", "words": [], "predicates": [],
+          "table_columns": {"t_variants.c_price_mad": "price"}}
+    recs = asyncio.run(steps.extract(None, t, up))["records"]
+    assert [r["function"] for r in recs if r["role"] in ("calculation", "rounding")] == [
+        "entry:INCREASE_PERCENT", "entry:SUBTRACT_AMOUNT", "entry:ROUND_TO_NEAREST"], recs
