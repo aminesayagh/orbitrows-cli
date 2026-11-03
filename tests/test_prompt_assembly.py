@@ -582,3 +582,22 @@ def test_a_lookup_nothing_matched_that_names_a_table_is_records_not_a_value():
               {"text": "black", "role": "lookup", "column": "t_variants.c_color", "match": "exact"}]
     records_of(values, schema)
     assert [v["role"] for v in values] == ["not_value", "lookup", "lookup"]
+
+
+def test_a_message_runs_nothing_when_one_of_its_requests_is_not_built():
+    """A07 (2026-11-03): "Add 10 to the price of the variants costing more than 100 and 5 to the black ones" was cut
+    in two, the second not built, and the first ran alone: half a change. All or nothing: no program, the reason."""
+    db = baseline()
+    reqs = [{"id": "r1", "text": "delete the cancelled sales", "statement": "delete"},
+            {"id": "r2", "text": "and 5 to the black variants", "statement": "update"}]
+    cancelled = {"type": "comparison", "operator": "=", "left": {"type": "column", "source": "t_sales",
+                                                                  "reference": "c_status"},
+                 "right": {"type": "literal", "value": "cancelled"}}
+    out = assemble.assemble(db, store_of(db), reqs, {"r1": {"statement": "delete"}, "r2": {"statement": "update"}},
+                            {"r1": {"target": {"type": "database_table", "reference": "t_sales"}},
+                             "r2": {"target": {"type": "database_table", "reference": "t_variants"}}},
+                            {"r1": {}, "r2": {}},
+                            {"r1": {}, "r2": {"refused": "the number '5' used by no part of the request"}},
+                            {"r1": {"where": cancelled}, "r2": {}}, [])
+    assert out["program"] == [] and [e["request"] for e in out["errors"]] == ["r2"], out
+    assert "the number '5'" in out["errors"][0]["error"] and "nothing of the message runs" in out["errors"][0]["error"]

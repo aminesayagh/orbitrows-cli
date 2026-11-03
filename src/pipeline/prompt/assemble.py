@@ -537,7 +537,15 @@ def assemble(db, schema, requests, operation, sources, parts, conditions, groupi
                 warnings.append({"request": rid, "problem": f"not built: {unlinked}"})
                 continue
         items.append(it)
-    errors = compiled(db, schema, items)
+    built = {it["request"] for it in items}
+    lost = [r["id"] for r in requests if r["id"] not in built]
+    if lost and items:                                  # all or nothing: never part of a message (A07, 2026-11-03:
+        why = {w["request"]: w["problem"] for w in warnings if "not built" in w.get("problem", "")}   # "+10 … and 5
+        errors = [{"request": rid, "stage": "message", "error": f"{why.get(rid, 'not built')}; nothing of the message "
+                   f"runs without it"} for rid in lost]  # to the black ones" ran the +10 alone)
+        items = []
+    else:
+        errors = compiled(db, schema, items)
     for it in items:                                    # what the user should see before approving
         a = it["ast"]
         if a["type"] in ("update", "delete") and a["scope"]["type"] == "all_rows":
