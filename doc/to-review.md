@@ -177,6 +177,17 @@ Decisions taken to move forward, and assumptions to check later on real data. Ea
 - *Why not now (user):* a wrong answer would be reused silently in every later message, and changing it later is a design problem of its own: how the user sees what was remembered, corrects one answer, and what happens to the changes already made with it. Too risky at this stage.
 - *Open questions:* where the remembered answers are shown (`orbitrows status`? a command of their own?); how one is corrected or forgotten; whether a reused answer is still confirmed the first few times; whether Jev's answers with the examples are really better (its sureness depends on its context: 0.64 alone, 0.98 inside the pipeline); how it meets the column descriptions planned for a later version (the table's business at import, a standard column vocabulary).
 
+**Open after the typed-model rounds (2026-11-03; sets T, A, branch cases, the 700's rerun slices):**
+- [ ] **When / otherwise links (TC011, B01):** "Raise the price of the variants by 10% when they cost more than 100, and by 5% otherwise" refused in some runs: the pieces arrive (two operations, one condition), "its steps couldn't be linked into one formula". Diagnose offline from `.bench/runs/2026-11-03_r5_T` / `_r5_B`.
+- [ ] **"For the white ones, add 15 if they cost more than 50 and 5 otherwise" (B03, TC061):** refused (links); the stage-1 rule for branch conditions (53b1384) not yet measured on it.
+- [ ] **TC013** ("Increase prices by 10% for variants whose cost is above 100, otherwise by 5%"): wrong after a question, the price/cost choice at 0.50.
+- [ ] **"Costing the customer" (H112, H686, H698):** asked now, never silent (faa4e4c, d42efe5); right only with the user's answer. Needs the column descriptions planned for a later version.
+- [ ] **Many questions on conditional changes:** 2–7 per branch request (set T ~1.3 per case overall).
+- [ ] **Single wordings refused or wrong after a question** in set T: three branches, limit after branches, nested in else, per-group limit (one wording each).
+- [ ] **Actions outside OrbitRows read as data** ("Génère la facture pour l'order 22, … et envoie-la", 2026-11-03): "generate the invoice" became "show order 22"; "send it" was refused (the whole message, right) with a message naming a backup or an undo. Step 2 could name such actions (a document, a message, a file to send) and the refusal say so.
+- [ ] **French coreference:** spaCy's English model splits "envoie-la"; the reference options were broken spans. Not a priority (English first).
+- [ ] **Measuring:** a held-out set (the 700, T and A are development sets now), a gold-answer mode, the 266 cases of the 700 not rerun since 2026-11-02.
+
 **The 21 regression sets: 15 old failures out of 174:** dates (T11, T16, T17), formulas (F03, Y03, E05), linked records (L04, L06, M06), same-column cases (S05, S06), text changes (T03), new operations (N01, N06, N10).
 
 **Not started:** the unified grouping decision; date parts ("per month"); statistics (median, percentiles).
