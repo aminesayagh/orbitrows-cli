@@ -58,10 +58,12 @@ def predicate_spans(cond6, values, params, rid, off, schema, main):
     compares with (step 6's parameters); offsets in the request text."""
     out = []
     for i, p in enumerate(cond6.get("predicates", [])):
-        own = [w for w in p.get("words") or [] if w[0] >= off]   # the words it read itself (white's, not black's:
-        span = (own[0][0], own[0][1]) if own else next(          # each colour of "black …; white …" its own place,
-            ((v["start"], v["end"]) for v in values if v["request"] == rid and v.get("column") == p["column"]
-             and v.get("start") is not None), None)              # 2026-11-02: both at black's, the links collided)
+        own = p.get("words") or []                          # step 6's words: positions in the REQUEST already
+        span = None if own else next(((v["start"] - off, v["end"] - off) for v in values   # step 3's: in the prompt
+                                      if v["request"] == rid and v.get("column") == p["column"]
+                                      and v.get("start") is not None), None)
+        if own:                                             # each condition at its own words ("for the white ones":
+            span = (own[0][0], own[0][1])                   # white's, not black's; TC063, 2026-11-03: a second
         right = (p.get("condition") or {}).get("right") or {}
         if span is None and right.get("type") == "literal":
             span = next(((x["start"], x["end"]) for x in params if x["value"] == right.get("value")), None)
@@ -69,7 +71,7 @@ def predicate_spans(cond6, values, params, rid, off, schema, main):
         item = {"id": f"p{i + 1}", "text": label, "sql": p["condition"], "node": p["condition"],
                 "words": p.get("words", [])}                  # request positions the condition read (step 6)
         if span:
-            item |= {"start": span[0] - off, "end": span[1] - off}
+            item |= {"start": span[0], "end": span[1]}
         out.append(item)
     return out
 

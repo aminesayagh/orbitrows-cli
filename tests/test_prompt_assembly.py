@@ -518,6 +518,14 @@ def test_each_condition_reaches_the_formula_at_its_own_words():
               for t, a, b in (("black", 8, 13), ("white", 55, 60))]
     assert [(p["start"], p["end"]) for p in predicate_spans(cond6, values, [], "r1", 0, schema, "t_variants")] == [
         (8, 13), (55, 60)]
+    # a second request (TC063, 2026-11-03): step 6's words are the request's positions already; shifted again by
+    # the request's offset they pointed at "th"
+    over = {"type": "comparison", "operator": ">", "left": {"type": "column", "source": "t_variants",
+                                                             "reference": "c_cost_mad"},
+            "right": {"type": "literal", "value": 50}}
+    cond6 = {"predicates": [{"column": "t_variants.c_cost_mad", "condition": over, "words": [[54, 56]]}]}
+    assert [(p["start"], p["end"]) for p in predicate_spans(cond6, [], [], "r2", 43, schema, "t_variants")] == [
+        (54, 56)]
 
 
 def test_a_superlative_never_makes_a_resembled_column_a_condition():
