@@ -125,6 +125,11 @@ async def run(jev, prompt, requests, schema, sources, values, parts, conditions,
         if not assigns or not main:
             continue
         off, text = r["start"], prompt[r["start"]:r["end"]]
+        if not reads and not changes and verbless(text):   # "Delete the cancelled sales, and 5 to the black
+            warnings.append({"request": rid, "problem": f"not built: '{text.strip()}' has no operation of its own (no "
+                             "verb, and no change before it to take one from)"})   # variants" (A11): never an
+            part["assignments"] = []                        # operation made up for its 5; the message is refused
+            continue
         cond6 = conditions["requests"].get(rid) or {}
         params = (conditions.get("parameters") or {}).get(rid, [])
         preds = predicate_spans(cond6, values, params, rid, off, schema, main)
