@@ -79,6 +79,8 @@ CHOOSE_RULES = [
     "Answer yes when the request keeps or excludes records by this column: 'the black variants' (color), 'priced at "
     "250' (price), 'without a barcode' (barcode), 'except the Kora ones' (the column holding Kora), 'newer than "
     "June' (the date).",
+    "Answer yes too when the request gives the records a different change by this column: 'add 15 if they cost more "
+    "than 50, and 5 otherwise' (cost): the records are not excluded, they get one change or the other.",
     "Answer no for a column the request only changes ('set the price to 199': price is not a condition, unless "
     "another words choose by it), only shows, only sorts by ('the cheapest'), or only groups by ('per brand').",
     "A column of another table counts when the condition is on it: 'the variants of the Kora products' (the brand "
