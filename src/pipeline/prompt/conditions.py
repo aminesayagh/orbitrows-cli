@@ -443,8 +443,11 @@ def resembled(schema, requests, every, rid, named) -> dict:
             continue
         group = [k2 for k2 in every if k2.split(".")[0] == k.split(".")[0] and number_column(schema, k2)
                  and unit(k2) == unit(k)]
-        both = [k2 for k2 in group if k2 != k and k2 in cols]   # "if a variant costs more than 100, add 30 to its
-        if len(group) > 1 and (not written_as_named(schema, k, text) or both) and not any(   # price" (TC051): two
+        both = [k2 for k2 in group if k2 != k and k2 in cols and written_as_named(schema, k2, text)   # written,
+                and written_as_named(schema, k, text)]       # never a meaning match ("price" ~ cost): "if a variant
+        # costs more than 100, add 30 to its
+        resembles = (cols[k] or {}).get("how") == "word" and not written_as_named(schema, k, text)   # "costing":
+        if len(group) > 1 and (resembles or both) and not any(   # its name's word, never a meaning match; price" (TC051): two
                 k in g for g in out.values()):                # look-alikes written: one choice, never two yes/no
             out[k] = group
     return out
@@ -533,7 +536,7 @@ def build(requests, schema, sources, values, answers) -> dict:
             # always the user's: "costs more than 100" (TC051: price, Jev 0.77) and "costing the customer" (H112:
             # cost, Jev 0.98) were chosen surely and wrongly; the everyday word and the store's column differ
             # (user, 2026-11-03); an answer the user gave (settled, 1.0) is not asked again
-            if c is not None and probs.get(c, 1) < 1.0:
+            if c is not None and probs.get(c, 1) < 1.0 and not (c == "none" and probs.get(c, 0) >= SURE):
                 out[rid]["flagged"] = True
                 warnings.append({"request": rid, "problem": f"column meant by {mk.split('_means_')[1]} uncertain",
                                  "answer": c, "probability": round(probs.get(c, 0), 2)} | question(answers, mk))

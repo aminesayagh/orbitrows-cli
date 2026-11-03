@@ -725,3 +725,19 @@ def test_another_operation_is_never_replaced_by_the_earlier_change(monkeypatch):
     recs = asyncio.run(steps.extract(None, t, up))["records"]
     assert [r["function"] for r in recs if r["role"] == "calculation"] == [
         "entry:INCREASE_PERCENT", "entry:SUBTRACT_AMOUNT", "entry:ADD_AMOUNT"], recs
+
+
+def test_a_sure_none_is_not_asked_and_a_meaning_match_never_pairs():
+    """r5 batch (2026-11-03): "Lower the price of the black variants by 5" asked the price/cost choice (82 of 100
+    questions): the cost was named by meaning only (price ~ cost), and the choice was asked though Jev surely said
+    "none". Only columns written as named pair; a sure "none" is not asked."""
+    from orbitrows.pipeline.prompt.conditions import build, resembled
+    schema = store_of(baseline())
+    every = {"t_variants.c_price_mad": "", "t_variants.c_cost_mad": ""}
+    r = {"id": "r1", "text": "Lower the price of the black variants by 5.", "statement": "update"}
+    named = {"r1": {"t_variants.c_price_mad": {"how": "word", "words": ["price"]},
+                    "t_variants.c_cost_mad": {"how": "meaning", "words": ["price"]}}}
+    assert resembled(schema, [r], every, "r1", named) == {}
+    sources = {"r1": {"target": {"type": "database_table", "reference": "t_variants"}}}
+    answers = {"r1_means_t_variants.c_cost_mad": ("none", {"none": 0.97, "t_variants.c_price_mad": 0.02})}
+    assert not [w for w in build([r], schema, sources, [], answers)["warnings"] if "column meant" in w["problem"]]
